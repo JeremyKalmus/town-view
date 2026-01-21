@@ -31,6 +31,17 @@ type Dependency struct {
 	Type     string `json:"type"` // "blocks", "parent-child"
 }
 
+// IssueDependencies contains blockers and blocked-by for an issue.
+type IssueDependencies struct {
+	Blockers  []Issue `json:"blockers"`   // Issues that block this issue
+	BlockedBy []Issue `json:"blocked_by"` // Issues blocked by this issue
+}
+
+// DependencyAdd represents a request to add a dependency.
+type DependencyAdd struct {
+	BlockerID string `json:"blocker_id"` // The issue that blocks
+}
+
 // Rig represents a Gas Town rig.
 type Rig struct {
 	ID         string `json:"id"`

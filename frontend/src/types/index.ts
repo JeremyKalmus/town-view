@@ -125,3 +125,9 @@ export interface Dependency {
   to_id: string;
   type: 'blocks' | 'parent-child';
 }
+
+// IssueDependencies contains blockers and blocked-by for an issue
+export interface IssueDependencies {
+  blockers: Issue[];   // Issues that block this issue
+  blocked_by: Issue[]; // Issues blocked by this issue
+}

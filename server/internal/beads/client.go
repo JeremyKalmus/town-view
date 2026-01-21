@@ -279,6 +279,56 @@ type graphComponentOutput struct {
 	Issues []types.Issue `json:"Issues"`
 }
 
+// GetIssueDependencies returns blockers and blocked-by for a specific issue.
+func (c *Client) GetIssueDependencies(rigPath, issueID string) (*types.IssueDependencies, error) {
+	result := &types.IssueDependencies{
+		Blockers:  []types.Issue{},
+		BlockedBy: []types.Issue{},
+	}
+
+	// Get blockers (what this issue depends on) - direction=down
+	blockersArgs := []string{"dep", "list", issueID, "--direction=down", "--json"}
+	blockersOutput, err := c.runBD(rigPath, blockersArgs...)
+	if err == nil && len(blockersOutput) > 0 {
+		var blockers []types.Issue
+		if jsonErr := json.Unmarshal(blockersOutput, &blockers); jsonErr == nil {
+			result.Blockers = blockers
+		}
+	}
+
+	// Get blocked-by (what depends on this issue) - direction=up
+	blockedByArgs := []string{"dep", "list", issueID, "--direction=up", "--json"}
+	blockedByOutput, err := c.runBD(rigPath, blockedByArgs...)
+	if err == nil && len(blockedByOutput) > 0 {
+		var blockedBy []types.Issue
+		if jsonErr := json.Unmarshal(blockedByOutput, &blockedBy); jsonErr == nil {
+			result.BlockedBy = blockedBy
+		}
+	}
+
+	return result, nil
+}
+
+// AddDependency adds a dependency: blockerID blocks issueID.
+func (c *Client) AddDependency(rigPath, issueID, blockerID string) error {
+	args := []string{"dep", "add", issueID, blockerID}
+	_, err := c.runBD(rigPath, args...)
+	if err != nil {
+		return fmt.Errorf("bd dep add failed: %w", err)
+	}
+	return nil
+}
+
+// RemoveDependency removes a dependency: blockerID no longer blocks issueID.
+func (c *Client) RemoveDependency(rigPath, issueID, blockerID string) error {
+	args := []string{"dep", "remove", issueID, blockerID}
+	_, err := c.runBD(rigPath, args...)
+	if err != nil {
+		return fmt.Errorf("bd dep remove failed: %w", err)
+	}
+	return nil
+}
+
 // GetDependencies returns all dependency relationships for a rig.
 func (c *Client) GetDependencies(rigPath string) ([]types.Dependency, error) {
 	args := []string{"graph", "--all", "--json"}

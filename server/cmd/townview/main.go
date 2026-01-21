@@ -81,6 +81,9 @@ func main() {
 	mux.HandleFunc("GET /api/rigs/{rigId}/issues", h.ListIssues)
 	mux.HandleFunc("GET /api/rigs/{rigId}/issues/{issueId}", h.GetIssue)
 	mux.HandleFunc("PATCH /api/rigs/{rigId}/issues/{issueId}", h.UpdateIssue)
+	mux.HandleFunc("GET /api/rigs/{rigId}/issues/{issueId}/dependencies", h.GetIssueDependencies)
+	mux.HandleFunc("POST /api/rigs/{rigId}/issues/{issueId}/dependencies", h.AddIssueDependency)
+	mux.HandleFunc("DELETE /api/rigs/{rigId}/issues/{issueId}/dependencies/{blockerId}", h.RemoveIssueDependency)
 	mux.HandleFunc("GET /api/rigs/{rigId}/agents", h.ListAgents)
 	mux.HandleFunc("GET /api/rigs/{rigId}/dependencies", h.ListDependencies)
 
