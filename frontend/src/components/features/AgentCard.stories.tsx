@@ -173,3 +173,78 @@ export const AllStates: Story = {
     </div>
   ),
 }
+
+// Compact variant stories
+export const CompactWorking: Story = {
+  args: {
+    agent: mockAgent,
+    variant: 'compact',
+  },
+}
+
+export const CompactIdle: Story = {
+  args: {
+    agent: {
+      ...mockAgent,
+      id: 'gt-compact-idle',
+      name: 'idle-worker',
+      state: 'idle',
+      hook_bead: undefined,
+    },
+    variant: 'compact',
+  },
+}
+
+export const CompactStuck: Story = {
+  args: {
+    agent: {
+      ...mockAgent,
+      id: 'gt-compact-stuck',
+      name: 'troubled-worker',
+      state: 'stuck',
+      hook_bead: 'to-l10.3',
+    },
+    variant: 'compact',
+  },
+}
+
+export const CompactAllStates: Story = {
+  render: () => (
+    <div className="space-y-2 max-w-md">
+      {(['idle', 'working', 'stuck', 'paused'] as const).map((state) => (
+        <AgentCard
+          key={state}
+          variant="compact"
+          agent={{
+            ...mockAgent,
+            id: `gt-compact-${state}`,
+            name: `${state}-agent`,
+            state,
+            hook_bead: state === 'idle' ? undefined : 'to-example',
+          }}
+        />
+      ))}
+    </div>
+  ),
+}
+
+export const CompactAllRoles: Story = {
+  render: () => (
+    <div className="space-y-2 max-w-md">
+      {(['mayor', 'deacon', 'refinery', 'witness', 'crew', 'polecat'] as const).map((roleType) => (
+        <AgentCard
+          key={roleType}
+          variant="compact"
+          agent={{
+            ...mockAgent,
+            id: `gt-compact-${roleType}`,
+            name: `${roleType}-agent`,
+            role_type: roleType,
+            state: 'working',
+            hook_bead: 'to-example',
+          }}
+        />
+      ))}
+    </div>
+  ),
+}
