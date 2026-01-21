@@ -162,3 +162,23 @@ export function getAgentRoleIcon(roleType: string): string {
       return '⚡'
   }
 }
+
+/**
+ * Returns the CSS class for a priority badge.
+ */
+export function getPriorityBadgeClass(priority: number): string {
+  switch (priority) {
+    case 0:
+      return 'badge-priority-p0'
+    case 1:
+      return 'badge-priority-p1'
+    case 2:
+      return 'badge-priority-p2'
+    case 3:
+      return 'badge-priority-p3'
+    case 4:
+      return 'badge-priority-p4'
+    default:
+      return 'badge-priority-p2'
+  }
+}

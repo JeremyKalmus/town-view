@@ -1,5 +1,5 @@
 import type { Issue } from '@/types'
-import { cn, formatRelativeTime, getStatusIcon, getPriorityClass, getPriorityLabel } from '@/lib/utils'
+import { cn, formatRelativeTime, getStatusIcon, getPriorityBadgeClass, getPriorityLabel } from '@/lib/utils'
 
 interface IssueRowProps {
   issue: Issue
@@ -24,11 +24,10 @@ export function IssueRow({ issue, onClick }: IssueRowProps) {
       )}
       onClick={onClick}
     >
-      {/* Priority indicator */}
-      <div className="flex items-center gap-1.5 w-12 flex-shrink-0">
-        <div className={cn('priority-dot', getPriorityClass(issue.priority))} />
-        <span className="text-xs text-text-muted">{getPriorityLabel(issue.priority)}</span>
-      </div>
+      {/* Priority badge */}
+      <span className={cn('w-8 flex-shrink-0', getPriorityBadgeClass(issue.priority))}>
+        {getPriorityLabel(issue.priority)}
+      </span>
 
       {/* Status badge - pill-shaped with icon */}
       <span className={cn(
