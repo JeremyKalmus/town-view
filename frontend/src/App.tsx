@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { RigDashboard } from '@/components/features/RigDashboard'
 import { useRigStore } from '@/stores/rig-store'
@@ -11,14 +11,15 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [updatedIssueIds, setUpdatedIssueIds] = useState<Set<string>>(new Set())
+  const clearTimeoutRef = useRef<Map<string, number>>(new Map())
 
   // WebSocket for real-time updates
   const handleWSMessage = useCallback((msg: WSMessage) => {
     console.log('[WS] Received message:', msg)
 
-    if (msg.type === 'beads_changed') {
+    if (msg.type === 'beads_changed' || msg.type === 'rig_update' || msg.type === 'issue_update' || msg.type === 'issue_changed') {
       // Trigger refresh when beads change
-      // msg.rig contains the rig name that was updated
       setRefreshKey((k) => k + 1)
     } else if (msg.type === 'rig_discovered') {
       // Refresh rig list when new rig discovered
@@ -26,6 +27,30 @@ function App() {
     } else if (msg.type === 'agent_state_changed') {
       // Refresh when agent state changes
       setRefreshKey((k) => k + 1)
+    }
+
+    // Track updated issue ID for flash animation
+    if (msg.type === 'issue_changed' && msg.payload?.id) {
+      const issueId = msg.payload.id as string
+      setUpdatedIssueIds((prev) => new Set(prev).add(issueId))
+
+      // Clear existing timeout for this issue if any
+      const existingTimeout = clearTimeoutRef.current.get(issueId)
+      if (existingTimeout) {
+        clearTimeout(existingTimeout)
+      }
+
+      // Clear the flash after animation completes (1.5s)
+      const timeoutId = window.setTimeout(() => {
+        setUpdatedIssueIds((prev) => {
+          const next = new Set(prev)
+          next.delete(issueId)
+          return next
+        })
+        clearTimeoutRef.current.delete(issueId)
+      }, 1500)
+
+      clearTimeoutRef.current.set(issueId, timeoutId)
     }
   }, [])
 
@@ -82,7 +107,7 @@ function App() {
             </div>
           </div>
         ) : selectedRig ? (
-          <RigDashboard rig={selectedRig} refreshKey={refreshKey} />
+          <RigDashboard rig={selectedRig} refreshKey={refreshKey} updatedIssueIds={updatedIssueIds} />
         ) : (
           <div className="flex items-center justify-center h-full">
             <p className="text-text-muted">Select a rig from the sidebar</p>
