@@ -162,6 +162,73 @@
   .mono {
     @apply font-mono text-sm;
   }
+
+  /* Tree node components */
+  .tree-node {
+    @apply flex items-center gap-2 py-1.5 px-2 rounded-md transition-colors;
+  }
+
+  .tree-node-interactive {
+    @apply tree-node cursor-pointer hover:bg-bg-tertiary;
+  }
+
+  .tree-node-accent {
+    @apply tree-node border-l-2;
+  }
+
+  /* Tree node status icons */
+  .tree-status-icon {
+    @apply inline-flex items-center justify-center w-5 h-5 rounded-full text-xs flex-shrink-0;
+  }
+
+  .tree-status-icon-open {
+    @apply tree-status-icon text-status-open;
+  }
+
+  .tree-status-icon-in-progress {
+    @apply tree-status-icon text-status-in-progress;
+  }
+
+  .tree-status-icon-blocked {
+    @apply tree-status-icon text-status-blocked;
+  }
+
+  .tree-status-icon-closed {
+    @apply tree-status-icon text-status-closed;
+  }
+
+  .tree-status-icon-deferred {
+    @apply tree-status-icon text-status-deferred;
+  }
+
+  /* Tree node priority borders */
+  .tree-node-priority-p0 {
+    @apply border-l-priority-p0;
+  }
+
+  .tree-node-priority-p1 {
+    @apply border-l-priority-p1;
+  }
+
+  .tree-node-priority-p2 {
+    @apply border-l-priority-p2;
+  }
+
+  .tree-node-priority-p3 {
+    @apply border-l-priority-p3;
+  }
+
+  .tree-node-priority-p4 {
+    @apply border-l-priority-p4;
+  }
+
+  /* Tree node indentation levels */
+  .tree-indent-0 { @apply pl-0; }
+  .tree-indent-1 { @apply pl-4; }
+  .tree-indent-2 { @apply pl-8; }
+  .tree-indent-3 { @apply pl-12; }
+  .tree-indent-4 { @apply pl-16; }
+  .tree-indent-5 { @apply pl-20; }
 }
 
 /* Utility layer */

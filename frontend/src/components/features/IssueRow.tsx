@@ -1,5 +1,5 @@
 import type { Issue } from '@/types'
-import { cn, formatRelativeTime, getStatusIcon, getPriorityBadgeClass, getPriorityLabel } from '@/lib/utils'
+import { cn, formatRelativeTime, getStatusIcon, getStatusBadgeClass, getPriorityBadgeClass, getPriorityLabel } from '@/lib/utils'
 
 interface IssueRowProps {
   issue: Issue
@@ -8,14 +8,7 @@ interface IssueRowProps {
 }
 
 export function IssueRow({ issue, onClick, isUpdated = false }: IssueRowProps) {
-  const statusBadgeClass = {
-    open: 'bg-status-open/20 text-status-open border-status-open/30',
-    in_progress: 'bg-status-in-progress/20 text-status-in-progress border-status-in-progress/30',
-    blocked: 'bg-status-blocked/20 text-status-blocked border-status-blocked/30',
-    closed: 'bg-status-closed/20 text-status-closed border-status-closed/30',
-    deferred: 'bg-status-deferred/20 text-status-deferred border-status-deferred/30',
-    tombstone: 'bg-bg-tertiary text-text-muted border-border',
-  }[issue.status] || 'bg-status-open/20 text-status-open border-status-open/30'
+  const statusBadgeClass = getStatusBadgeClass(issue.status)
 
   return (
     <div

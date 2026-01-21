@@ -182,3 +182,137 @@ export function getPriorityBadgeClass(priority: number): string {
       return 'badge-priority-p2'
   }
 }
+
+/**
+ * Returns the CSS class for status badge styling.
+ * Includes background, text color, and border color.
+ */
+export function getStatusBadgeClass(status: string): string {
+  switch (status) {
+    case 'open':
+      return 'bg-status-open/20 text-status-open border-status-open/30'
+    case 'in_progress':
+      return 'bg-status-in-progress/20 text-status-in-progress border-status-in-progress/30'
+    case 'blocked':
+      return 'bg-status-blocked/20 text-status-blocked border-status-blocked/30'
+    case 'closed':
+      return 'bg-status-closed/20 text-status-closed border-status-closed/30'
+    case 'deferred':
+      return 'bg-status-deferred/20 text-status-deferred border-status-deferred/30'
+    case 'tombstone':
+      return 'bg-bg-tertiary text-text-muted border-border'
+    default:
+      return 'bg-status-open/20 text-status-open border-status-open/30'
+  }
+}
+
+/**
+ * Returns the CSS class for status text color only.
+ */
+export function getStatusColorClass(status: string): string {
+  switch (status) {
+    case 'open':
+      return 'text-status-open'
+    case 'in_progress':
+      return 'text-status-in-progress'
+    case 'blocked':
+      return 'text-status-blocked'
+    case 'closed':
+      return 'text-status-closed'
+    case 'deferred':
+      return 'text-status-deferred'
+    case 'tombstone':
+      return 'text-text-muted'
+    default:
+      return 'text-status-open'
+  }
+}
+
+/**
+ * Returns the CSS class for priority-based border coloring on tree nodes.
+ */
+export function getPriorityBorderClass(priority: number): string {
+  switch (priority) {
+    case 0:
+      return 'border-l-priority-p0'
+    case 1:
+      return 'border-l-priority-p1'
+    case 2:
+      return 'border-l-priority-p2'
+    case 3:
+      return 'border-l-priority-p3'
+    case 4:
+      return 'border-l-priority-p4'
+    default:
+      return 'border-l-priority-p2'
+  }
+}
+
+/**
+ * Returns the CSS class for priority text color.
+ */
+export function getPriorityColorClass(priority: number): string {
+  switch (priority) {
+    case 0:
+      return 'text-priority-p0'
+    case 1:
+      return 'text-priority-p1'
+    case 2:
+      return 'text-priority-p2'
+    case 3:
+      return 'text-priority-p3'
+    case 4:
+      return 'text-priority-p4'
+    default:
+      return 'text-priority-p2'
+  }
+}
+
+/**
+ * Returns the CSS class for tree status icon.
+ */
+export function getTreeStatusIconClass(status: string): string {
+  switch (status) {
+    case 'open':
+      return 'tree-status-icon-open'
+    case 'in_progress':
+      return 'tree-status-icon-in-progress'
+    case 'blocked':
+      return 'tree-status-icon-blocked'
+    case 'closed':
+      return 'tree-status-icon-closed'
+    case 'deferred':
+      return 'tree-status-icon-deferred'
+    default:
+      return 'tree-status-icon-open'
+  }
+}
+
+/**
+ * Returns the CSS class for tree node priority styling.
+ */
+export function getTreeNodePriorityClass(priority: number): string {
+  switch (priority) {
+    case 0:
+      return 'tree-node-priority-p0'
+    case 1:
+      return 'tree-node-priority-p1'
+    case 2:
+      return 'tree-node-priority-p2'
+    case 3:
+      return 'tree-node-priority-p3'
+    case 4:
+      return 'tree-node-priority-p4'
+    default:
+      return 'tree-node-priority-p2'
+  }
+}
+
+/**
+ * Returns the CSS class for tree indentation by depth level.
+ */
+export function getTreeIndentClass(depth: number): string {
+  const maxIndent = 5
+  const clampedDepth = Math.min(Math.max(0, depth), maxIndent)
+  return `tree-indent-${clampedDepth}`
+}
