@@ -1,6 +1,8 @@
 import { Cog, Fuel } from 'lucide-react'
 import type { Rig } from '@/types'
 import { cn } from '@/lib/utils'
+import { Badge } from '@/components/ui'
+import { useAgents, healthIndicatorRoles, roleLabels } from '@/hooks/useAgents'
 
 interface SidebarProps {
   rigs: Rig[]
@@ -82,13 +84,58 @@ export function Sidebar({ rigs, selectedRig, onSelectRig, loading, connected, ht
   )
 }
 
-interface RigItemProps {
+export type RigItemVariant = 'default' | 'health'
+
+export interface RigItemProps {
   rig: Rig
   selected: boolean
   onClick: () => void
+  /** Variant: 'default' shows issue count, 'health' shows agent status dots */
+  variant?: RigItemVariant
 }
 
-function RigItem({ rig, selected, onClick }: RigItemProps) {
+/**
+ * Default indicator showing open issue count.
+ */
+function CountIndicator({ count }: { count: number }) {
+  return (
+    <div className="flex items-center gap-1 text-sm text-text-secondary">
+      <span>{count}</span>
+      <span className="w-2 h-2 rounded-full bg-status-open" />
+    </div>
+  )
+}
+
+/**
+ * Health indicator with fallback to count.
+ * Shows 3 dots for Witness/Refinery/Crew status, falls back to count on error.
+ */
+function HealthIndicatorWithFallback({ rigId, fallbackCount }: { rigId: string; fallbackCount: number }) {
+  const { getRoleHealth, loading, error } = useAgents(rigId)
+
+  // Fallback to count indicator if loading or error
+  if (loading || error) {
+    return <CountIndicator count={fallbackCount} />
+  }
+
+  return (
+    <div className="flex items-center gap-1" title="Witness | Refinery | Crew">
+      {healthIndicatorRoles.map((role) => {
+        const health = getRoleHealth(role)
+        return (
+          <Badge
+            key={role}
+            variant="health-dot"
+            state={health}
+            title={`${roleLabels[role]}: ${health ?? 'not present'}`}
+          />
+        )
+      })}
+    </div>
+  )
+}
+
+export function RigItem({ rig, selected, onClick, variant = 'default' }: RigItemProps) {
   return (
     <button
       onClick={onClick}
@@ -104,10 +151,11 @@ function RigItem({ rig, selected, onClick }: RigItemProps) {
         <div className="font-medium truncate">{rig.name}</div>
         <div className="text-xs text-text-muted">{rig.prefix}</div>
       </div>
-      <div className="flex items-center gap-1 text-sm text-text-secondary">
-        <span>{rig.open_count}</span>
-        <span className="w-2 h-2 rounded-full bg-status-open" />
-      </div>
+      {variant === 'health' ? (
+        <HealthIndicatorWithFallback rigId={rig.id} fallbackCount={rig.open_count} />
+      ) : (
+        <CountIndicator count={rig.open_count} />
+      )}
     </button>
   )
 }
