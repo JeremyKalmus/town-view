@@ -31,9 +31,11 @@ type PanelTab = 'edit' | 'dependencies' | 'comments' | 'history'
 
 interface PlanningViewProps {
   refreshKey?: number
+  /** Set of issue IDs that were recently updated (for flash animation) */
+  updatedIssueIds?: Set<string>
 }
 
-export function PlanningView({ refreshKey = 0 }: PlanningViewProps) {
+export function PlanningView({ refreshKey = 0, updatedIssueIds }: PlanningViewProps) {
   const { selectedRig, treeFilters, setTreeFilters } = useRigStore()
   const { showToast } = useToastStore()
 
@@ -371,6 +373,7 @@ export function PlanningView({ refreshKey = 0 }: PlanningViewProps) {
             defaultExpanded={true}
             onNodeClick={handleNodeClick}
             onBlockerClick={handleBlockerClick}
+            updatedIssueIds={updatedIssueIds}
           />
         )}
       </div>
