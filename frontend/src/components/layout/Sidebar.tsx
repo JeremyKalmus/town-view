@@ -1,5 +1,6 @@
 import { Cog, Fuel } from 'lucide-react'
 import type { Rig } from '@/types'
+import { SkeletonRigList } from '@/components/ui'
 import { cn } from '@/lib/utils'
 
 interface SidebarProps {
@@ -27,11 +28,7 @@ export function Sidebar({ rigs, selectedRig, onSelectRig, loading, connected }: 
 
         {loading ? (
           <div className="px-2 py-4">
-            <div className="animate-pulse space-y-2">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="h-10 bg-bg-tertiary rounded-md" />
-              ))}
-            </div>
+            <SkeletonRigList count={3} />
           </div>
         ) : rigs.length === 0 ? (
           <div className="px-2 py-4 text-text-muted text-sm">
