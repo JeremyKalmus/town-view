@@ -168,7 +168,7 @@ function App() {
                 <p className="text-text-muted">Select a rig from the sidebar</p>
               </div>
             ) : viewMode === 'planning' ? (
-              <PlanningView />
+              <PlanningView refreshKey={refreshKey} />
             ) : viewMode === 'monitoring' ? (
               <RigDashboard rig={selectedRig} refreshKey={refreshKey} updatedIssueIds={updatedIssueIds} />
             ) : (
