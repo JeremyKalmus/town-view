@@ -206,6 +206,11 @@ export function hasCachedData(): boolean {
   return meta.keys.length > 0
 }
 
+// Expose cache clearing globally for debugging
+if (typeof window !== 'undefined') {
+  (window as unknown as { clearTownViewCache: () => void }).clearTownViewCache = clearAllCache
+}
+
 /**
  * Get the timestamp of cached data for a URL
  */
