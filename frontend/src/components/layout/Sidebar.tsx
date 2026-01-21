@@ -1,6 +1,7 @@
-import { Cog, Fuel } from 'lucide-react'
+import { Cog, Fuel, Keyboard } from 'lucide-react'
 import type { Rig } from '@/types'
 import { cn } from '@/lib/utils'
+import { ShortcutHint } from '@/components/ui/ShortcutHint'
 
 interface SidebarProps {
   rigs: Rig[]
@@ -52,16 +53,23 @@ export function Sidebar({ rigs, selectedRig, onSelectRig, loading, connected }: 
       </div>
 
       {/* Footer */}
-      <div className="p-4 border-t border-border text-xs text-text-muted flex items-center justify-between">
-        <span>Gas Town</span>
-        <div className="flex items-center gap-1">
-          <span
-            className={cn(
-              'w-2 h-2 rounded-full',
-              connected ? 'bg-status-closed animate-pulse' : 'bg-status-blocked'
-            )}
-          />
-          <span>{connected ? 'Live' : 'Offline'}</span>
+      <div className="p-4 border-t border-border">
+        <div className="flex items-center justify-between text-xs text-text-muted mb-2">
+          <span>Gas Town</span>
+          <div className="flex items-center gap-1">
+            <span
+              className={cn(
+                'w-2 h-2 rounded-full',
+                connected ? 'bg-status-closed animate-pulse' : 'bg-status-blocked'
+              )}
+            />
+            <span>{connected ? 'Live' : 'Offline'}</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5 text-xs text-text-muted">
+          <Keyboard className="w-3 h-3" />
+          <span>Shortcuts</span>
+          <ShortcutHint keys="?" size="sm" />
         </div>
       </div>
     </aside>

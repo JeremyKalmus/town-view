@@ -92,6 +92,7 @@ const config: Config = {
       animation: {
         'fade-in': 'fadeIn 200ms ease-out',
         'slide-in': 'slideIn 200ms ease-out',
+        'slide-up': 'slideUp 200ms ease-out',
         'flash-update': 'flashUpdate 1.5s ease-out',
       },
       keyframes: {
@@ -102,6 +103,10 @@ const config: Config = {
         slideIn: {
           '0%': { transform: 'translateX(100%)' },
           '100%': { transform: 'translateX(0)' },
+        },
+        slideUp: {
+          '0%': { opacity: '0', transform: 'translate(-50%, -48%) scale(0.96)' },
+          '100%': { opacity: '1', transform: 'translate(-50%, -50%) scale(1)' },
         },
         flashUpdate: {
           '0%': { backgroundColor: 'rgba(245, 158, 11, 0.3)' },
