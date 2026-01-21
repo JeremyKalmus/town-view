@@ -12,6 +12,7 @@ interface TreeNodeProps {
   depth?: number
   defaultExpanded?: boolean
   onNodeClick?: (issue: Issue) => void
+  showDescriptionPreview?: boolean
 }
 
 export function TreeNode({
@@ -19,8 +20,10 @@ export function TreeNode({
   depth = 0,
   defaultExpanded = false,
   onNodeClick,
+  showDescriptionPreview = false,
 }: TreeNodeProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded)
+  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false)
   const [childrenHeight, setChildrenHeight] = useState<number | undefined>(undefined)
   const childrenRef = useRef<HTMLDivElement>(null)
 
@@ -43,6 +46,13 @@ export function TreeNode({
   const handleNodeClick = () => {
     onNodeClick?.(data.issue)
   }
+
+  const handleDescriptionToggle = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setIsDescriptionExpanded(!isDescriptionExpanded)
+  }
+
+  const hasDescription = data.issue.description && data.issue.description.trim().length > 0
 
   const statusBadgeClass = {
     open: 'bg-status-open/20 text-status-open border-status-open/30',
@@ -121,7 +131,49 @@ export function TreeNode({
         <span className="text-xs px-2 py-0.5 rounded bg-bg-tertiary text-text-secondary flex-shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
           {data.issue.issue_type}
         </span>
+
+        {/* Description toggle indicator */}
+        {showDescriptionPreview && hasDescription && (
+          <button
+            onClick={handleDescriptionToggle}
+            className={cn(
+              'w-5 h-5 flex items-center justify-center flex-shrink-0',
+              'text-text-muted hover:text-text-primary',
+              'transition-colors duration-100'
+            )}
+            aria-label={isDescriptionExpanded ? 'Hide description' : 'Show description'}
+            aria-expanded={isDescriptionExpanded}
+          >
+            <svg
+              className={cn(
+                'w-4 h-4 transition-transform duration-200',
+                isDescriptionExpanded && 'rotate-180'
+              )}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+        )}
       </div>
+
+      {/* Description preview */}
+      {showDescriptionPreview && hasDescription && (
+        <div
+          className={cn(
+            'overflow-hidden transition-[max-height,opacity] duration-200 ease-out',
+            isDescriptionExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
+          )}
+          style={{ paddingLeft: `${depth * 20 + 52}px` }}
+        >
+          <div className="py-2 pr-4 text-sm text-text-secondary whitespace-pre-wrap">
+            {data.issue.description}
+          </div>
+        </div>
+      )}
 
       {/* Children container with animation */}
       {hasChildren && (
@@ -149,6 +201,7 @@ export function TreeNode({
                 depth={depth + 1}
                 defaultExpanded={defaultExpanded}
                 onNodeClick={onNodeClick}
+                showDescriptionPreview={showDescriptionPreview}
               />
             ))}
           </div>
@@ -163,10 +216,11 @@ interface TreeViewProps {
   nodes: TreeNodeData[]
   defaultExpanded?: boolean
   onNodeClick?: (issue: Issue) => void
+  showDescriptionPreview?: boolean
   className?: string
 }
 
-export function TreeView({ nodes, defaultExpanded = false, onNodeClick, className }: TreeViewProps) {
+export function TreeView({ nodes, defaultExpanded = false, onNodeClick, showDescriptionPreview = false, className }: TreeViewProps) {
   return (
     <div className={cn('py-2', className)}>
       {nodes.map((node) => (
@@ -176,6 +230,7 @@ export function TreeView({ nodes, defaultExpanded = false, onNodeClick, classNam
           depth={0}
           defaultExpanded={defaultExpanded}
           onNodeClick={onNodeClick}
+          showDescriptionPreview={showDescriptionPreview}
         />
       ))}
     </div>
