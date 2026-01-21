@@ -9,22 +9,22 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Background colors
+        // Background colors - using CSS variables for theme switching
         bg: {
-          primary: '#0D0D0D',
-          secondary: '#1A1A1A',
-          tertiary: '#262626',
+          primary: 'var(--bg-primary)',
+          secondary: 'var(--bg-secondary)',
+          tertiary: 'var(--bg-tertiary)',
         },
         // Border colors
         border: {
-          DEFAULT: '#333333',
-          accent: '#4A4A4A',
+          DEFAULT: 'var(--border)',
+          accent: 'var(--border-accent)',
         },
         // Text colors
         text: {
-          primary: '#F5F5F5',
-          secondary: '#A3A3A3',
-          muted: '#666666',
+          primary: 'var(--text-primary)',
+          secondary: 'var(--text-secondary)',
+          muted: 'var(--text-muted)',
         },
         // Status colors (Mad Max inspired)
         status: {
@@ -44,8 +44,8 @@ const config: Config = {
         },
         // Accent colors (Mad Max theme)
         accent: {
-          rust: '#B7410E',
-          chrome: '#C0C0C0',
+          rust: 'var(--accent-rust)',
+          chrome: 'var(--accent-chrome)',
           oil: '#1C1C1C',
           sand: '#C2B280',
           warning: '#FACC15',
