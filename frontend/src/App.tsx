@@ -3,7 +3,7 @@ import { Sidebar } from '@/components/layout/Sidebar'
 import { RigDashboard } from '@/components/features/RigDashboard'
 import { useRigStore } from '@/stores/rig-store'
 import { useWebSocket } from '@/hooks/useWebSocket'
-import type { Rig } from '@/types'
+import type { Rig, WSMessage } from '@/types'
 
 function App() {
   const { selectedRig, setSelectedRig } = useRigStore()
@@ -13,9 +13,18 @@ function App() {
   const [refreshKey, setRefreshKey] = useState(0)
 
   // WebSocket for real-time updates
-  const handleWSMessage = useCallback((msg: { type: string; rigId?: string }) => {
-    if (msg.type === 'rig_update' || msg.type === 'issue_update') {
-      // Trigger refresh when we get updates
+  const handleWSMessage = useCallback((msg: WSMessage) => {
+    console.log('[WS] Received message:', msg)
+
+    if (msg.type === 'beads_changed') {
+      // Trigger refresh when beads change
+      // msg.rig contains the rig name that was updated
+      setRefreshKey((k) => k + 1)
+    } else if (msg.type === 'rig_discovered') {
+      // Refresh rig list when new rig discovered
+      setRefreshKey((k) => k + 1)
+    } else if (msg.type === 'agent_state_changed') {
+      // Refresh when agent state changes
       setRefreshKey((k) => k + 1)
     }
   }, [])

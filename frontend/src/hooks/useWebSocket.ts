@@ -1,11 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from 'react'
-
-interface WSMessage {
-  type: 'rig_update' | 'issue_update' | 'agent_update' | 'ping'
-  rigId?: string
-  data?: unknown
-  timestamp: string
-}
+import type { WSMessage } from '@/types'
 
 interface UseWebSocketOptions {
   onMessage?: (msg: WSMessage) => void
