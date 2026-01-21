@@ -1,12 +1,15 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { RigDashboard } from '@/components/features/RigDashboard'
+import { Toast, ToastProvider, ToastViewport } from '@/components/ui/Toast'
 import { useRigStore } from '@/stores/rig-store'
+import { useToastStore } from '@/stores/toast-store'
 import { useWebSocket } from '@/hooks/useWebSocket'
 import type { Rig, WSMessage } from '@/types'
 
 function App() {
   const { selectedRig, setSelectedRig } = useRigStore()
+  const { toast, hideToast } = useToastStore()
   const [rigs, setRigs] = useState<Rig[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -82,39 +85,51 @@ function App() {
   }, [selectedRig, setSelectedRig, refreshKey])
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      {/* Sidebar */}
-      <Sidebar
-        rigs={rigs}
-        selectedRig={selectedRig}
-        onSelectRig={setSelectedRig}
-        loading={loading}
-        connected={connected}
-      />
+    <ToastProvider duration={4000}>
+      <div className="flex h-screen overflow-hidden">
+        {/* Sidebar */}
+        <Sidebar
+          rigs={rigs}
+          selectedRig={selectedRig}
+          onSelectRig={setSelectedRig}
+          loading={loading}
+          connected={connected}
+        />
 
-      {/* Main content */}
-      <main className="flex-1 overflow-auto">
-        {error ? (
-          <div className="flex items-center justify-center h-full">
-            <div className="card-accent p-6 max-w-md">
-              <h2 className="text-lg font-semibold text-status-blocked mb-2">
-                Connection Error
-              </h2>
-              <p className="text-text-secondary mb-4">{error}</p>
-              <p className="text-sm text-text-muted">
-                Make sure the Town View server is running on port 8080.
-              </p>
+        {/* Main content */}
+        <main className="flex-1 overflow-auto">
+          {error ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="card-accent p-6 max-w-md">
+                <h2 className="text-lg font-semibold text-status-blocked mb-2">
+                  Connection Error
+                </h2>
+                <p className="text-text-secondary mb-4">{error}</p>
+                <p className="text-sm text-text-muted">
+                  Make sure the Town View server is running on port 8080.
+                </p>
+              </div>
             </div>
-          </div>
-        ) : selectedRig ? (
-          <RigDashboard rig={selectedRig} refreshKey={refreshKey} updatedIssueIds={updatedIssueIds} />
-        ) : (
-          <div className="flex items-center justify-center h-full">
-            <p className="text-text-muted">Select a rig from the sidebar</p>
-          </div>
-        )}
-      </main>
-    </div>
+          ) : selectedRig ? (
+            <RigDashboard rig={selectedRig} refreshKey={refreshKey} updatedIssueIds={updatedIssueIds} />
+          ) : (
+            <div className="flex items-center justify-center h-full">
+              <p className="text-text-muted">Select a rig from the sidebar</p>
+            </div>
+          )}
+        </main>
+      </div>
+
+      {/* Toast notifications */}
+      <Toast
+        title={toast.title}
+        description={toast.description}
+        variant={toast.variant}
+        open={toast.open}
+        onOpenChange={(open) => !open && hideToast()}
+      />
+      <ToastViewport />
+    </ToastProvider>
   )
 }
 
