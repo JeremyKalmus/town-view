@@ -5,7 +5,7 @@ import { cachedFetch } from '@/services/cache'
 import { cn, getAgentRoleIcon, formatRelativeTime } from '@/lib/utils'
 import { SlideOutPanel } from '@/components/layout/SlideOutPanel'
 import { IssueEditorForm } from './issue-editor'
-import { SkeletonAgentGrid, SkeletonWorkList } from '@/components/ui/Skeleton'
+import { SkeletonAgentGrid, SkeletonWorkList, ErrorState } from '@/components/ui/Skeleton'
 
 interface MonitoringViewProps {
   rig: Rig
@@ -42,6 +42,13 @@ export function MonitoringView({ rig, refreshKey = 0, updatedIssueIds = new Set(
   const [issuesLoading, setIssuesLoading] = useState(true)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
+  // Error states
+  const [agentsError, setAgentsError] = useState<string | null>(null)
+  const [issuesError, setIssuesError] = useState<string | null>(null)
+
+  // Retry counter for manual retry
+  const [retryCount, setRetryCount] = useState(0)
+
   // Panel state for viewing hooked bead
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null)
   const [panelOpen, setPanelOpen] = useState(false)
@@ -49,6 +56,7 @@ export function MonitoringView({ rig, refreshKey = 0, updatedIssueIds = new Set(
   // Fetch agents for rig
   useEffect(() => {
     setLoading(true)
+    setAgentsError(null)
 
     const fetchAgents = async () => {
       const url = `/api/rigs/${rig.id}/agents`
@@ -65,17 +73,19 @@ export function MonitoringView({ rig, refreshKey = 0, updatedIssueIds = new Set(
         }
       } else {
         console.error('Failed to fetch agents:', result.error)
+        setAgentsError(result.error || 'Failed to load agents')
         setAgents([])
       }
       setLoading(false)
     }
 
     fetchAgents()
-  }, [rig.id, refreshKey])
+  }, [rig.id, refreshKey, retryCount])
 
   // Fetch issues for in-flight work section
   useEffect(() => {
     setIssuesLoading(true)
+    setIssuesError(null)
 
     const fetchIssues = async () => {
       const url = `/api/rigs/${rig.id}/issues?all=true`
@@ -87,13 +97,19 @@ export function MonitoringView({ rig, refreshKey = 0, updatedIssueIds = new Set(
       if (result.data) {
         setIssues(result.data)
       } else {
+        setIssuesError(result.error || 'Failed to load issues')
         setIssues([])
       }
       setIssuesLoading(false)
     }
 
     fetchIssues()
-  }, [rig.id, refreshKey])
+  }, [rig.id, refreshKey, retryCount])
+
+  // Handle retry
+  const handleRetry = useCallback(() => {
+    setRetryCount((c) => c + 1)
+  }, [])
 
   // Separate agents by status for display
   const workingAgents = agents.filter(a => a.state === 'working' || a.hook_bead)
@@ -182,8 +198,17 @@ export function MonitoringView({ rig, refreshKey = 0, updatedIssueIds = new Set(
         </div>
       </div>
 
+      {/* Error state - show if agents failed to load */}
+      {agentsError && !loading && (
+        <ErrorState
+          title="Failed to load agents"
+          message={agentsError}
+          onRetry={handleRetry}
+        />
+      )}
+
       {/* Stuck agents section - shown first if any exist */}
-      {stuckAgents.length > 0 && (
+      {!agentsError && stuckAgents.length > 0 && (
         <div className="mb-8">
           <div className="flex items-center gap-2 mb-4">
             <span className="text-status-blocked text-lg">⚠</span>
@@ -204,117 +229,133 @@ export function MonitoringView({ rig, refreshKey = 0, updatedIssueIds = new Set(
       )}
 
       {/* In-flight work section */}
-      <div className="mb-8">
-        <div className="flex items-center gap-2 mb-4">
-          <span className="text-status-in-progress text-lg">◐</span>
-          <h2 className="section-header">
-            IN-FLIGHT WORK ({inFlightWork.length})
-          </h2>
+      {!agentsError && (
+        <div className="mb-8">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-status-in-progress text-lg">◐</span>
+            <h2 className="section-header">
+              IN-FLIGHT WORK ({inFlightWork.length})
+            </h2>
+          </div>
+          <div className="card">
+            {issuesLoading ? (
+              <SkeletonWorkList count={3} />
+            ) : issuesError ? (
+              <div className="py-8 text-center text-status-blocked text-sm">
+                {issuesError}
+              </div>
+            ) : inFlightWork.length === 0 ? (
+              <div className="py-8 text-center text-text-muted">
+                No work currently in progress
+              </div>
+            ) : (
+              <div className="divide-y divide-border">
+                {inFlightWork.map((issue) => (
+                  <InFlightWorkRow
+                    key={issue.id}
+                    issue={issue}
+                    agent={issue.assignee ? agentsByName.get(issue.assignee) : undefined}
+                    isUpdated={updatedIssueIds.has(issue.id)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         </div>
-        <div className="card">
-          {issuesLoading ? (
-            <SkeletonWorkList count={3} />
-          ) : inFlightWork.length === 0 ? (
-            <div className="py-8 text-center text-text-muted">
-              No work currently in progress
-            </div>
-          ) : (
-            <div className="divide-y divide-border">
-              {inFlightWork.map((issue) => (
-                <InFlightWorkRow
-                  key={issue.id}
-                  issue={issue}
-                  agent={issue.assignee ? agentsByName.get(issue.assignee) : undefined}
-                  isUpdated={updatedIssueIds.has(issue.id)}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
+      )}
 
       {/* Recently completed section */}
-      <div className="mb-8">
-        <div className="flex items-center gap-2 mb-4">
-          <span className="text-status-closed text-lg">✓</span>
-          <h2 className="section-header">
-            RECENTLY COMPLETED ({recentlyCompleted.length})
-          </h2>
-          <span className="text-xs text-text-muted">(last 24h)</span>
+      {!agentsError && (
+        <div className="mb-8">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-status-closed text-lg">✓</span>
+            <h2 className="section-header">
+              RECENTLY COMPLETED ({recentlyCompleted.length})
+            </h2>
+            <span className="text-xs text-text-muted">(last 24h)</span>
+          </div>
+          <div className="card">
+            {issuesLoading ? (
+              <SkeletonWorkList count={3} />
+            ) : issuesError ? (
+              <div className="py-8 text-center text-status-blocked text-sm">
+                {issuesError}
+              </div>
+            ) : recentlyCompleted.length === 0 ? (
+              <div className="py-8 text-center text-text-muted">
+                No work completed in the last 24 hours
+              </div>
+            ) : (
+              <div className="divide-y divide-border">
+                {recentlyCompleted.map((issue) => (
+                  <RecentlyCompletedRow
+                    key={issue.id}
+                    issue={issue}
+                    agent={issue.assignee ? agentsByName.get(issue.assignee) : undefined}
+                    isUpdated={updatedIssueIds.has(issue.id)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         </div>
-        <div className="card">
-          {issuesLoading ? (
-            <SkeletonWorkList count={3} />
-          ) : recentlyCompleted.length === 0 ? (
-            <div className="py-8 text-center text-text-muted">
-              No work completed in the last 24 hours
+      )}
+
+      {/* Working agents section */}
+      {!agentsError && (
+        <div className="mb-8">
+          <h2 className="section-header mb-4">
+            WORKING AGENTS ({workingAgents.length})
+          </h2>
+          {loading ? (
+            <SkeletonAgentGrid count={4} />
+          ) : workingAgents.length === 0 ? (
+            <div className="card">
+              <div className="py-8 text-center text-text-muted">
+                No agents currently working
+              </div>
             </div>
           ) : (
-            <div className="divide-y divide-border">
-              {recentlyCompleted.map((issue) => (
-                <RecentlyCompletedRow
-                  key={issue.id}
-                  issue={issue}
-                  agent={issue.assignee ? agentsByName.get(issue.assignee) : undefined}
-                  isUpdated={updatedIssueIds.has(issue.id)}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {workingAgents.map((agent) => (
+                <AgentCard
+                  key={agent.id}
+                  agent={agent}
+                  onClick={agent.hook_bead ? () => handleAgentClick(agent) : undefined}
                 />
               ))}
             </div>
           )}
         </div>
-      </div>
-
-      {/* Working agents section */}
-      <div className="mb-8">
-        <h2 className="section-header mb-4">
-          WORKING AGENTS ({workingAgents.length})
-        </h2>
-        {loading ? (
-          <SkeletonAgentGrid count={4} />
-        ) : workingAgents.length === 0 ? (
-          <div className="card">
-            <div className="py-8 text-center text-text-muted">
-              No agents currently working
-            </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {workingAgents.map((agent) => (
-              <AgentCard
-                key={agent.id}
-                agent={agent}
-                onClick={agent.hook_bead ? () => handleAgentClick(agent) : undefined}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+      )}
 
       {/* Idle agents section */}
-      <div>
-        <h2 className="section-header mb-4">
-          IDLE AGENTS ({idleAgents.length})
-        </h2>
-        {loading ? (
-          <SkeletonAgentGrid count={2} />
-        ) : idleAgents.length === 0 ? (
-          <div className="card">
-            <div className="py-8 text-center text-text-muted">
-              No idle agents
+      {!agentsError && (
+        <div>
+          <h2 className="section-header mb-4">
+            IDLE AGENTS ({idleAgents.length})
+          </h2>
+          {loading ? (
+            <SkeletonAgentGrid count={2} />
+          ) : idleAgents.length === 0 ? (
+            <div className="card">
+              <div className="py-8 text-center text-text-muted">
+                No idle agents
+              </div>
             </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {idleAgents.map((agent) => (
-              <AgentCard
-                key={agent.id}
-                agent={agent}
-                onClick={agent.hook_bead ? () => handleAgentClick(agent) : undefined}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {idleAgents.map((agent) => (
+                <AgentCard
+                  key={agent.id}
+                  agent={agent}
+                  onClick={agent.hook_bead ? () => handleAgentClick(agent) : undefined}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Issue Editor Panel for viewing hooked bead */}
       <SlideOutPanel

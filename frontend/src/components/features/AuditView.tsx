@@ -8,7 +8,7 @@ import { AssignmentComparison } from './AssignmentComparison'
 import { getDescendants } from '@/lib/tree'
 import type { Issue, AuditMetrics } from '@/types'
 import { cn, getStatusIcon } from '@/lib/utils'
-import { SkeletonCompletedWorkList } from '@/components/ui/Skeleton'
+import { SkeletonCompletedWorkList, ErrorState } from '@/components/ui/Skeleton'
 
 interface AuditViewProps {
   /** Set of issue IDs that were recently updated (for flash animation) */
@@ -27,6 +27,7 @@ export function AuditView({ updatedIssueIds = new Set() }: AuditViewProps) {
   const [selectedConvoy, setSelectedConvoy] = useState<Issue | null>(null)
   const [convoySortBy, setConvoySortBy] = useState<ConvoySortBy>('date')
   const [convoysLoading, setConvoysLoading] = useState(true)
+  const [convoysError, setConvoysError] = useState<string | null>(null)
 
   // Date range filter
   const [dateRange, setDateRange] = useState<DateRange>({
@@ -37,9 +38,13 @@ export function AuditView({ updatedIssueIds = new Set() }: AuditViewProps) {
   // Completed work items
   const [completedWork, setCompletedWork] = useState<Issue[]>([])
   const [completedWorkLoading, setCompletedWorkLoading] = useState(false)
+  const [completedWorkError, setCompletedWorkError] = useState<string | null>(null)
 
   // Expanded item for full comparison view
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null)
+
+  // Retry counter for manual retry
+  const [retryCount, setRetryCount] = useState(0)
 
   // Fetch convoys when rig changes
   useEffect(() => {
@@ -50,6 +55,7 @@ export function AuditView({ updatedIssueIds = new Set() }: AuditViewProps) {
     }
 
     setConvoysLoading(true)
+    setConvoysError(null)
 
     const fetchConvoys = async () => {
       const url = `/api/rigs/${selectedRig.id}/issues?all=true`
@@ -65,13 +71,14 @@ export function AuditView({ updatedIssueIds = new Set() }: AuditViewProps) {
         )
         setConvoys(convoyIssues)
       } else {
+        setConvoysError(result.error || 'Failed to load convoys')
         setConvoys([])
       }
       setConvoysLoading(false)
     }
 
     fetchConvoys()
-  }, [selectedRig?.id])
+  }, [selectedRig?.id, retryCount])
 
   // Fetch completed work when convoy or date range changes
   useEffect(() => {
@@ -81,6 +88,7 @@ export function AuditView({ updatedIssueIds = new Set() }: AuditViewProps) {
     }
 
     setCompletedWorkLoading(true)
+    setCompletedWorkError(null)
 
     const fetchCompletedWork = async () => {
       const url = `/api/rigs/${selectedRig.id}/issues?all=true`
@@ -120,13 +128,19 @@ export function AuditView({ updatedIssueIds = new Set() }: AuditViewProps) {
 
         setCompletedWork(filtered)
       } else {
+        setCompletedWorkError(result.error || 'Failed to load completed work')
         setCompletedWork([])
       }
       setCompletedWorkLoading(false)
     }
 
     fetchCompletedWork()
-  }, [selectedRig?.id, selectedConvoy?.id, dateRange])
+  }, [selectedRig?.id, selectedConvoy?.id, dateRange, retryCount])
+
+  // Handle retry
+  const handleRetry = useCallback(() => {
+    setRetryCount((c) => c + 1)
+  }, [])
 
   // Handle convoy selection
   const handleConvoySelect = useCallback((convoy: Issue | null) => {
@@ -197,79 +211,100 @@ export function AuditView({ updatedIssueIds = new Set() }: AuditViewProps) {
         </p>
       </div>
 
-      {/* Convoy Selector */}
-      <div className="card mb-6">
-        <ConvoySelector
-          convoys={convoys}
-          selectedConvoyId={selectedConvoy?.id}
-          onSelect={handleConvoySelect}
-          sortBy={convoySortBy}
-          onSortChange={setConvoySortBy}
-          loading={convoysLoading}
-          className="max-w-md"
+      {/* Error state */}
+      {convoysError && !convoysLoading && (
+        <ErrorState
+          title="Failed to load data"
+          message={convoysError}
+          onRetry={handleRetry}
         />
-      </div>
+      )}
+
+      {/* Convoy Selector */}
+      {!convoysError && (
+        <div className="card mb-6">
+          <ConvoySelector
+            convoys={convoys}
+            selectedConvoyId={selectedConvoy?.id}
+            onSelect={handleConvoySelect}
+            sortBy={convoySortBy}
+            onSortChange={setConvoySortBy}
+            loading={convoysLoading}
+            className="max-w-md"
+          />
+        </div>
+      )}
 
       {/* Date Range Picker */}
-      <div className="card mb-6">
-        <div className="mb-3 flex items-center gap-2">
-          <span className="text-sm font-medium text-text-secondary">
-            Filter by Date Range
-          </span>
-          {(dateRange.startDate || dateRange.endDate) && (
-            <span className="text-xs px-2 py-0.5 rounded-full bg-accent-rust/20 text-accent-rust">
-              Active
+      {!convoysError && (
+        <div className="card mb-6">
+          <div className="mb-3 flex items-center gap-2">
+            <span className="text-sm font-medium text-text-secondary">
+              Filter by Date Range
             </span>
-          )}
+            {(dateRange.startDate || dateRange.endDate) && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-accent-rust/20 text-accent-rust">
+                Active
+              </span>
+            )}
+          </div>
+          <DateRangePicker value={dateRange} onChange={setDateRange} />
         </div>
-        <DateRangePicker value={dateRange} onChange={setDateRange} />
-      </div>
+      )}
 
       {/* Metrics Display */}
-      <div className="mb-6">
-        <div className="mb-3">
-          <span className="section-header">METRICS SUMMARY</span>
+      {!convoysError && (
+        <div className="mb-6">
+          <div className="mb-3">
+            <span className="section-header">METRICS SUMMARY</span>
+          </div>
+          <MetricsDisplay metrics={metrics} />
         </div>
-        <MetricsDisplay metrics={metrics} />
-      </div>
+      )}
 
       {/* Completed Work List */}
-      <div className="card">
-        <div className="border-b border-border pb-2 mb-4">
-          <h2 className="section-header">
-            COMPLETED WORK
-            <span className="text-text-muted font-normal ml-2">
-              ({completedWork.length} {completedWork.length === 1 ? 'item' : 'items'})
-            </span>
-          </h2>
-        </div>
+      {!convoysError && (
+        <div className="card">
+          <div className="border-b border-border pb-2 mb-4">
+            <h2 className="section-header">
+              COMPLETED WORK
+              <span className="text-text-muted font-normal ml-2">
+                ({completedWork.length} {completedWork.length === 1 ? 'item' : 'items'})
+              </span>
+            </h2>
+          </div>
 
-        {completedWorkLoading ? (
-          <SkeletonCompletedWorkList count={3} />
-        ) : completedWork.length === 0 ? (
-          <div className="py-12 text-center text-text-muted">
-            {selectedConvoy && (dateRange.startDate || dateRange.endDate)
-              ? 'No completed work found for this convoy in the selected date range'
-              : selectedConvoy
-                ? 'No completed work found for this convoy'
-                : dateRange.startDate || dateRange.endDate
-                  ? 'No completed work found in the selected date range'
-                  : 'No completed work found'}
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {completedWork.map((issue) => (
-              <CompletedWorkItem
-                key={issue.id}
-                issue={issue}
-                isExpanded={expandedItemId === issue.id}
-                onToggleExpand={() => handleToggleExpand(issue.id)}
-                isUpdated={updatedIssueIds.has(issue.id)}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+          {completedWorkLoading ? (
+            <SkeletonCompletedWorkList count={3} />
+          ) : completedWorkError ? (
+            <div className="py-8 text-center text-status-blocked text-sm">
+              {completedWorkError}
+            </div>
+          ) : completedWork.length === 0 ? (
+            <div className="py-12 text-center text-text-muted">
+              {selectedConvoy && (dateRange.startDate || dateRange.endDate)
+                ? 'No completed work found for this convoy in the selected date range'
+                : selectedConvoy
+                  ? 'No completed work found for this convoy'
+                  : dateRange.startDate || dateRange.endDate
+                    ? 'No completed work found in the selected date range'
+                    : 'No completed work found'}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {completedWork.map((issue) => (
+                <CompletedWorkItem
+                  key={issue.id}
+                  issue={issue}
+                  isExpanded={expandedItemId === issue.id}
+                  onToggleExpand={() => handleToggleExpand(issue.id)}
+                  isUpdated={updatedIssueIds.has(issue.id)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
