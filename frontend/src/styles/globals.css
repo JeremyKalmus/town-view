@@ -387,4 +387,29 @@
   .form-hint {
     @apply text-xs text-text-muted;
   }
+
+  /* Health dot indicators for agent status */
+  .health-dot {
+    @apply inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-medium;
+  }
+
+  .health-dot-none {
+    @apply bg-bg-tertiary text-text-muted;
+  }
+
+  .health-dot-idle {
+    @apply bg-bg-tertiary text-text-muted;
+  }
+
+  .health-dot-working {
+    @apply bg-status-in-progress/20 text-status-in-progress;
+  }
+
+  .health-dot-stuck {
+    @apply bg-status-blocked/20 text-status-blocked;
+  }
+
+  .health-dot-paused {
+    @apply bg-status-deferred/20 text-status-deferred;
+  }
 }
