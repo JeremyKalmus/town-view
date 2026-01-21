@@ -2,9 +2,17 @@ import { useState, useRef, useEffect } from 'react'
 import type { Issue } from '@/types'
 import { cn, getStatusIcon, getPriorityBadgeClass, getPriorityLabel } from '@/lib/utils'
 
+/** Blocker info for displaying blocked-by indicator */
+export interface BlockerInfo {
+  id: string
+  title?: string
+}
+
 export interface TreeNodeData {
   issue: Issue
   children?: TreeNodeData[]
+  /** List of issues blocking this one */
+  blockers?: BlockerInfo[]
 }
 
 interface TreeNodeProps {
@@ -12,6 +20,7 @@ interface TreeNodeProps {
   depth?: number
   defaultExpanded?: boolean
   onNodeClick?: (issue: Issue) => void
+  onBlockerClick?: (blockerId: string) => void
   showDescriptionPreview?: boolean
 }
 
@@ -20,6 +29,7 @@ export function TreeNode({
   depth = 0,
   defaultExpanded = false,
   onNodeClick,
+  onBlockerClick,
   showDescriptionPreview = false,
 }: TreeNodeProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded)
@@ -127,6 +137,48 @@ export function TreeNode({
           {data.issue.title}
         </span>
 
+        {/* Blocked-by indicator */}
+        {data.blockers && data.blockers.length > 0 && (
+          <span className="flex items-center gap-1 flex-shrink-0">
+            {data.blockers.slice(0, 2).map((blocker) => (
+              <button
+                key={blocker.id}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onBlockerClick?.(blocker.id)
+                }}
+                className={cn(
+                  'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs',
+                  'bg-status-blocked/10 text-status-blocked border border-status-blocked/20',
+                  'hover:bg-status-blocked/20 transition-colors',
+                  'cursor-pointer'
+                )}
+                title={`Blocked by: ${blocker.title || blocker.id}`}
+              >
+                <svg
+                  className="w-3 h-3"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
+                  />
+                </svg>
+                <span className="mono">{blocker.id}</span>
+              </button>
+            ))}
+            {data.blockers.length > 2 && (
+              <span className="text-xs text-status-blocked">
+                +{data.blockers.length - 2}
+              </span>
+            )}
+          </span>
+        )}
+
         {/* Type badge */}
         <span className="text-xs px-2 py-0.5 rounded bg-bg-tertiary text-text-secondary flex-shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
           {data.issue.issue_type}
@@ -201,6 +253,7 @@ export function TreeNode({
                 depth={depth + 1}
                 defaultExpanded={defaultExpanded}
                 onNodeClick={onNodeClick}
+                onBlockerClick={onBlockerClick}
                 showDescriptionPreview={showDescriptionPreview}
               />
             ))}
@@ -216,11 +269,12 @@ interface TreeViewProps {
   nodes: TreeNodeData[]
   defaultExpanded?: boolean
   onNodeClick?: (issue: Issue) => void
+  onBlockerClick?: (blockerId: string) => void
   showDescriptionPreview?: boolean
   className?: string
 }
 
-export function TreeView({ nodes, defaultExpanded = false, onNodeClick, showDescriptionPreview = false, className }: TreeViewProps) {
+export function TreeView({ nodes, defaultExpanded = false, onNodeClick, onBlockerClick, showDescriptionPreview = false, className }: TreeViewProps) {
   return (
     <div className={cn('py-2', className)}>
       {nodes.map((node) => (
@@ -230,6 +284,7 @@ export function TreeView({ nodes, defaultExpanded = false, onNodeClick, showDesc
           depth={0}
           defaultExpanded={defaultExpanded}
           onNodeClick={onNodeClick}
+          onBlockerClick={onBlockerClick}
           showDescriptionPreview={showDescriptionPreview}
         />
       ))}

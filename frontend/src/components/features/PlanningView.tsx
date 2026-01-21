@@ -9,8 +9,8 @@
  * - Real-time updates via refreshKey prop
  */
 
-import { useState, useEffect, useCallback } from 'react'
-import type { Issue, Comment, HistoryEntry } from '@/types'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import type { Issue, Comment, HistoryEntry, Dependency } from '@/types'
 import { useRigStore } from '@/stores/rig-store'
 import { useToastStore } from '@/stores/toast-store'
 import { TreeView, type TreeNodeData } from './TreeNode'
@@ -62,6 +62,9 @@ export function PlanningView({ refreshKey = 0 }: PlanningViewProps) {
   const [history, setHistory] = useState<HistoryEntry[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
 
+  // Dependencies state for blocker indicators
+  const [dependencies, setDependencies] = useState<Dependency[]>([])
+
   // Fetch issues
   useEffect(() => {
     if (!selectedRig) return
@@ -86,6 +89,25 @@ export function PlanningView({ refreshKey = 0 }: PlanningViewProps) {
     }
 
     fetchIssues()
+  }, [selectedRig, refreshKey])
+
+  // Fetch dependencies for blocker indicators
+  useEffect(() => {
+    if (!selectedRig) return
+
+    const fetchDependencies = async () => {
+      const url = `/api/rigs/${selectedRig.id}/dependencies`
+      const result = await cachedFetch<Dependency[]>(url, {
+        cacheTTL: 2 * 60 * 1000,
+        returnStaleOnError: true,
+      })
+
+      if (result.data) {
+        setDependencies(result.data)
+      }
+    }
+
+    fetchDependencies()
   }, [selectedRig, refreshKey])
 
   // Fetch comments when dependencies tab is active
@@ -134,6 +156,27 @@ export function PlanningView({ refreshKey = 0 }: PlanningViewProps) {
     parentLookup.set(issue.id, getParentId(issue.id) ?? undefined)
   }
 
+  // Build blocker lookup from dependencies (from_id blocks to_id, so to_id is blocked by from_id)
+  const blockerLookup = useMemo(() => {
+    const lookup = new Map<string, Array<{ id: string; title?: string }>>()
+    const issueMap = new Map(issues.map((i) => [i.id, i]))
+
+    for (const dep of dependencies) {
+      if (dep.type === 'blocks') {
+        // dep.from_id blocks dep.to_id, so to_id has from_id as a blocker
+        const blockers = lookup.get(dep.to_id) || []
+        const blockerIssue = issueMap.get(dep.from_id)
+        blockers.push({
+          id: dep.from_id,
+          title: blockerIssue?.title,
+        })
+        lookup.set(dep.to_id, blockers)
+      }
+    }
+
+    return lookup
+  }, [dependencies, issues])
+
   // Get visible node IDs based on filters
   const visibleIds = getVisibleNodeIds(issues, treeFilters, parentLookup)
 
@@ -141,11 +184,12 @@ export function PlanningView({ refreshKey = 0 }: PlanningViewProps) {
   const filteredIssues = issues.filter((issue) => visibleIds.has(issue.id))
   const treeData = buildTree(filteredIssues)
 
-  // Convert tree to TreeNodeData format
+  // Convert tree to TreeNodeData format with blocker info
   const convertToTreeNodeData = (nodes: ReturnType<typeof buildTree>): TreeNodeData[] => {
     return nodes.map((node) => ({
       issue: node.issue,
       children: node.children.length > 0 ? convertToTreeNodeData(node.children) : undefined,
+      blockers: blockerLookup.get(node.issue.id),
     }))
   }
 
@@ -245,17 +289,21 @@ export function PlanningView({ refreshKey = 0 }: PlanningViewProps) {
     [selectedRig, selectedIssue, showToast]
   )
 
-  // Handle clicking a dependency to navigate
+  // Handle clicking a dependency/blocker to navigate
   const handleDependencyClick = useCallback(
     (issueId: string) => {
       const issue = issues.find((i) => i.id === issueId)
       if (issue) {
         setSelectedIssue(issue)
         setActiveTab('edit')
+        setPanelOpen(true)
       }
     },
     [issues]
   )
+
+  // Handle clicking a blocker indicator in the tree (alias for dependency click)
+  const handleBlockerClick = handleDependencyClick
 
   // Check if there are changes to save
   const hasChanges = selectedIssue && formData && (
@@ -307,6 +355,7 @@ export function PlanningView({ refreshKey = 0 }: PlanningViewProps) {
             nodes={treeNodeData}
             defaultExpanded={true}
             onNodeClick={handleNodeClick}
+            onBlockerClick={handleBlockerClick}
           />
         )}
       </div>
