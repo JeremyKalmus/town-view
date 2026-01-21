@@ -1,0 +1,116 @@
+keeper_decision:
+  id: ADR-002
+  date: 2026-01-21
+  spec: "to-c133: Town Operations Center & Rig Health Dashboard"
+  mode: growth
+  status: approved
+
+  reuse:
+    frontend:
+      - Card (for sections and rig overview grid)
+      - Badge (for status indicators with existing status variant)
+      - AgentCard (for displaying agent status)
+      - RigItem (for sidebar, will extend)
+      - useWebSocket (for real-time updates)
+      - design_tokens (status colors: idle=green, working=blue, stuck=red, paused=yellow)
+    backend:
+      - GET /api/rigs/:rigId/agents (existing agent endpoint)
+      - WebSocket hub (for broadcasting mail events)
+      - BeadsClient (extend to support mail operations)
+    data:
+      - AgentState enum (idle, working, stuck, paused)
+      - AgentRoleType enum (witness, refinery, crew, polecat, deacon, mayor)
+      - Agent type (has state, hook_bead fields needed)
+
+  extensions:
+    frontend:
+      AgentCard:
+        add_variant: "compact"
+        description: "Minimal status-only display for dashboard grid"
+      RigItem:
+        add_variant: "health"
+        description: "Show health dots instead of issue count"
+      Badge:
+        add_variant: "health-dot"
+        description: "Small circular indicator (green/yellow/red)"
+    backend:
+      BeadsClient:
+        add_method: "GetMail(rigPath string, limit int) ([]Mail, error)"
+        description: "Execute 'gt mail inbox' and parse output"
+
+  new_seeds:
+    - type: component
+      name: MailItem
+      scope: src/components/features/mail-item.tsx
+      justification: "No existing component for displaying mail messages. Mail is structurally different from issues."
+
+    - type: component
+      name: RigHealthGrid
+      scope: src/components/features/rig-health-grid.tsx
+      justification: "Composite component for rig overview table. Composes existing Card, Badge, but layout is unique."
+
+    - type: component
+      name: InfrastructureHealth
+      scope: src/components/features/infrastructure-health.tsx
+      justification: "Dashboard section for Mayor/Deacon/Refinery status. Uses AgentCard compact variant."
+
+    - type: hook
+      name: useAgents
+      scope: src/hooks/use-agents.ts
+      justification: "Dedicated hook for fetching agents per rig. Currently embedded in issue fetching logic."
+
+    - type: hook
+      name: useMail
+      scope: src/hooks/use-mail.ts
+      justification: "Hook for fetching mail stream. New data source not covered by existing hooks."
+
+    - type: route
+      name: GET /api/mail
+      scope: internal/handlers/mail.go
+      justification: "Mail system has no API exposure. Required for activity stream. Follows existing REST pattern."
+
+    - type: service
+      name: MailClient
+      scope: internal/mail/client.go
+      justification: "Wrapper for 'gt mail' CLI operations. Follows BeadsClient pattern."
+
+    - type: data
+      name: Mail
+      scope: internal/types/mail.go + src/types/mail.ts
+      justification: "New type for mail messages. Fields: id, from, to, subject, body, timestamp, read."
+
+  forbidden:
+    - Direct tmux integration (process monitoring should use agent state beads, not tmux)
+    - New auth patterns (keep local-only, no auth)
+    - Persistent mail storage (mail is read-only view of existing gt mail system)
+    - Polling for mail (use WebSocket for real-time, existing ws hub pattern)
+
+  constraints:
+    - Mail API must be read-only (no sending mail from Town View)
+    - RigItem health variant must be backward-compatible (default to count if agents unavailable)
+    - InfrastructureHealth must gracefully handle missing Mayor/Deacon (not all towns have them)
+    - Activity stream should limit to last 50 messages by default
+    - Health dot colors must use existing design_tokens status colors
+    - All new components must have Storybook stories
+
+  rationale: |
+    This epic introduces significant new functionality (mail visibility, health dashboards) that
+    cannot be achieved through pure reuse. However, the implementation can leverage extensive
+    existing patterns:
+
+    1. Agent health data already exists via /api/rigs/:id/agents - we just need better display
+    2. Card, Badge, AgentCard provide foundation for dashboard UI
+    3. BeadsClient pattern can be replicated for MailClient
+    4. WebSocket hub already handles real-time - extend for mail events
+
+    The 3 new components (MailItem, RigHealthGrid, InfrastructureHealth) are justified because:
+    - MailItem: Mail structure differs from issues (from/to vs assignee, no priority/status)
+    - RigHealthGrid: Unique tabular layout not covered by existing list components
+    - InfrastructureHealth: Distinct dashboard section with specific layout requirements
+
+    The 2 new hooks (useAgents, useMail) follow existing hook patterns and are necessary for
+    clean data fetching separation.
+
+    The Mail API and MailClient follow existing patterns (REST routes, CLI wrapper services).
+
+    APPROVED with constraints to ensure consistency with existing patterns.

@@ -11,12 +11,15 @@ export interface TreeFilters {
 }
 
 export const DEFAULT_FILTERS: TreeFilters = {
-  status: 'all',
+  status: 'open',
   type: 'all',
   assignee: 'all',
   priorityMin: 0,
   priorityMax: 4,
 }
+
+// System types that are hidden by default (not user-facing work items)
+export const HIDDEN_TYPES: IssueType[] = ['event', 'molecule', 'merge-request', 'agent', 'convoy', 'gate', 'rig'] as IssueType[]
 
 interface FilterBarProps {
   filters: TreeFilters
@@ -100,11 +103,11 @@ export function FilterBar({ filters, onFiltersChange, assignees = [], className 
   }, [onFiltersChange])
 
   const hasActiveFilters =
-    filters.status !== 'all' ||
-    filters.type !== 'all' ||
-    filters.assignee !== 'all' ||
-    filters.priorityMin !== 0 ||
-    filters.priorityMax !== 4
+    filters.status !== DEFAULT_FILTERS.status ||
+    filters.type !== DEFAULT_FILTERS.type ||
+    filters.assignee !== DEFAULT_FILTERS.assignee ||
+    filters.priorityMin !== DEFAULT_FILTERS.priorityMin ||
+    filters.priorityMax !== DEFAULT_FILTERS.priorityMax
 
   const selectClass =
     'bg-bg-tertiary border border-border rounded-md px-3 py-1.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-rust'
@@ -219,6 +222,7 @@ export function FilterBar({ filters, onFiltersChange, assignees = [], className 
 
 /**
  * Checks if an issue matches the given filters.
+ * Hidden system types (event, molecule, etc.) are filtered out when type filter is 'all'.
  */
 export function matchesFilters(
   issue: { status: IssueStatus; issue_type: IssueType; assignee?: string; priority: number },
@@ -229,8 +233,12 @@ export function matchesFilters(
     return false
   }
 
-  // Type filter
-  if (filters.type !== 'all' && issue.issue_type !== filters.type) {
+  // Type filter - when 'all', exclude hidden system types
+  if (filters.type === 'all') {
+    if (HIDDEN_TYPES.includes(issue.issue_type)) {
+      return false
+    }
+  } else if (issue.issue_type !== filters.type) {
     return false
   }
 
@@ -282,16 +290,8 @@ export function getVisibleNodeIds<T extends { id: string; status: IssueStatus; i
   filters: TreeFilters,
   parentLookup: Map<string, string | undefined>
 ): Set<string> {
-  // If no filters active, all nodes are visible
-  if (
-    filters.status === 'all' &&
-    filters.type === 'all' &&
-    filters.assignee === 'all' &&
-    filters.priorityMin === 0 &&
-    filters.priorityMax === 4
-  ) {
-    return new Set(nodes.map((n) => n.id))
-  }
+  // Even with default filters, we still need to filter out hidden types
+  // So we always run through the filter logic
 
   // Find matching nodes
   const matchingIds = new Set<string>()

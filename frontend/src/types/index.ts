@@ -18,7 +18,9 @@ export type IssueType =
   | 'molecule'
   | 'gate'
   | 'convoy'
-  | 'agent';
+  | 'agent'
+  | 'event'
+  | 'rig';
 
 // Agent role type enum
 export type AgentRoleType =

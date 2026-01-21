@@ -82,6 +82,8 @@ interface TreeNodeProps {
   expandedIds?: Set<string>
   /** Callback to toggle expansion (controlled mode) */
   onToggleExpand?: (issueId: string) => void
+  /** ID of the currently selected node (for click-based selection) */
+  selectedId?: string | null
 }
 
 export function TreeNode({
@@ -96,12 +98,14 @@ export function TreeNode({
   onFocus,
   expandedIds,
   onToggleExpand,
+  selectedId,
 }: TreeNodeProps) {
   const [isExpandedLocal, setIsExpandedLocal] = useState(defaultExpanded)
   // Use controlled expansion if provided, otherwise local state
   const isExpanded = expandedIds !== undefined ? expandedIds.has(data.issue.id) : isExpandedLocal
-  // Compute if this node is focused
+  // Compute if this node is focused (keyboard) or selected (click)
   const isFocused = focusedId === data.issue.id
+  const isSelected = selectedId === data.issue.id
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false)
   const [childrenHeight, setChildrenHeight] = useState<number | undefined>(undefined)
   const childrenRef = useRef<HTMLDivElement>(null)
@@ -163,7 +167,7 @@ export function TreeNode({
           'hover:bg-bg-tertiary cursor-pointer',
           'group',
           isUpdated && 'animate-flash-update bg-accent-rust/10',
-          isFocused && 'ring-2 ring-accent-rust ring-offset-1 ring-offset-bg-primary bg-bg-tertiary'
+          (isSelected || isFocused) && 'ring-2 ring-accent-rust ring-offset-1 ring-offset-bg-primary bg-bg-tertiary'
         )}
         style={{ paddingLeft: `${depth * 20 + 8}px` }}
         onClick={handleNodeClick}
@@ -362,6 +366,7 @@ export function TreeNode({
                 onFocus={onFocus}
                 expandedIds={expandedIds}
                 onToggleExpand={onToggleExpand}
+                selectedId={selectedId}
               />
             ))}
           </div>
@@ -383,6 +388,8 @@ interface TreeViewProps {
   updatedIssueIds?: Set<string>
   /** Enable keyboard navigation */
   enableKeyboardNavigation?: boolean
+  /** ID of the currently selected node (for click-based selection) */
+  selectedId?: string | null
 }
 
 export function TreeView({
@@ -394,6 +401,7 @@ export function TreeView({
   className,
   updatedIssueIds,
   enableKeyboardNavigation = true,
+  selectedId,
 }: TreeViewProps) {
   // Convert TreeNodeData to TreeNode format for keyboard navigation
   const treeNodes = useMemo(
@@ -453,7 +461,8 @@ export function TreeView({
   const containerRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (focusedId && containerRef.current) {
-      const focusedElement = containerRef.current.querySelector(`#tree-node-${focusedId}`)
+      // Use getElementById to avoid issues with dots in IDs (e.g., to-c133.2)
+      const focusedElement = document.getElementById(`tree-node-${focusedId}`)
       if (focusedElement) {
         focusedElement.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
       }
@@ -482,6 +491,7 @@ export function TreeView({
           onFocus={enableKeyboardNavigation ? setFocusedId : undefined}
           expandedIds={enableKeyboardNavigation ? expandedIds : undefined}
           onToggleExpand={enableKeyboardNavigation ? toggleExpanded : undefined}
+          selectedId={selectedId}
         />
       ))}
     </div>
@@ -573,6 +583,8 @@ interface VirtualizedTreeViewProps {
   className?: string
   /** Height of the container (required for virtualization) */
   height?: string | number
+  /** ID of the currently selected node (for click-based selection) */
+  selectedId?: string | null
 }
 
 export function VirtualizedTreeView({
@@ -582,6 +594,7 @@ export function VirtualizedTreeView({
   onBlockerClick,
   className,
   height = '100%',
+  selectedId,
 }: VirtualizedTreeViewProps) {
   // Track expanded paths
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() => {
@@ -615,6 +628,7 @@ export function VirtualizedTreeView({
     const { data, depth, hasChildren, isExpanded, path } = node
     const progress = calculateProgress(data)
     const showProgress = hasChildren && progress.total > 0
+    const isSelected = selectedId === data.issue.id
 
     const statusBadgeClass = {
       open: 'bg-status-open/20 text-status-open border-status-open/30',
@@ -631,7 +645,8 @@ export function VirtualizedTreeView({
           'flex items-center gap-2 py-2 px-2 rounded-md h-full',
           'transition-colors duration-100',
           'hover:bg-bg-tertiary cursor-pointer',
-          'group'
+          'group',
+          isSelected && 'ring-2 ring-accent-rust ring-offset-1 ring-offset-bg-primary bg-bg-tertiary'
         )}
         style={{ paddingLeft: `${depth * 20 + 8}px` }}
         onClick={() => onNodeClick?.(data.issue)}

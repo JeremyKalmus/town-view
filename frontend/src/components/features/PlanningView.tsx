@@ -9,7 +9,7 @@
  * - Real-time updates via refreshKey prop
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import type { Issue, Comment, HistoryEntry, Dependency } from '@/types'
 import { useRigStore } from '@/stores/rig-store'
 import { useToastStore } from '@/stores/toast-store'
@@ -72,12 +72,25 @@ export function PlanningView({ refreshKey = 0, updatedIssueIds }: PlanningViewPr
   // Retry counter for manual retry
   const [retryCount, setRetryCount] = useState(0)
 
+  // Track if we've done initial load (to avoid showing skeleton on background refreshes)
+  const hasLoadedRef = useRef(false)
+
+  // Reset hasLoaded when rig changes so we show skeleton on rig switch
+  useEffect(() => {
+    hasLoadedRef.current = false
+  }, [selectedRig?.id])
+
   // Fetch issues
   useEffect(() => {
     if (!selectedRig) return
 
     const fetchIssues = async () => {
-      setLoading(true)
+      // Only show loading skeleton on initial load, not on WebSocket refreshes
+      // This prevents TreeView from unmounting and losing expansion state
+      const isInitialLoad = !hasLoadedRef.current
+      if (isInitialLoad) {
+        setLoading(true)
+      }
       setError(null)
 
       const url = `/api/rigs/${selectedRig.id}/issues?all=true`
@@ -88,6 +101,7 @@ export function PlanningView({ refreshKey = 0, updatedIssueIds }: PlanningViewPr
 
       if (result.data) {
         setIssues(result.data)
+        hasLoadedRef.current = true
         setLoading(false)
       } else if (result.error) {
         setError(result.error)
@@ -192,9 +206,9 @@ export function PlanningView({ refreshKey = 0, updatedIssueIds }: PlanningViewPr
   // Get visible node IDs based on filters
   const visibleIds = getVisibleNodeIds(issues, treeFilters, parentLookup)
 
-  // Filter issues and build tree
+  // Filter issues and build tree (pass dependencies for parent-child hierarchy)
   const filteredIssues = issues.filter((issue) => visibleIds.has(issue.id))
-  const treeData = buildTree(filteredIssues)
+  const treeData = buildTree(filteredIssues, dependencies)
 
   // Convert tree to TreeNodeData format with blocker info
   const convertToTreeNodeData = (nodes: ReturnType<typeof buildTree>): TreeNodeData[] => {
@@ -421,18 +435,20 @@ export function PlanningView({ refreshKey = 0, updatedIssueIds }: PlanningViewPr
         ) : useVirtualization ? (
           <VirtualizedTreeView
             nodes={treeNodeData}
-            defaultExpanded={true}
+            defaultExpanded={false}
             onNodeClick={handleNodeClick}
             onBlockerClick={handleBlockerClick}
             height="100%"
+            selectedId={selectedIssue?.id}
           />
         ) : (
           <TreeView
             nodes={treeNodeData}
-            defaultExpanded={true}
+            defaultExpanded={false}
             onNodeClick={handleNodeClick}
             onBlockerClick={handleBlockerClick}
             updatedIssueIds={updatedIssueIds}
+            selectedId={selectedIssue?.id}
           />
         )}
       </div>

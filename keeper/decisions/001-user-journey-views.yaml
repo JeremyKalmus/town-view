@@ -1,0 +1,162 @@
+keeper_decision:
+  id: ADR-001
+  date: 2025-01-21
+  spec: "IMPLEMENTATION_PLAN.md - Town View User Journey Views"
+  mode: growth
+  status: approved
+
+  reuse:
+    frontend:
+      - TreeNode (src/components/features/TreeNode.tsx) - for hierarchy display
+      - SlideOutPanel (src/components/layout/SlideOutPanel.tsx) - for editor panel
+      - FilterBar (src/components/features/FilterBar.tsx) - for planning view filters
+      - IssueEditorForm (src/components/features/issue-editor/IssueEditorForm.tsx) - for editing
+      - DependenciesTab (src/components/features/DependenciesTab.tsx) - for dependencies
+      - CommentsTab (src/components/features/CommentsTab.tsx) - for comments
+      - HistoryTab (src/components/features/HistoryTab.tsx) - for audit trail
+      - ConfirmationModal (src/components/ui/ConfirmationModal.tsx) - for save confirmation
+      - AgentCard (src/components/features/AgentCard.tsx) - for monitoring
+      - AssignmentComparison (src/components/features/AssignmentComparison.tsx) - for audit
+      - ConvoySelector (src/components/features/ConvoySelector.tsx) - for audit
+      - DateRangePicker (src/components/ui/DateRangePicker.tsx) - for audit
+      - MetricsDisplay (src/components/features/MetricsDisplay.tsx) - for audit
+      - VirtualList (src/components/ui/VirtualList.tsx) - for large lists
+      - Sidebar (src/components/layout/Sidebar.tsx) - unchanged
+      - Toast (src/components/ui/Toast.tsx) - for notifications
+      - Skeleton (src/components/ui/Skeleton.tsx) - for loading states
+    backend:
+      - GET /api/rigs/:rigId/issues - existing endpoint with filters
+      - GET /api/rigs/:rigId/issues/:issueId - single issue
+      - PATCH /api/rigs/:rigId/issues/:issueId - update issue
+      - GET /api/rigs/:rigId/issues/:issueId/dependencies - dependencies
+      - GET /api/rigs/:rigId/issues/:issueId/history - history
+      - GET /api/rigs/:rigId/agents - agent list
+      - WS /ws - real-time updates
+    data:
+      - IssueStatus enum - open/in_progress/blocked/deferred/closed/tombstone
+      - IssuePriority enum - 0-4
+      - IssueType enum - includes epic/task for hierarchy
+      - AgentState enum - idle/working/stuck/paused
+      - Issue type definition - existing
+      - Agent type definition - existing
+    state:
+      - rigStore (src/stores/rig-store.ts) - selected rig
+      - uiStore (src/stores/ui-store.ts) - for view mode state
+      - useWebSocket hook - real-time updates
+
+  extensions:
+    frontend:
+      TreeNode:
+        add_props:
+          - "showDescription: boolean - toggle inline description preview"
+          - "blockedBy: string[] - list of blocker issue IDs"
+          - "progressSummary: string - e.g. '3/7 tasks'"
+          - "onBlockerClick: (id: string) => void - navigate to blocker"
+        notes: "Extend existing component, do not replace"
+      uiStore:
+        add_field: "viewMode: 'planning' | 'monitoring' | 'audit'"
+        notes: "Add to existing store, default to 'planning'"
+
+  new_seeds:
+    - type: component
+      name: ViewSwitcher
+      scope: src/components/layout/ViewSwitcher.tsx
+      justification: |
+        No existing tab navigation component in seeds. This is a simple
+        composition of styled buttons for view switching. Could not find
+        an existing pattern that fits. Minimal new code required.
+      constraints:
+        - Use existing Button styles or match design tokens
+        - Store state in uiStore, not local state
+        - Three fixed views: Planning | Monitoring | Audit
+
+    - type: component
+      name: PlanningView
+      scope: src/components/features/PlanningView.tsx
+      justification: |
+        Feature view composing TreeNode + FilterBar. This is a view container,
+        not a reusable UI primitive. Composition of existing components.
+      constraints:
+        - MUST use existing TreeNode (extended)
+        - MUST use existing FilterBar
+        - MUST use existing VirtualList if >100 items
+        - Build hierarchy from flat issue list using parent_id field
+        - Click node opens IssueEditorPanel
+
+    - type: component
+      name: MonitoringView
+      scope: src/components/features/MonitoringView.tsx
+      justification: |
+        Feature view extracted from RigDashboard. Composition of AgentCard
+        and in-flight work display. Not a new primitive.
+      constraints:
+        - MUST use existing AgentCard
+        - MUST extract from RigDashboard, not duplicate
+        - Stuck detection: >15min on same bead
+
+    - type: component
+      name: AuditView
+      scope: src/components/features/AuditView.tsx
+      justification: |
+        Feature view composing ConvoySelector + AssignmentComparison +
+        DateRangePicker + MetricsDisplay. Pure composition.
+      constraints:
+        - MUST use existing ConvoySelector
+        - MUST use existing AssignmentComparison
+        - MUST use existing DateRangePicker
+        - MUST use existing MetricsDisplay
+
+    - type: component
+      name: IssueEditorPanel
+      scope: src/components/features/IssueEditorPanel.tsx
+      justification: |
+        Wrapper around SlideOutPanel with tabs for Edit/Dependencies/Comments/
+        History. Composes existing components into a unified editor experience.
+      constraints:
+        - MUST wrap existing SlideOutPanel
+        - MUST use existing IssueEditorForm for edit tab
+        - MUST use existing DependenciesTab
+        - MUST use existing CommentsTab
+        - MUST use existing HistoryTab
+        - MUST use existing ConfirmationModal for save
+        - Tab pattern should match existing tab implementations
+
+  forbidden:
+    - Do NOT create new UI primitives (Button, Card, Badge variants)
+    - Do NOT create new API endpoints for basic CRUD
+    - Do NOT create new Zustand stores (extend existing)
+    - Do NOT duplicate AgentCard logic in MonitoringView
+    - Do NOT duplicate filter logic (use FilterBar)
+    - Do NOT create new status/priority enums
+    - Do NOT bypass ConfirmationModal for saves
+
+  constraints:
+    - All new views are COMPOSITIONS of existing components
+    - TreeNode extension must be backward compatible
+    - Use existing design tokens from src/styles/tokens.css
+    - Follow existing file naming conventions (kebab-case)
+    - Include Storybook stories for new components
+    - Include tests matching existing patterns
+
+  rationale: |
+    The implementation plan proposes 5 new components, but analysis shows:
+
+    1. **ViewSwitcher** - Truly new, but minimal (tab navigation). Approved
+       as it fills a gap in the seed vault for view-level navigation.
+
+    2. **PlanningView, MonitoringView, AuditView** - These are feature views
+       that COMPOSE existing components. They don't introduce new UI primitives
+       or patterns. Approved as compositions.
+
+    3. **IssueEditorPanel** - Wrapper that unifies existing tab components
+       into a cohesive editor. Approved as composition.
+
+    4. **TreeNode extension** - Adding props to existing component is the
+       correct approach (extend, don't replace). Approved.
+
+    The plan correctly identifies reuse opportunities. Main risk is polecats
+    recreating components instead of composing. Constraints emphasize MUST
+    use existing components.
+
+    No backend changes needed - existing API endpoints suffice.
+    No data model changes needed - existing types cover requirements.

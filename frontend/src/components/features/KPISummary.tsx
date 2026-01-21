@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import type { Issue, IssueStatus, IssueType } from '@/types'
 import { cn, getStatusBadgeClass, getStatusIcon } from '@/lib/utils'
+import { HIDDEN_TYPES } from './FilterBar'
 
 /** Filter values for status or type selection */
 export interface KPIFilter {
@@ -51,18 +52,13 @@ const STATUS_ORDER: IssueStatus[] = [
   'tombstone',
 ]
 
-/** Type display order */
+/** Type display order (excludes hidden system types) */
 const TYPE_ORDER: IssueType[] = [
   'epic',
   'feature',
   'task',
   'bug',
   'chore',
-  'convoy',
-  'molecule',
-  'gate',
-  'merge-request',
-  'agent',
 ]
 
 /**
@@ -75,23 +71,28 @@ export function KPISummary({
   onFilterChange,
   className,
 }: KPISummaryProps) {
-  // Count issues by status
+  // Filter out hidden types (system-level beads like agent, molecule, etc.)
+  const visibleIssues = useMemo(() => {
+    return issues.filter(issue => !HIDDEN_TYPES.includes(issue.issue_type))
+  }, [issues])
+
+  // Count visible issues by status
   const statusCounts = useMemo(() => {
     const counts = new Map<IssueStatus, number>()
-    for (const issue of issues) {
+    for (const issue of visibleIssues) {
       counts.set(issue.status, (counts.get(issue.status) || 0) + 1)
     }
     return counts
-  }, [issues])
+  }, [visibleIssues])
 
-  // Count issues by type
+  // Count visible issues by type
   const typeCounts = useMemo(() => {
     const counts = new Map<IssueType, number>()
-    for (const issue of issues) {
+    for (const issue of visibleIssues) {
       counts.set(issue.issue_type, (counts.get(issue.issue_type) || 0) + 1)
     }
     return counts
-  }, [issues])
+  }, [visibleIssues])
 
   const handleStatusClick = (status: IssueStatus) => {
     if (activeFilter?.status === status) {
