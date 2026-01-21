@@ -5,6 +5,7 @@ import { ConvoySelector, type ConvoySortBy } from './ConvoySelector'
 import { DateRangePicker, type DateRange } from '@/components/ui/DateRangePicker'
 import { MetricsDisplay } from './MetricsDisplay'
 import { AssignmentComparison } from './AssignmentComparison'
+import { getDescendants } from '@/lib/tree'
 import type { Issue, AuditMetrics } from '@/types'
 import { cn, getStatusIcon } from '@/lib/utils'
 
@@ -103,9 +104,13 @@ export function AuditView() {
           })
         }
 
-        // TODO: Filter by convoy when backend supports convoy membership
-        // For now, we show all closed issues when a convoy is selected
-        // In the future, this would filter to only issues belonging to the selected convoy
+        // Filter by convoy - show only descendants of the selected convoy
+        if (selectedConvoy) {
+          const allIssues = result.data
+          const convoyDescendants = getDescendants(allIssues, selectedConvoy.id)
+          const descendantIds = new Set(convoyDescendants.map((i) => i.id))
+          filtered = filtered.filter((issue) => descendantIds.has(issue.id))
+        }
 
         setCompletedWork(filtered)
       } else {
