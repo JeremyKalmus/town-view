@@ -1,7 +1,8 @@
-import { useState, useRef, useEffect, useMemo } from 'react'
-import type { Issue } from '@/types'
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
+import type { Issue, TreeNode as TreeNodeType } from '@/types'
 import { cn, getStatusIcon, getPriorityBadgeClass, getPriorityLabel } from '@/lib/utils'
 import { VirtualList } from '@/components/ui/VirtualList'
+import { useTreeKeyboardNavigation } from '@/hooks/useTreeKeyboardNavigation'
 
 /** Blocker info for displaying blocked-by indicator */
 export interface BlockerInfo {
@@ -20,6 +21,25 @@ export interface TreeNodeData {
 interface ProgressSummary {
   completed: number
   total: number
+}
+
+/**
+ * Convert TreeNodeData to TreeNode format for keyboard navigation.
+ * Recursively converts the tree structure.
+ */
+function treeNodeDataToTreeNodes(
+  nodes: TreeNodeData[],
+  depth: number = 0,
+  parentId?: string
+): TreeNodeType[] {
+  return nodes.map((node) => ({
+    id: node.issue.id,
+    parentId,
+    depth,
+    children: node.children
+      ? treeNodeDataToTreeNodes(node.children, depth + 1, node.issue.id)
+      : undefined,
+  }))
 }
 
 /** Calculate progress (closed tasks) for a tree node and its descendants */
@@ -54,6 +74,14 @@ interface TreeNodeProps {
   showDescriptionPreview?: boolean
   /** Set of issue IDs that were recently updated (for flash animation) */
   updatedIssueIds?: Set<string>
+  /** ID of the currently focused node (for keyboard navigation) */
+  focusedId?: string | null
+  /** Callback to set focus on a node */
+  onFocus?: (issueId: string) => void
+  /** Set of expanded node IDs (controlled mode) */
+  expandedIds?: Set<string>
+  /** Callback to toggle expansion (controlled mode) */
+  onToggleExpand?: (issueId: string) => void
 }
 
 export function TreeNode({
@@ -64,8 +92,16 @@ export function TreeNode({
   onBlockerClick,
   showDescriptionPreview = false,
   updatedIssueIds,
+  focusedId,
+  onFocus,
+  expandedIds,
+  onToggleExpand,
 }: TreeNodeProps) {
-  const [isExpanded, setIsExpanded] = useState(defaultExpanded)
+  const [isExpandedLocal, setIsExpandedLocal] = useState(defaultExpanded)
+  // Use controlled expansion if provided, otherwise local state
+  const isExpanded = expandedIds !== undefined ? expandedIds.has(data.issue.id) : isExpandedLocal
+  // Compute if this node is focused
+  const isFocused = focusedId === data.issue.id
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false)
   const [childrenHeight, setChildrenHeight] = useState<number | undefined>(undefined)
   const childrenRef = useRef<HTMLDivElement>(null)
@@ -83,11 +119,16 @@ export function TreeNode({
   const handleToggle = (e: React.MouseEvent) => {
     e.stopPropagation()
     if (hasChildren) {
-      setIsExpanded(!isExpanded)
+      if (expandedIds !== undefined && onToggleExpand) {
+        onToggleExpand(data.issue.id)
+      } else {
+        setIsExpandedLocal(!isExpanded)
+      }
     }
   }
 
   const handleNodeClick = () => {
+    onFocus?.(data.issue.id)
     onNodeClick?.(data.issue)
   }
 
@@ -115,15 +156,22 @@ export function TreeNode({
     <div className="select-none">
       {/* Node row */}
       <div
+        id={`tree-node-${data.issue.id}`}
         className={cn(
           'flex items-center gap-2 py-2 px-2 -mx-2 rounded-md',
           'transition-colors duration-100',
           'hover:bg-bg-tertiary cursor-pointer',
           'group',
-          isUpdated && 'animate-flash-update bg-accent-rust/10'
+          isUpdated && 'animate-flash-update bg-accent-rust/10',
+          isFocused && 'ring-2 ring-accent-rust ring-offset-1 ring-offset-bg-primary bg-bg-tertiary'
         )}
         style={{ paddingLeft: `${depth * 20 + 8}px` }}
         onClick={handleNodeClick}
+        role="treeitem"
+        aria-expanded={hasChildren ? isExpanded : undefined}
+        aria-level={depth + 1}
+        aria-selected={isFocused}
+        tabIndex={isFocused ? 0 : -1}
       >
         {/* Expand/collapse chevron */}
         <button
@@ -310,6 +358,10 @@ export function TreeNode({
                 onBlockerClick={onBlockerClick}
                 showDescriptionPreview={showDescriptionPreview}
                 updatedIssueIds={updatedIssueIds}
+                focusedId={focusedId}
+                onFocus={onFocus}
+                expandedIds={expandedIds}
+                onToggleExpand={onToggleExpand}
               />
             ))}
           </div>
@@ -329,11 +381,93 @@ interface TreeViewProps {
   className?: string
   /** Set of issue IDs that were recently updated (for flash animation) */
   updatedIssueIds?: Set<string>
+  /** Enable keyboard navigation */
+  enableKeyboardNavigation?: boolean
 }
 
-export function TreeView({ nodes, defaultExpanded = false, onNodeClick, onBlockerClick, showDescriptionPreview = false, className, updatedIssueIds }: TreeViewProps) {
+export function TreeView({
+  nodes,
+  defaultExpanded = false,
+  onNodeClick,
+  onBlockerClick,
+  showDescriptionPreview = false,
+  className,
+  updatedIssueIds,
+  enableKeyboardNavigation = true,
+}: TreeViewProps) {
+  // Convert TreeNodeData to TreeNode format for keyboard navigation
+  const treeNodes = useMemo(
+    () => treeNodeDataToTreeNodes(nodes),
+    [nodes]
+  )
+
+  // Get all paths for default expansion
+  const initialExpandedIds = useMemo(() => {
+    if (!defaultExpanded) return []
+    const getAllIds = (data: TreeNodeData[]): string[] => {
+      const ids: string[] = []
+      for (const node of data) {
+        ids.push(node.issue.id)
+        if (node.children) {
+          ids.push(...getAllIds(node.children))
+        }
+      }
+      return ids
+    }
+    return getAllIds(nodes)
+  }, [nodes, defaultExpanded])
+
+  // Handle node selection
+  const handleSelect = useCallback((nodeId: string) => {
+    // Find the issue by ID
+    const findIssue = (data: TreeNodeData[]): Issue | null => {
+      for (const node of data) {
+        if (node.issue.id === nodeId) return node.issue
+        if (node.children) {
+          const found = findIssue(node.children)
+          if (found) return found
+        }
+      }
+      return null
+    }
+    const issue = findIssue(nodes)
+    if (issue) {
+      onNodeClick?.(issue)
+    }
+  }, [nodes, onNodeClick])
+
+  // Use keyboard navigation hook
+  const {
+    focusedId,
+    expandedIds,
+    setFocusedId,
+    toggleExpanded,
+    getTreeProps,
+  } = useTreeKeyboardNavigation({
+    nodes: treeNodes,
+    onSelect: handleSelect,
+    initialExpandedIds,
+  })
+
+  // Scroll focused node into view
+  const containerRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (focusedId && containerRef.current) {
+      const focusedElement = containerRef.current.querySelector(`#tree-node-${focusedId}`)
+      if (focusedElement) {
+        focusedElement.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      }
+    }
+  }, [focusedId])
+
+  const treeProps = enableKeyboardNavigation ? getTreeProps() : {}
+
   return (
-    <div className={cn('py-2', className)}>
+    <div
+      ref={containerRef}
+      className={cn('py-2', className)}
+      {...treeProps}
+    >
       {nodes.map((node) => (
         <TreeNode
           key={node.issue.id}
@@ -344,6 +478,10 @@ export function TreeView({ nodes, defaultExpanded = false, onNodeClick, onBlocke
           onBlockerClick={onBlockerClick}
           showDescriptionPreview={showDescriptionPreview}
           updatedIssueIds={updatedIssueIds}
+          focusedId={enableKeyboardNavigation ? focusedId : undefined}
+          onFocus={enableKeyboardNavigation ? setFocusedId : undefined}
+          expandedIds={enableKeyboardNavigation ? expandedIds : undefined}
+          onToggleExpand={enableKeyboardNavigation ? toggleExpanded : undefined}
         />
       ))}
     </div>
