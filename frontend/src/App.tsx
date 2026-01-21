@@ -2,11 +2,13 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { RigDashboard } from '@/components/features/RigDashboard'
 import { Toast, ToastProvider, ToastViewport } from '@/components/ui/Toast'
-import { KeyboardShortcutsModal } from '@/components/ui/KeyboardShortcutsModal'
-import { useRigStore } from '@/stores/rig-store'
-import { useToastStore } from '@/stores/toast-store'
-import { useWebSocket } from '@/hooks/useWebSocket'
-import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
+import { KeyboardShortcutsModal } from "@/components/ui/KeyboardShortcutsModal"
+import { ErrorBoundary } from "@/components/ui/ErrorBoundary"
+import { useRigStore } from "@/stores/rig-store"
+import { useToastStore } from "@/stores/toast-store"
+import { useWebSocket } from "@/hooks/useWebSocket"
+import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts"
+import { logError } from "@/lib/error-logger"
 import type { Rig, WSMessage } from '@/types'
 
 function App() {
@@ -114,36 +116,52 @@ function App() {
   return (
     <ToastProvider duration={4000}>
       <div className="flex h-screen overflow-hidden">
-        {/* Sidebar */}
-        <Sidebar
-          rigs={rigs}
-          selectedRig={selectedRig}
-          onSelectRig={setSelectedRig}
-          loading={loading}
-          connected={connected}
-        />
+        {/* Sidebar with error boundary */}
+        <ErrorBoundary
+          variant="inline"
+          title="Sidebar Error"
+          description="Failed to load the navigation sidebar."
+          onError={(error, errorInfo) => logError('Sidebar', error, errorInfo)}
+          className="w-64 bg-bg-secondary border-r border-border"
+        >
+          <Sidebar
+            rigs={rigs}
+            selectedRig={selectedRig}
+            onSelectRig={setSelectedRig}
+            loading={loading}
+            connected={connected}
+          />
+        </ErrorBoundary>
 
-        {/* Main content */}
+        {/* Main content with error boundary */}
         <main className="flex-1 overflow-auto">
-          {error ? (
-            <div className="flex items-center justify-center h-full">
-              <div className="card-accent p-6 max-w-md">
-                <h2 className="text-lg font-semibold text-status-blocked mb-2">
-                  Connection Error
-                </h2>
-                <p className="text-text-secondary mb-4">{error}</p>
-                <p className="text-sm text-text-muted">
-                  Make sure the Town View server is running on port 8080.
-                </p>
+          <ErrorBoundary
+            variant="full"
+            title="Dashboard Error"
+            description="Something went wrong while loading the dashboard. This might be a temporary issue."
+            onError={(error, errorInfo) => logError('RigDashboard', error, errorInfo)}
+            className="h-full"
+          >
+            {error ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="card-accent p-6 max-w-md">
+                  <h2 className="text-lg font-semibold text-status-blocked mb-2">
+                    Connection Error
+                  </h2>
+                  <p className="text-text-secondary mb-4">{error}</p>
+                  <p className="text-sm text-text-muted">
+                    Make sure the Town View server is running on port 8080.
+                  </p>
+                </div>
               </div>
-            </div>
-          ) : selectedRig ? (
-            <RigDashboard rig={selectedRig} refreshKey={refreshKey} updatedIssueIds={updatedIssueIds} />
-          ) : (
-            <div className="flex items-center justify-center h-full">
-              <p className="text-text-muted">Select a rig from the sidebar</p>
-            </div>
-          )}
+            ) : selectedRig ? (
+              <RigDashboard rig={selectedRig} refreshKey={refreshKey} updatedIssueIds={updatedIssueIds} />
+            ) : (
+              <div className="flex items-center justify-center h-full">
+                <p className="text-text-muted">Select a rig from the sidebar</p>
+              </div>
+            )}
+          </ErrorBoundary>
         </main>
       </div>
 

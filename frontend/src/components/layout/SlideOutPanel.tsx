@@ -1,6 +1,8 @@
 import { X } from 'lucide-react'
 import { useEffect, useCallback } from 'react'
 import { cn } from '@/lib/utils'
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
+import { logError } from '@/lib/error-logger'
 
 interface SlideOutPanelProps {
   isOpen: boolean
@@ -87,9 +89,17 @@ export function SlideOutPanel({
           </button>
         </div>
 
-        {/* Content */}
+        {/* Content with error boundary */}
         <div className="flex-1 overflow-auto h-[calc(100%-57px)]">
-          {children}
+          <ErrorBoundary
+            variant="inline"
+            title="Panel Error"
+            description="Something went wrong loading this content."
+            onError={(error, errorInfo) => logError('SlideOutPanel', error, errorInfo)}
+            className="m-4"
+          >
+            {children}
+          </ErrorBoundary>
         </div>
       </div>
     </>
