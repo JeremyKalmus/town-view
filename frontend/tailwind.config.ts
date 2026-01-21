@@ -28,11 +28,11 @@ const config: Config = {
         },
         // Status colors (Mad Max inspired)
         status: {
-          open: '#71717A',       // Zinc
-          'in-progress': '#F59E0B', // Chrome Amber
-          blocked: '#B91C1C',    // Blood Rust
-          closed: '#22C55E',     // Witness Green
-          deferred: '#3B82F6',   // Ice Blue
+          open: '#3B82F6',       // Ice Blue (spec: open=blue)
+          'in-progress': '#F59E0B', // Chrome Amber (spec: yellow)
+          blocked: '#B91C1C',    // Blood Rust (spec: red)
+          closed: '#22C55E',     // Witness Green (spec: green)
+          deferred: '#71717A',   // Zinc (swapped with open)
         },
         // Priority colors
         priority: {

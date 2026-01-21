@@ -158,3 +158,22 @@ export const AllPriorities: Story = {
     </div>
   ),
 }
+
+export const AllStatusBadges: Story = {
+  render: () => (
+    <div className="space-y-2">
+      {(['open', 'in_progress', 'blocked', 'closed', 'deferred'] as const).map((status) => (
+        <IssueRow
+          key={status}
+          issue={{
+            ...mockIssue,
+            id: `gt-${status}`,
+            title: `Issue with ${status.replace('_', ' ')} status`,
+            status,
+            priority: 2,
+          }}
+        />
+      ))}
+    </div>
+  ),
+}
