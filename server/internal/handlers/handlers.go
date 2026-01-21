@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strconv"
 
 	"github.com/gastown/townview/internal/beads"
 	"github.com/gastown/townview/internal/rigs"
@@ -292,6 +293,84 @@ func (h *Handlers) ListDependencies(w http.ResponseWriter, r *http.Request) {
 // WebSocket handles GET /ws
 func (h *Handlers) WebSocket(w http.ResponseWriter, r *http.Request) {
 	h.wsHub.ServeWS(w, r)
+}
+
+// GetMoleculeProgress handles GET /api/rigs/{rigId}/issues/{issueId}/progress
+func (h *Handlers) GetMoleculeProgress(w http.ResponseWriter, r *http.Request) {
+	rigID := r.PathValue("rigId")
+	issueID := r.PathValue("issueId")
+
+	rig, err := h.rigDiscovery.GetRig(rigID)
+	if err != nil || rig == nil {
+		http.Error(w, "Rig not found", http.StatusNotFound)
+		return
+	}
+
+	progress, err := h.beadsClient.GetMoleculeProgress(rig.Path, issueID)
+	if err != nil {
+		slog.Error("Failed to get molecule progress", "rigId", rigID, "issueId", issueID, "error", err)
+		http.Error(w, "Failed to get molecule progress", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, progress)
+}
+
+// PeekAgent handles GET /api/rigs/{rigId}/agents/{agentId}/peek
+func (h *Handlers) PeekAgent(w http.ResponseWriter, r *http.Request) {
+	rigID := r.PathValue("rigId")
+	agentID := r.PathValue("agentId")
+
+	rig, err := h.rigDiscovery.GetRig(rigID)
+	if err != nil || rig == nil {
+		http.Error(w, "Rig not found", http.StatusNotFound)
+		return
+	}
+
+	// Parse lines query param (default: 50)
+	lines := 50
+	if linesStr := r.URL.Query().Get("lines"); linesStr != "" {
+		if parsed, err := strconv.Atoi(linesStr); err == nil && parsed > 0 {
+			lines = parsed
+		}
+	}
+
+	output, err := h.beadsClient.PeekAgent(rig.Path, agentID, lines)
+	if err != nil {
+		slog.Error("Failed to peek agent", "rigId", rigID, "agentId", agentID, "error", err)
+		http.Error(w, "Failed to peek agent", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, output)
+}
+
+// GetRecentActivity handles GET /api/rigs/{rigId}/activity
+func (h *Handlers) GetRecentActivity(w http.ResponseWriter, r *http.Request) {
+	rigID := r.PathValue("rigId")
+
+	rig, err := h.rigDiscovery.GetRig(rigID)
+	if err != nil || rig == nil {
+		http.Error(w, "Rig not found", http.StatusNotFound)
+		return
+	}
+
+	// Parse limit query param (default: 50)
+	limit := 50
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+
+	events, err := h.beadsClient.GetRecentActivity(rig.Path, limit)
+	if err != nil {
+		slog.Error("Failed to get recent activity", "rigId", rigID, "error", err)
+		http.Error(w, "Failed to get recent activity", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, events)
 }
 
 // writeJSON writes a JSON response.
