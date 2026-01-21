@@ -1,5 +1,7 @@
 export { ConfirmationModal, calculateDiff } from './ConfirmationModal'
 export type { ConfirmationModalProps, DiffEntry } from './ConfirmationModal'
+export { ErrorBoundary } from './ErrorBoundary'
+export type { ErrorBoundaryProps } from './ErrorBoundary'
 export { DateRangePicker, type DateRange, type DateRangePickerProps } from './DateRangePicker'
 export { Input, type InputProps } from './Input'
 export { Textarea, type TextareaProps } from './Textarea'
