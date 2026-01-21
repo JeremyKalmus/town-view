@@ -21,7 +21,7 @@ import { DependenciesTab } from './DependenciesTab'
 import { CommentsTab } from './CommentsTab'
 import { HistoryTab } from './HistoryTab'
 import { ConfirmationModal } from '@/components/ui/ConfirmationModal'
-import { SkeletonTreeView } from '@/components/ui/Skeleton'
+import { SkeletonTreeView, ErrorState } from '@/components/ui/Skeleton'
 import { cachedFetch } from '@/services/cache'
 import { updateIssue } from '@/services/api'
 import { buildTree, getParentId } from '@/lib/tree'
@@ -68,6 +68,9 @@ export function PlanningView({ refreshKey = 0, updatedIssueIds }: PlanningViewPr
   // Dependencies state for blocker indicators
   const [dependencies, setDependencies] = useState<Dependency[]>([])
 
+  // Retry counter for manual retry
+  const [retryCount, setRetryCount] = useState(0)
+
   // Fetch issues
   useEffect(() => {
     if (!selectedRig) return
@@ -92,7 +95,12 @@ export function PlanningView({ refreshKey = 0, updatedIssueIds }: PlanningViewPr
     }
 
     fetchIssues()
-  }, [selectedRig, refreshKey])
+  }, [selectedRig, refreshKey, retryCount])
+
+  // Handle retry
+  const handleRetry = useCallback(() => {
+    setRetryCount((c) => c + 1)
+  }, [])
 
   // Fetch dependencies for blocker indicators
   useEffect(() => {
@@ -349,7 +357,11 @@ export function PlanningView({ refreshKey = 0, updatedIssueIds }: PlanningViewPr
         {loading ? (
           <SkeletonTreeView count={8} />
         ) : error ? (
-          <div className="text-center py-12 text-status-blocked">{error}</div>
+          <ErrorState
+            title="Failed to load issues"
+            message={error}
+            onRetry={handleRetry}
+          />
         ) : treeNodeData.length === 0 ? (
           <div className="text-center py-12 text-text-muted">
             {issues.length === 0
