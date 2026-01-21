@@ -269,4 +269,42 @@
   .tree-indent-3 { @apply pl-12; }
   .tree-indent-4 { @apply pl-16; }
   .tree-indent-5 { @apply pl-20; }
+
+  /* Form field styles */
+  .form-input {
+    @apply flex h-9 w-full rounded-md border border-border bg-bg-secondary px-3 py-2 text-sm;
+    @apply placeholder:text-text-muted;
+    @apply focus:outline-none focus:ring-2 focus:ring-accent-chrome focus:ring-offset-2 focus:ring-offset-bg-primary;
+    @apply disabled:cursor-not-allowed disabled:opacity-50;
+    @apply transition-colors hover:border-border-accent;
+  }
+
+  .form-input-error {
+    @apply border-status-blocked focus:ring-status-blocked;
+  }
+
+  .form-textarea {
+    @apply form-input min-h-[80px] resize-y;
+  }
+
+  .form-select {
+    @apply form-input cursor-pointer appearance-none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23A3A3A3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    background-size: 16px 16px;
+    padding-right: 32px;
+  }
+
+  .form-label {
+    @apply flex items-center gap-1 text-sm font-medium text-text-secondary;
+  }
+
+  .form-error {
+    @apply text-xs text-status-blocked;
+  }
+
+  .form-hint {
+    @apply text-xs text-text-muted;
+  }
 }
