@@ -162,6 +162,51 @@
   .mono {
     @apply font-mono text-sm;
   }
+
+  /* Tree component styles */
+  .tree {
+    @apply outline-none;
+  }
+
+  .tree-node {
+    @apply relative flex items-center gap-2 px-2 py-1 rounded cursor-pointer transition-colors;
+  }
+
+  .tree-node:hover {
+    @apply bg-bg-tertiary;
+  }
+
+  .tree-node[aria-selected="true"] {
+    @apply bg-bg-tertiary/50;
+  }
+
+  .tree-node:focus,
+  .tree-node[aria-selected="true"]:focus-within {
+    @apply outline-none ring-2 ring-accent-chrome ring-inset;
+  }
+
+  .tree-node-focused {
+    @apply bg-bg-tertiary ring-2 ring-accent-chrome ring-inset;
+  }
+
+  /* Tree node expand/collapse chevron */
+  .tree-chevron {
+    @apply w-4 h-4 text-text-secondary transition-transform duration-150;
+  }
+
+  .tree-chevron-expanded {
+    @apply rotate-90;
+  }
+
+  /* Tree node indentation */
+  .tree-indent {
+    @apply flex-shrink-0;
+  }
+
+  /* Tree connection lines */
+  .tree-line {
+    @apply border-l border-dashed border-border;
+  }
 }
 
 /* Utility layer */
