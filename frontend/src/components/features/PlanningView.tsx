@@ -21,6 +21,7 @@ import { DependenciesTab } from './DependenciesTab'
 import { CommentsTab } from './CommentsTab'
 import { HistoryTab } from './HistoryTab'
 import { ConfirmationModal } from '@/components/ui/ConfirmationModal'
+import { SkeletonTreeView } from '@/components/ui/Skeleton'
 import { cachedFetch } from '@/services/cache'
 import { updateIssue } from '@/services/api'
 import { buildTree, getParentId } from '@/lib/tree'
@@ -337,11 +338,7 @@ export function PlanningView({ refreshKey = 0 }: PlanningViewProps) {
       {/* Tree content */}
       <div className="flex-1 overflow-auto px-6 py-4">
         {loading ? (
-          <div className="space-y-2">
-            {[...Array(8)].map((_, i) => (
-              <div key={i} className="h-10 bg-bg-tertiary rounded animate-pulse" />
-            ))}
-          </div>
+          <SkeletonTreeView count={8} />
         ) : error ? (
           <div className="text-center py-12 text-status-blocked">{error}</div>
         ) : treeNodeData.length === 0 ? (

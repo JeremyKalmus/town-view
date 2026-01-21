@@ -8,6 +8,7 @@ import { AssignmentComparison } from './AssignmentComparison'
 import { getDescendants } from '@/lib/tree'
 import type { Issue, AuditMetrics } from '@/types'
 import { cn, getStatusIcon } from '@/lib/utils'
+import { SkeletonCompletedWorkList } from '@/components/ui/Skeleton'
 
 /**
  * AuditView - Audit completed work and compare assignments
@@ -239,13 +240,7 @@ export function AuditView() {
         </div>
 
         {completedWorkLoading ? (
-          <div className="py-8 flex justify-center">
-            <div className="animate-pulse flex flex-col gap-3 w-full">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="h-16 bg-bg-tertiary rounded" />
-              ))}
-            </div>
-          </div>
+          <SkeletonCompletedWorkList count={3} />
         ) : completedWork.length === 0 ? (
           <div className="py-12 text-center text-text-muted">
             {selectedConvoy && (dateRange.startDate || dateRange.endDate)
