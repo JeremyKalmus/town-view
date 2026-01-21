@@ -1,4 +1,4 @@
-import type { Agent } from '@/types'
+import type { Agent, AgentState } from '@/types'
 import { cn, formatRelativeTime, getAgentStateIcon, getAgentStateClass, getAgentStateBgClass, getAgentRoleIcon } from '@/lib/utils'
 
 interface AgentCardProps {
@@ -6,16 +6,34 @@ interface AgentCardProps {
   onClick?: () => void
 }
 
+/**
+ * Infer effective agent state.
+ * If agent has hooked work but no explicit state (or idle), treat as working.
+ */
+function getEffectiveState(agent: Agent): AgentState {
+  // If agent explicitly has a state, use it
+  if (agent.state && agent.state !== 'idle') {
+    return agent.state
+  }
+  // If agent has hooked work, infer working state
+  if (agent.hook_bead) {
+    return 'working'
+  }
+  // Default to idle
+  return 'idle'
+}
+
 export function AgentCard({ agent, onClick }: AgentCardProps) {
-  const stateClass = getAgentStateClass(agent.state)
-  const stateBgClass = getAgentStateBgClass(agent.state)
+  const effectiveState = getEffectiveState(agent)
+  const stateClass = getAgentStateClass(effectiveState)
+  const stateBgClass = getAgentStateBgClass(effectiveState)
 
   return (
     <div
       className={cn(
         'card transition-all',
         onClick && 'cursor-pointer hover:border-border-accent hover:shadow-md',
-        agent.state === 'stuck' && 'border-l-4 border-l-status-blocked'
+        effectiveState === 'stuck' && 'border-l-4 border-l-status-blocked'
       )}
       onClick={onClick}
     >
@@ -28,8 +46,8 @@ export function AgentCard({ agent, onClick }: AgentCardProps) {
           <span className="font-medium truncate">{agent.name}</span>
         </div>
         <div className={cn('badge', stateBgClass, stateClass)}>
-          <span>{getAgentStateIcon(agent.state)}</span>
-          <span className="capitalize">{agent.state}</span>
+          <span>{getAgentStateIcon(effectiveState)}</span>
+          <span className="capitalize">{effectiveState}</span>
         </div>
       </div>
 
