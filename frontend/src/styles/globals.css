@@ -102,6 +102,31 @@
     @apply bg-priority-p4;
   }
 
+  /* Priority badges */
+  .badge-priority {
+    @apply inline-flex items-center justify-center px-1.5 py-0.5 rounded text-xs font-semibold;
+  }
+
+  .badge-priority-p0 {
+    @apply badge-priority bg-priority-p0 text-white;
+  }
+
+  .badge-priority-p1 {
+    @apply badge-priority bg-priority-p1 text-white;
+  }
+
+  .badge-priority-p2 {
+    @apply badge-priority bg-priority-p2 text-black;
+  }
+
+  .badge-priority-p3 {
+    @apply badge-priority bg-priority-p3 text-white;
+  }
+
+  .badge-priority-p4 {
+    @apply badge-priority bg-priority-p4 text-white;
+  }
+
   /* Buttons */
   .btn {
     @apply inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-chrome disabled:pointer-events-none disabled:opacity-50;
