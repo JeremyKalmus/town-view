@@ -10,11 +10,16 @@ import type { Issue, AuditMetrics } from '@/types'
 import { cn, getStatusIcon } from '@/lib/utils'
 import { SkeletonCompletedWorkList } from '@/components/ui/Skeleton'
 
+interface AuditViewProps {
+  /** Set of issue IDs that were recently updated (for flash animation) */
+  updatedIssueIds?: Set<string>
+}
+
 /**
  * AuditView - Audit completed work and compare assignments
  * Part of the three-view architecture: Planning | Monitoring | Audit
  */
-export function AuditView() {
+export function AuditView({ updatedIssueIds = new Set() }: AuditViewProps) {
   const { selectedRig } = useRigStore()
 
   // Convoy selection state
@@ -259,6 +264,7 @@ export function AuditView() {
                 issue={issue}
                 isExpanded={expandedItemId === issue.id}
                 onToggleExpand={() => handleToggleExpand(issue.id)}
+                isUpdated={updatedIssueIds.has(issue.id)}
               />
             ))}
           </div>
@@ -272,12 +278,13 @@ interface CompletedWorkItemProps {
   issue: Issue
   isExpanded: boolean
   onToggleExpand: () => void
+  isUpdated?: boolean
 }
 
 /**
  * Individual completed work item with expandable comparison view.
  */
-function CompletedWorkItem({ issue, isExpanded, onToggleExpand }: CompletedWorkItemProps) {
+function CompletedWorkItem({ issue, isExpanded, onToggleExpand, isUpdated = false }: CompletedWorkItemProps) {
   // For the comparison, we use the same issue for both original and final
   // In a real implementation, the backend would provide the original state
   // This is a placeholder until we have proper history tracking
@@ -288,7 +295,10 @@ function CompletedWorkItem({ issue, isExpanded, onToggleExpand }: CompletedWorkI
   }), [issue])
 
   return (
-    <div className="border border-border rounded-md overflow-hidden">
+    <div className={cn(
+      "border border-border rounded-md overflow-hidden",
+      isUpdated && "animate-flash-update"
+    )}>
       {/* Summary row - always visible */}
       <button
         type="button"

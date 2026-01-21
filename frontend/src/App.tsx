@@ -172,7 +172,7 @@ function App() {
             ) : viewMode === 'monitoring' ? (
               <MonitoringView rig={selectedRig} refreshKey={refreshKey} updatedIssueIds={updatedIssueIds} />
             ) : (
-              <AuditView />
+              <AuditView updatedIssueIds={updatedIssueIds} />
             )}
           </main>
         </div>
