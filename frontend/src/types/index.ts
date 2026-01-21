@@ -91,9 +91,9 @@ export interface IssueUpdate {
 
 // WebSocket message
 export interface WSMessage {
-  type: 'issue_changed' | 'issue_created' | 'beads_changed' | 'rig_discovered' | 'agent_state_changed';
+  type: 'issue_changed' | 'issue_created' | 'issue_update' | 'beads_changed' | 'rig_discovered' | 'rig_update' | 'agent_state_changed';
   rig?: string;
-  payload?: unknown;
+  payload?: Record<string, unknown>;
 }
 
 // Filter options
