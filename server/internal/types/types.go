@@ -82,6 +82,35 @@ type WSMessage struct {
 	Payload interface{} `json:"payload,omitempty"`
 }
 
+// MoleculeProgress represents progress of a molecule's execution.
+type MoleculeProgress struct {
+	IssueID     string `json:"issue_id"`
+	CurrentStep int    `json:"current_step"`
+	TotalSteps  int    `json:"total_steps"`
+	StepName    string `json:"step_name"`
+	Status      string `json:"status"`
+}
+
+// PeekOutput represents output from peeking at an agent's session.
+type PeekOutput struct {
+	AgentID   string    `json:"agent_id"`
+	Lines     []string  `json:"lines"`
+	Timestamp time.Time `json:"timestamp"`
+}
+
+// ActivityEvent represents an activity event for the monitoring view.
+type ActivityEvent struct {
+	ID        string    `json:"id"`
+	IssueID   string    `json:"issue_id"`
+	IssueType string    `json:"issue_type"`
+	Title     string    `json:"title"`
+	EventType string    `json:"event_type"`
+	OldValue  string    `json:"old_value,omitempty"`
+	NewValue  string    `json:"new_value,omitempty"`
+	Actor     string    `json:"actor"`
+	Timestamp time.Time `json:"timestamp"`
+}
+
 // Issue statuses
 const (
 	StatusOpen       = "open"
