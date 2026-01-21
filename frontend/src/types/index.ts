@@ -118,3 +118,10 @@ export interface TreeNavigationState {
   focusedId: string | null;
   expandedIds: Set<string>;
 }
+
+// Dependency represents a relationship between issues
+export interface Dependency {
+  from_id: string;
+  to_id: string;
+  type: 'blocks' | 'parent-child';
+}
