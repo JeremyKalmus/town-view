@@ -94,6 +94,8 @@ const config: Config = {
         'slide-in': 'slideIn 200ms ease-out',
         'slide-up': 'slideUp 200ms ease-out',
         'flash-update': 'flashUpdate 1.5s ease-out',
+        'view-enter': 'viewEnter 200ms ease-out',
+        'view-exit': 'viewExit 150ms ease-in',
       },
       keyframes: {
         fadeIn: {
@@ -111,6 +113,14 @@ const config: Config = {
         flashUpdate: {
           '0%': { backgroundColor: 'rgba(245, 158, 11, 0.3)' },
           '100%': { backgroundColor: 'transparent' },
+        },
+        viewEnter: {
+          '0%': { opacity: '0', transform: 'translateY(8px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        viewExit: {
+          '0%': { opacity: '1', transform: 'translateY(0)' },
+          '100%': { opacity: '0', transform: 'translateY(-8px)' },
         },
       },
     },

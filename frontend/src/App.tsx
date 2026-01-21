@@ -6,6 +6,7 @@ import { AuditView } from '@/components/features/AuditView'
 import { OfflineBanner } from '@/components/layout/OfflineBanner'
 import { Toast, ToastProvider, ToastViewport } from '@/components/ui/Toast'
 import { ViewSwitcher } from '@/components/ui/ViewSwitcher'
+import { SimpleViewTransition } from '@/components/ui/ViewTransition'
 import { useRigStore } from '@/stores/rig-store'
 import { useToastStore } from '@/stores/toast-store'
 import { useConnectivityStore } from '@/stores/connectivity-store'
@@ -167,12 +168,16 @@ function App() {
               <div className="flex items-center justify-center h-full">
                 <p className="text-text-muted">Select a rig from the sidebar</p>
               </div>
-            ) : viewMode === 'planning' ? (
-              <PlanningView refreshKey={refreshKey} updatedIssueIds={updatedIssueIds} />
-            ) : viewMode === 'monitoring' ? (
-              <MonitoringView rig={selectedRig} refreshKey={refreshKey} updatedIssueIds={updatedIssueIds} />
             ) : (
-              <AuditView />
+              <SimpleViewTransition viewKey={viewMode}>
+                {viewMode === 'planning' ? (
+                  <PlanningView refreshKey={refreshKey} updatedIssueIds={updatedIssueIds} />
+                ) : viewMode === 'monitoring' ? (
+                  <MonitoringView rig={selectedRig} refreshKey={refreshKey} updatedIssueIds={updatedIssueIds} />
+                ) : (
+                  <AuditView />
+                )}
+              </SimpleViewTransition>
             )}
           </main>
         </div>
