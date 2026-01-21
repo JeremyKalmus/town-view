@@ -172,3 +172,41 @@ export interface AuditMetrics {
     mergeConflictCount?: number;
   };
 }
+
+// Molecule progress tracking
+export interface MoleculeProgress {
+  issue_id: string;
+  current_step: number;
+  total_steps: number;
+  step_name: string;
+  status: string;
+}
+
+// Agent terminal output peek
+export interface PeekOutput {
+  agent_id: string;
+  lines: string[];
+  timestamp: string;
+}
+
+// Activity event for recent changes
+export interface ActivityEvent {
+  id: string;
+  issue_id: string;
+  issue_type: IssueType;
+  title: string;
+  event_type: string;
+  old_value: string | null;
+  new_value: string | null;
+  actor: string;
+  timestamp: string;
+}
+
+// Work item health status based on duration
+export type WorkItemHealthStatus = 'healthy' | 'concerning' | 'stuck';
+
+export interface WorkItemHealth {
+  status: WorkItemHealthStatus;
+  duration_ms: number;
+  started_at: string;
+}
