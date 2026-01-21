@@ -2,6 +2,35 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Theme CSS Custom Properties */
+:root {
+  /* Light mode (default) */
+  --bg-primary: #FAFAFA;
+  --bg-secondary: #FFFFFF;
+  --bg-tertiary: #F5F5F5;
+  --border: #E5E5E5;
+  --border-accent: #D4D4D4;
+  --text-primary: #171717;
+  --text-secondary: #525252;
+  --text-muted: #A3A3A3;
+  --accent-rust: #C2410C;
+  --accent-chrome: #737373;
+}
+
+.dark {
+  /* Dark mode (Mad Max theme) */
+  --bg-primary: #0D0D0D;
+  --bg-secondary: #1A1A1A;
+  --bg-tertiary: #262626;
+  --border: #333333;
+  --border-accent: #4A4A4A;
+  --text-primary: #F5F5F5;
+  --text-secondary: #A3A3A3;
+  --text-muted: #666666;
+  --accent-rust: #B7410E;
+  --accent-chrome: #C0C0C0;
+}
+
 /* Base layer customizations */
 @layer base {
   * {
@@ -11,6 +40,7 @@
   body {
     @apply bg-bg-primary text-text-primary antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
+    transition: background-color 0.2s ease, color 0.2s ease;
   }
 
   /* Custom scrollbar */
