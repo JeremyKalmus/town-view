@@ -7,14 +7,14 @@ interface IssueRowProps {
 }
 
 export function IssueRow({ issue, onClick }: IssueRowProps) {
-  const statusClass = {
-    open: 'text-status-open',
-    in_progress: 'text-status-in-progress',
-    blocked: 'text-status-blocked',
-    closed: 'text-status-closed',
-    deferred: 'text-status-deferred',
-    tombstone: 'text-text-muted',
-  }[issue.status] || 'text-status-open'
+  const statusBadgeClass = {
+    open: 'bg-status-open/20 text-status-open border-status-open/30',
+    in_progress: 'bg-status-in-progress/20 text-status-in-progress border-status-in-progress/30',
+    blocked: 'bg-status-blocked/20 text-status-blocked border-status-blocked/30',
+    closed: 'bg-status-closed/20 text-status-closed border-status-closed/30',
+    deferred: 'bg-status-deferred/20 text-status-deferred border-status-deferred/30',
+    tombstone: 'bg-bg-tertiary text-text-muted border-border',
+  }[issue.status] || 'bg-status-open/20 text-status-open border-status-open/30'
 
   return (
     <div
@@ -30,8 +30,14 @@ export function IssueRow({ issue, onClick }: IssueRowProps) {
         <span className="text-xs text-text-muted">{getPriorityLabel(issue.priority)}</span>
       </div>
 
-      {/* Status icon */}
-      <span className={cn('text-lg w-5 text-center flex-shrink-0', statusClass)}>
+      {/* Status badge - pill-shaped with icon */}
+      <span className={cn(
+        'inline-flex items-center justify-center',
+        'w-6 h-6 rounded-full border',
+        'text-sm',
+        'flex-shrink-0',
+        statusBadgeClass
+      )}>
         {getStatusIcon(issue.status)}
       </span>
 
