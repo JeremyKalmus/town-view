@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import type { Issue } from '@/types'
 import { cn, getStatusIcon, getPriorityBadgeClass, getPriorityLabel } from '@/lib/utils'
 
@@ -13,6 +13,35 @@ export interface TreeNodeData {
   children?: TreeNodeData[]
   /** List of issues blocking this one */
   blockers?: BlockerInfo[]
+}
+
+/** Progress summary for a node with children */
+interface ProgressSummary {
+  completed: number
+  total: number
+}
+
+/** Calculate progress (closed tasks) for a tree node and its descendants */
+function calculateProgress(node: TreeNodeData): ProgressSummary {
+  if (!node.children || node.children.length === 0) {
+    return { completed: 0, total: 0 }
+  }
+
+  let completed = 0
+  let total = 0
+
+  for (const child of node.children) {
+    total += 1
+    if (child.issue.status === 'closed') {
+      completed += 1
+    }
+    // Also count nested children
+    const childProgress = calculateProgress(child)
+    completed += childProgress.completed
+    total += childProgress.total
+  }
+
+  return { completed, total }
 }
 
 interface TreeNodeProps {
@@ -63,6 +92,10 @@ export function TreeNode({
   }
 
   const hasDescription = data.issue.description && data.issue.description.trim().length > 0
+
+  // Calculate progress for nodes with children
+  const progress = useMemo(() => calculateProgress(data), [data])
+  const showProgress = hasChildren && progress.total > 0
 
   const statusBadgeClass = {
     open: 'bg-status-open/20 text-status-open border-status-open/30',
@@ -136,6 +169,21 @@ export function TreeNode({
         <span className="flex-1 truncate text-text-primary">
           {data.issue.title}
         </span>
+
+        {/* Progress summary for parent nodes */}
+        {showProgress && (
+          <span
+            className={cn(
+              'flex-shrink-0 text-xs px-1.5 py-0.5 rounded',
+              progress.completed === progress.total
+                ? 'bg-status-closed/10 text-status-closed'
+                : 'bg-bg-tertiary text-text-secondary'
+            )}
+            title={`${progress.completed} of ${progress.total} completed`}
+          >
+            {progress.completed}/{progress.total}
+          </span>
+        )}
 
         {/* Blocked-by indicator */}
         {data.blockers && data.blockers.length > 0 && (
