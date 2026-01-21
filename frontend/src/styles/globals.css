@@ -189,6 +189,14 @@
     @apply bg-bg-tertiary ring-2 ring-accent-chrome ring-inset;
   }
 
+  .tree-node-interactive {
+    @apply cursor-pointer hover:bg-bg-tertiary;
+  }
+
+  .tree-node-accent {
+    @apply border-l-2;
+  }
+
   /* Tree node expand/collapse chevron */
   .tree-chevron {
     @apply w-4 h-4 text-text-secondary transition-transform duration-150;
@@ -207,24 +215,58 @@
   .tree-line {
     @apply border-l border-dashed border-border;
   }
-}
 
-/* Utility layer */
-@layer utilities {
-  /* Animation utilities */
-  .animate-in {
-    animation: fadeIn 200ms ease-out;
+  /* Tree node status icons */
+  .tree-status-icon {
+    @apply inline-flex items-center justify-center w-5 h-5 rounded-full text-xs flex-shrink-0;
   }
 
-  .slide-in-right {
-    animation: slideIn 200ms ease-out;
+  .tree-status-icon-open {
+    @apply tree-status-icon text-status-open;
   }
 
-  /* Truncation */
-  .truncate-2 {
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
+  .tree-status-icon-in-progress {
+    @apply tree-status-icon text-status-in-progress;
   }
+
+  .tree-status-icon-blocked {
+    @apply tree-status-icon text-status-blocked;
+  }
+
+  .tree-status-icon-closed {
+    @apply tree-status-icon text-status-closed;
+  }
+
+  .tree-status-icon-deferred {
+    @apply tree-status-icon text-status-deferred;
+  }
+
+  /* Tree node priority borders */
+  .tree-node-priority-p0 {
+    @apply border-l-priority-p0;
+  }
+
+  .tree-node-priority-p1 {
+    @apply border-l-priority-p1;
+  }
+
+  .tree-node-priority-p2 {
+    @apply border-l-priority-p2;
+  }
+
+  .tree-node-priority-p3 {
+    @apply border-l-priority-p3;
+  }
+
+  .tree-node-priority-p4 {
+    @apply border-l-priority-p4;
+  }
+
+  /* Tree node indentation levels */
+  .tree-indent-0 { @apply pl-0; }
+  .tree-indent-1 { @apply pl-4; }
+  .tree-indent-2 { @apply pl-8; }
+  .tree-indent-3 { @apply pl-12; }
+  .tree-indent-4 { @apply pl-16; }
+  .tree-indent-5 { @apply pl-20; }
 }
