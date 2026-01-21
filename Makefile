@@ -1,4 +1,7 @@
-.PHONY: all server frontend storybook install build clean
+.PHONY: all server frontend storybook install build clean dev help
+
+# Town root - override with: make dev TOWN_ROOT=/path/to/gt
+TOWN_ROOT ?= $(shell cd ../.. && pwd)
 
 # Default target
 all: install
@@ -13,7 +16,8 @@ install:
 # Run the Go backend server
 server:
 	@echo "Starting Town View server on http://localhost:8080..."
-	cd server && go run ./cmd/townview
+	@echo "TOWN_ROOT=$(TOWN_ROOT)"
+	cd server && TOWN_ROOT="$(TOWN_ROOT)" go run ./cmd/townview
 
 # Run the frontend dev server
 frontend:
@@ -42,12 +46,16 @@ clean:
 	rm -rf frontend/node_modules/
 	rm -rf server/static/
 
-# Development: run both server and frontend
+# Development: run both server and frontend (Ctrl+C to stop both)
 dev:
-	@echo "Starting development servers..."
-	@echo "Run 'make server' in one terminal"
-	@echo "Run 'make frontend' in another terminal"
-	@echo "Or run 'make storybook' to develop components"
+	@echo "Starting Town View development environment..."
+	@echo "TOWN_ROOT=$(TOWN_ROOT)"
+	@echo "Backend: http://localhost:8080"
+	@echo "Frontend: http://localhost:3000"
+	@echo "Press Ctrl+C to stop both servers"
+	@trap 'kill 0' EXIT; \
+		(cd server && TOWN_ROOT="$(TOWN_ROOT)" go run ./cmd/townview) & \
+		(cd frontend && npm run dev)
 
 # Help
 help:
