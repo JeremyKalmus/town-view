@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/gastown/townview/internal/beads"
+	"github.com/gastown/townview/internal/mail"
 	"github.com/gastown/townview/internal/rigs"
 	"github.com/gastown/townview/internal/types"
 	"github.com/gastown/townview/internal/ws"
@@ -16,14 +17,16 @@ import (
 type Handlers struct {
 	rigDiscovery *rigs.Discovery
 	beadsClient  *beads.Client
+	mailClient   *mail.Client
 	wsHub        *ws.Hub
 }
 
 // New creates a new Handlers instance.
-func New(rigDiscovery *rigs.Discovery, beadsClient *beads.Client, wsHub *ws.Hub) *Handlers {
+func New(rigDiscovery *rigs.Discovery, beadsClient *beads.Client, mailClient *mail.Client, wsHub *ws.Hub) *Handlers {
 	return &Handlers{
 		rigDiscovery: rigDiscovery,
 		beadsClient:  beadsClient,
+		mailClient:   mailClient,
 		wsHub:        wsHub,
 	}
 }
@@ -292,6 +295,42 @@ func (h *Handlers) ListDependencies(w http.ResponseWriter, r *http.Request) {
 // WebSocket handles GET /ws
 func (h *Handlers) WebSocket(w http.ResponseWriter, r *http.Request) {
 	h.wsHub.ServeWS(w, r)
+}
+
+// ListMail handles GET /api/mail
+func (h *Handlers) ListMail(w http.ResponseWriter, r *http.Request) {
+	opts := mail.ParseQueryParams(r.URL.Query().Get)
+
+	messages, err := h.mailClient.ListMail(opts)
+	if err != nil {
+		slog.Error("Failed to list mail", "error", err)
+		http.Error(w, "Failed to list mail", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, messages)
+}
+
+// ListRigMail handles GET /api/rigs/{rigId}/mail
+func (h *Handlers) ListRigMail(w http.ResponseWriter, r *http.Request) {
+	rigID := r.PathValue("rigId")
+
+	rig, err := h.rigDiscovery.GetRig(rigID)
+	if err != nil || rig == nil {
+		http.Error(w, "Rig not found", http.StatusNotFound)
+		return
+	}
+
+	opts := mail.ParseQueryParams(r.URL.Query().Get)
+
+	messages, err := h.mailClient.ListRigMail(rig.Path, opts)
+	if err != nil {
+		slog.Error("Failed to list rig mail", "rigId", rigID, "error", err)
+		http.Error(w, "Failed to list rig mail", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, messages)
 }
 
 // writeJSON writes a JSON response.

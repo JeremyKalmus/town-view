@@ -11,6 +11,7 @@ import (
 
 	"github.com/gastown/townview/internal/beads"
 	"github.com/gastown/townview/internal/handlers"
+	"github.com/gastown/townview/internal/mail"
 	"github.com/gastown/townview/internal/rigs"
 	"github.com/gastown/townview/internal/watcher"
 	"github.com/gastown/townview/internal/ws"
@@ -55,6 +56,7 @@ func main() {
 
 	// Initialize services
 	beadsClient := beads.NewClient(root)
+	mailClient := mail.NewClient(root)
 	rigDiscovery := rigs.NewDiscovery(root, beadsClient)
 	wsHub := ws.NewHub()
 	fileWatcher := watcher.New(root, wsHub)
@@ -70,7 +72,7 @@ func main() {
 	defer fileWatcher.Stop()
 
 	// Set up HTTP handlers
-	h := handlers.New(rigDiscovery, beadsClient, wsHub)
+	h := handlers.New(rigDiscovery, beadsClient, mailClient, wsHub)
 
 	// Routes
 	mux := http.NewServeMux()
@@ -86,6 +88,8 @@ func main() {
 	mux.HandleFunc("DELETE /api/rigs/{rigId}/issues/{issueId}/dependencies/{blockerId}", h.RemoveIssueDependency)
 	mux.HandleFunc("GET /api/rigs/{rigId}/agents", h.ListAgents)
 	mux.HandleFunc("GET /api/rigs/{rigId}/dependencies", h.ListDependencies)
+	mux.HandleFunc("GET /api/rigs/{rigId}/mail", h.ListRigMail)
+	mux.HandleFunc("GET /api/mail", h.ListMail)
 
 	// WebSocket
 	mux.HandleFunc("GET /ws", h.WebSocket)

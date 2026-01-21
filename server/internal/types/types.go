@@ -115,3 +115,39 @@ const (
 	RoleDeacon   = "deacon"
 	RoleMayor    = "mayor"
 )
+
+// Mail represents a mail message in the Gas Town system.
+type Mail struct {
+	ID        string    `json:"id"`
+	From      string    `json:"from"`
+	To        string    `json:"to"`
+	Subject   string    `json:"subject"`
+	Body      string    `json:"body"`
+	Timestamp time.Time `json:"timestamp"`
+	Read      bool      `json:"read"`
+	Priority  string    `json:"priority"`
+	Type      string    `json:"type"`
+	ThreadID  string    `json:"thread_id,omitempty"`
+	ReplyTo   string    `json:"reply_to,omitempty"`
+	CC        []string  `json:"cc,omitempty"`
+	Queue     string    `json:"queue,omitempty"`
+	Channel   string    `json:"channel,omitempty"`
+	ClaimedBy string    `json:"claimed_by,omitempty"`
+	ClaimedAt *time.Time `json:"claimed_at,omitempty"`
+}
+
+// Mail priority levels
+const (
+	MailPriorityLow    = "low"
+	MailPriorityNormal = "normal"
+	MailPriorityHigh   = "high"
+	MailPriorityUrgent = "urgent"
+)
+
+// Mail types
+const (
+	MailTypeTask         = "task"
+	MailTypeScavenge     = "scavenge"
+	MailTypeNotification = "notification"
+	MailTypeReply        = "reply"
+)

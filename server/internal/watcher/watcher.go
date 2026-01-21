@@ -177,18 +177,29 @@ func (w *Watcher) flushPending() {
 
 		// Determine rig from path
 		rig := w.rigFromPath(path)
+		filename := filepath.Base(path)
 
-		// Broadcast change
+		// Broadcast beads change
 		w.wsHub.Broadcast(types.WSMessage{
 			Type: "beads_changed",
 			Rig:  rig,
 			Payload: map[string]string{
-				"file": filepath.Base(path),
+				"file": filename,
+			},
+		})
+
+		// Also broadcast mail_received for potential mail changes
+		// (mail is stored as beads issues with type=message)
+		w.wsHub.Broadcast(types.WSMessage{
+			Type: "mail_received",
+			Rig:  rig,
+			Payload: map[string]string{
+				"file": filename,
 			},
 		})
 
 		delete(w.pending, path)
-		slog.Debug("Broadcast beads change", "rig", rig, "file", path)
+		slog.Debug("Broadcast beads/mail change", "rig", rig, "file", path)
 	}
 }
 
