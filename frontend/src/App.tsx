@@ -89,11 +89,15 @@ function App() {
       })
 
       if (result.data) {
-        setRigs(result.data)
+        // Deduplicate rigs by ID (defensive measure for backend edge cases)
+        const uniqueRigs = result.data.filter(
+          (rig, index, self) => index === self.findIndex((r) => r.id === rig.id)
+        )
+        setRigs(uniqueRigs)
         setIsFromCache(result.fromCache)
         // Select first rig by default
-        if (result.data.length > 0 && !selectedRig) {
-          setSelectedRig(result.data[0])
+        if (uniqueRigs.length > 0 && !selectedRig) {
+          setSelectedRig(uniqueRigs[0])
         }
         setLoading(false)
         // Clear error if we have data (even cached)
