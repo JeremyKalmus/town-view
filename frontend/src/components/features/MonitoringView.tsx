@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useCallback } from 'react'
 import type { Rig, Agent, Issue } from '@/types'
 import { AgentCard } from './AgentCard'
 import { cachedFetch } from '@/services/cache'
 import { cn, getAgentRoleIcon, formatRelativeTime } from '@/lib/utils'
+import { SlideOutPanel } from '@/components/layout/SlideOutPanel'
+import { IssueEditorForm } from './issue-editor'
 
 interface MonitoringViewProps {
   rig: Rig
@@ -35,6 +37,10 @@ export function MonitoringView({ rig, refreshKey = 0 }: MonitoringViewProps) {
   const [issues, setIssues] = useState<Issue[]>([])
   const [loading, setLoading] = useState(true)
   const [issuesLoading, setIssuesLoading] = useState(true)
+
+  // Panel state for viewing hooked bead
+  const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null)
+  const [panelOpen, setPanelOpen] = useState(false)
 
   // Fetch agents for rig
   useEffect(() => {
@@ -123,6 +129,31 @@ export function MonitoringView({ rig, refreshKey = 0 }: MonitoringViewProps) {
     return map
   }, [agents])
 
+  // Create a map of issue IDs to issues for quick lookup
+  const issuesById = useMemo(() => {
+    const map = new Map<string, Issue>()
+    issues.forEach(issue => {
+      map.set(issue.id, issue)
+    })
+    return map
+  }, [issues])
+
+  // Handle agent card click - open panel with hooked bead
+  const handleAgentClick = useCallback((agent: Agent) => {
+    if (!agent.hook_bead) return
+    const issue = issuesById.get(agent.hook_bead)
+    if (issue) {
+      setSelectedIssue(issue)
+      setPanelOpen(true)
+    }
+  }, [issuesById])
+
+  // Handle panel close
+  const handlePanelClose = useCallback(() => {
+    setPanelOpen(false)
+    setSelectedIssue(null)
+  }, [])
+
   return (
     <div className="p-6">
       {/* Stuck agents section - shown first if any exist */}
@@ -136,7 +167,11 @@ export function MonitoringView({ rig, refreshKey = 0 }: MonitoringViewProps) {
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {stuckAgents.map((agent) => (
-              <AgentCard key={agent.id} agent={{ ...agent, state: 'stuck' }} />
+              <AgentCard
+                key={agent.id}
+                agent={{ ...agent, state: 'stuck' }}
+                onClick={agent.hook_bead ? () => handleAgentClick(agent) : undefined}
+              />
             ))}
           </div>
         </div>
@@ -233,7 +268,11 @@ export function MonitoringView({ rig, refreshKey = 0 }: MonitoringViewProps) {
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {workingAgents.map((agent) => (
-              <AgentCard key={agent.id} agent={agent} />
+              <AgentCard
+                key={agent.id}
+                agent={agent}
+                onClick={agent.hook_bead ? () => handleAgentClick(agent) : undefined}
+              />
             ))}
           </div>
         )}
@@ -263,11 +302,32 @@ export function MonitoringView({ rig, refreshKey = 0 }: MonitoringViewProps) {
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {idleAgents.map((agent) => (
-              <AgentCard key={agent.id} agent={agent} />
+              <AgentCard
+                key={agent.id}
+                agent={agent}
+                onClick={agent.hook_bead ? () => handleAgentClick(agent) : undefined}
+              />
             ))}
           </div>
         )}
       </div>
+
+      {/* Issue Editor Panel for viewing hooked bead */}
+      <SlideOutPanel
+        isOpen={panelOpen}
+        onClose={handlePanelClose}
+        title={selectedIssue?.id}
+        className="w-[500px]"
+      >
+        {selectedIssue && (
+          <div className="p-4">
+            <IssueEditorForm
+              issue={selectedIssue}
+              disabled={true}
+            />
+          </div>
+        )}
+      </SlideOutPanel>
     </div>
   )
 }
