@@ -7,6 +7,8 @@ import { cn, getAgentRoleIcon, formatRelativeTime } from '@/lib/utils'
 interface MonitoringViewProps {
   rig: Rig
   refreshKey?: number
+  /** Set of issue IDs that were recently updated (for flash animation) */
+  updatedIssueIds?: Set<string>
 }
 
 // Threshold for stuck detection (15 minutes in milliseconds)
@@ -30,11 +32,12 @@ function isAgentStuck(agent: Agent): boolean {
  * MonitoringView - Displays agent status grid with stuck detection
  * Part of the three-view architecture: Planning | Monitoring | Audit
  */
-export function MonitoringView({ rig, refreshKey = 0 }: MonitoringViewProps) {
+export function MonitoringView({ rig, refreshKey = 0, updatedIssueIds = new Set() }: MonitoringViewProps) {
   const [agents, setAgents] = useState<Agent[]>([])
   const [issues, setIssues] = useState<Issue[]>([])
   const [loading, setLoading] = useState(true)
   const [issuesLoading, setIssuesLoading] = useState(true)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
   // Fetch agents for rig
   useEffect(() => {
@@ -49,6 +52,7 @@ export function MonitoringView({ rig, refreshKey = 0 }: MonitoringViewProps) {
 
       if (result.data) {
         setAgents(result.data)
+        setLastUpdated(new Date())
         if (result.fromCache && result.error) {
           console.warn('[Agents] Using cached data:', result.error)
         }
@@ -125,6 +129,27 @@ export function MonitoringView({ rig, refreshKey = 0 }: MonitoringViewProps) {
 
   return (
     <div className="p-6">
+      {/* Real-time status header */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="font-display text-2xl font-bold tracking-wide">MONITORING</h1>
+          <p className="text-text-muted text-sm mt-1">
+            Real-time agent status and work tracking
+          </p>
+        </div>
+        <div className="flex items-center gap-2 text-sm">
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-status-closed animate-pulse" />
+            <span className="text-text-muted">Live</span>
+          </span>
+          {lastUpdated && (
+            <span className="text-text-muted">
+              · Updated {formatRelativeTime(lastUpdated.toISOString())}
+            </span>
+          )}
+        </div>
+      </div>
+
       {/* Stuck agents section - shown first if any exist */}
       {stuckAgents.length > 0 && (
         <div className="mb-8">
@@ -168,6 +193,7 @@ export function MonitoringView({ rig, refreshKey = 0 }: MonitoringViewProps) {
                   key={issue.id}
                   issue={issue}
                   agent={issue.assignee ? agentsByName.get(issue.assignee) : undefined}
+                  isUpdated={updatedIssueIds.has(issue.id)}
                 />
               ))}
             </div>
@@ -202,6 +228,7 @@ export function MonitoringView({ rig, refreshKey = 0 }: MonitoringViewProps) {
                   key={issue.id}
                   issue={issue}
                   agent={issue.assignee ? agentsByName.get(issue.assignee) : undefined}
+                  isUpdated={updatedIssueIds.has(issue.id)}
                 />
               ))}
             </div>
@@ -275,19 +302,23 @@ export function MonitoringView({ rig, refreshKey = 0 }: MonitoringViewProps) {
 interface InFlightWorkRowProps {
   issue: Issue
   agent?: Agent
+  isUpdated?: boolean
 }
 
 /**
  * Row component for in-flight work section showing issue with assigned agent.
  */
-function InFlightWorkRow({ issue, agent }: InFlightWorkRowProps) {
+function InFlightWorkRow({ issue, agent, isUpdated = false }: InFlightWorkRowProps) {
   // Extract short agent name from full path (e.g., "townview/polecats/rictus" -> "rictus")
   const agentDisplayName = issue.assignee
     ? issue.assignee.split('/').pop() || issue.assignee
     : null
 
   return (
-    <div className="flex items-center gap-3 py-3 px-4 hover:bg-bg-tertiary/50 transition-colors">
+    <div className={cn(
+      "flex items-center gap-3 py-3 px-4 hover:bg-bg-tertiary/50 transition-colors",
+      isUpdated && "animate-flash-update"
+    )}>
       {/* Issue ID */}
       <span className="mono text-xs text-text-muted w-24 flex-shrink-0 truncate">
         {issue.id}
@@ -328,19 +359,23 @@ function InFlightWorkRow({ issue, agent }: InFlightWorkRowProps) {
 interface RecentlyCompletedRowProps {
   issue: Issue
   agent?: Agent
+  isUpdated?: boolean
 }
 
 /**
  * Row component for recently completed section showing closed issue with completion time.
  */
-function RecentlyCompletedRow({ issue, agent }: RecentlyCompletedRowProps) {
+function RecentlyCompletedRow({ issue, agent, isUpdated = false }: RecentlyCompletedRowProps) {
   // Extract short agent name from full path
   const agentDisplayName = issue.assignee
     ? issue.assignee.split('/').pop() || issue.assignee
     : null
 
   return (
-    <div className="flex items-center gap-3 py-3 px-4 hover:bg-bg-tertiary/50 transition-colors">
+    <div className={cn(
+      "flex items-center gap-3 py-3 px-4 hover:bg-bg-tertiary/50 transition-colors",
+      isUpdated && "animate-flash-update"
+    )}>
       {/* Status icon */}
       <span className="text-status-closed text-lg flex-shrink-0">✓</span>
 
