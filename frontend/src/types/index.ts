@@ -93,10 +93,13 @@ export interface IssueUpdate {
 
 // WebSocket message
 export interface WSMessage {
-  type: 'issue_changed' | 'issue_created' | 'issue_update' | 'beads_changed' | 'rig_discovered' | 'rig_update' | 'agent_state_changed';
+  type: 'issue_changed' | 'issue_created' | 'issue_update' | 'beads_changed' | 'rig_discovered' | 'rig_update' | 'agent_state_changed' | 'mail_received';
   rig?: string;
   payload?: Record<string, unknown>;
 }
+
+// Re-export mail types
+export type { Mail } from './mail'
 
 // Filter options
 export interface IssueFilters {
