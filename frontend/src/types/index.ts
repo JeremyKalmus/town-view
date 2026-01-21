@@ -144,3 +144,9 @@ export interface HistoryEntry {
   old_value: string | null;
   new_value: string | null;
 }
+
+// IssueDependencies contains blockers and blocked-by for an issue
+export interface IssueDependencies {
+  blockers: Issue[];   // Issues that block this issue
+  blocked_by: Issue[]; // Issues blocked by this issue
+}

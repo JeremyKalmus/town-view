@@ -172,6 +172,103 @@ func (h *Handlers) ListAgents(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, agents)
 }
 
+// GetIssueDependencies handles GET /api/rigs/{rigId}/issues/{issueId}/dependencies
+func (h *Handlers) GetIssueDependencies(w http.ResponseWriter, r *http.Request) {
+	rigID := r.PathValue("rigId")
+	issueID := r.PathValue("issueId")
+
+	rig, err := h.rigDiscovery.GetRig(rigID)
+	if err != nil || rig == nil {
+		http.Error(w, "Rig not found", http.StatusNotFound)
+		return
+	}
+
+	deps, err := h.beadsClient.GetIssueDependencies(rig.Path, issueID)
+	if err != nil {
+		slog.Error("Failed to get issue dependencies", "rigId", rigID, "issueId", issueID, "error", err)
+		http.Error(w, "Failed to get issue dependencies", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, deps)
+}
+
+// AddIssueDependency handles POST /api/rigs/{rigId}/issues/{issueId}/dependencies
+func (h *Handlers) AddIssueDependency(w http.ResponseWriter, r *http.Request) {
+	rigID := r.PathValue("rigId")
+	issueID := r.PathValue("issueId")
+
+	rig, err := h.rigDiscovery.GetRig(rigID)
+	if err != nil || rig == nil {
+		http.Error(w, "Rig not found", http.StatusNotFound)
+		return
+	}
+
+	var req types.DependencyAdd
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.BlockerID == "" {
+		http.Error(w, "blocker_id is required", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.beadsClient.AddDependency(rig.Path, issueID, req.BlockerID); err != nil {
+		slog.Error("Failed to add dependency", "rigId", rigID, "issueId", issueID, "blockerId", req.BlockerID, "error", err)
+		http.Error(w, "Failed to add dependency", http.StatusInternalServerError)
+		return
+	}
+
+	// Broadcast change
+	h.wsHub.Broadcast(types.WSMessage{
+		Type: "issue_changed",
+		Rig:  rigID,
+		Payload: map[string]string{
+			"id":         issueID,
+			"blocker_id": req.BlockerID,
+			"action":     "dependency_added",
+		},
+	})
+
+	w.WriteHeader(http.StatusCreated)
+	writeJSON(w, map[string]string{"status": "ok"})
+}
+
+// RemoveIssueDependency handles DELETE /api/rigs/{rigId}/issues/{issueId}/dependencies/{blockerId}
+func (h *Handlers) RemoveIssueDependency(w http.ResponseWriter, r *http.Request) {
+	rigID := r.PathValue("rigId")
+	issueID := r.PathValue("issueId")
+	blockerID := r.PathValue("blockerId")
+
+	rig, err := h.rigDiscovery.GetRig(rigID)
+	if err != nil || rig == nil {
+		http.Error(w, "Rig not found", http.StatusNotFound)
+		return
+	}
+
+	if err := h.beadsClient.RemoveDependency(rig.Path, issueID, blockerID); err != nil {
+		slog.Error("Failed to remove dependency", "rigId", rigID, "issueId", issueID, "blockerId", blockerID, "error", err)
+		http.Error(w, "Failed to remove dependency", http.StatusInternalServerError)
+		return
+	}
+
+	// Broadcast change
+	h.wsHub.Broadcast(types.WSMessage{
+		Type: "issue_changed",
+		Rig:  rigID,
+		Payload: map[string]string{
+			"id":         issueID,
+			"blocker_id": blockerID,
+			"action":     "dependency_removed",
+		},
+	})
+
+	w.WriteHeader(http.StatusOK)
+	writeJSON(w, map[string]string{"status": "ok"})
+}
+
 // ListDependencies handles GET /api/rigs/{rigId}/dependencies
 func (h *Handlers) ListDependencies(w http.ResponseWriter, r *http.Request) {
 	rigID := r.PathValue("rigId")
