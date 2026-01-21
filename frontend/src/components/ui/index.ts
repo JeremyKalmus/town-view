@@ -22,3 +22,4 @@ export {
   SkeletonRigItem,
   SkeletonRigList,
 } from './Skeleton'
+export { ViewSwitcher, type ViewSwitcherProps } from './ViewSwitcher'
