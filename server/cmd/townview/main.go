@@ -85,7 +85,10 @@ func main() {
 	mux.HandleFunc("POST /api/rigs/{rigId}/issues/{issueId}/dependencies", h.AddIssueDependency)
 	mux.HandleFunc("DELETE /api/rigs/{rigId}/issues/{issueId}/dependencies/{blockerId}", h.RemoveIssueDependency)
 	mux.HandleFunc("GET /api/rigs/{rigId}/agents", h.ListAgents)
+	mux.HandleFunc("GET /api/rigs/{rigId}/agents/{agentId}/peek", h.PeekAgent)
 	mux.HandleFunc("GET /api/rigs/{rigId}/dependencies", h.ListDependencies)
+	mux.HandleFunc("GET /api/rigs/{rigId}/issues/{issueId}/progress", h.GetMoleculeProgress)
+	mux.HandleFunc("GET /api/rigs/{rigId}/activity", h.GetRecentActivity)
 
 	// WebSocket
 	mux.HandleFunc("GET /ws", h.WebSocket)

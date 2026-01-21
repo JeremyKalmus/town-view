@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/gastown/townview/internal/types"
 )
@@ -378,4 +379,126 @@ func (c *Client) GetDependencies(rigPath string) ([]types.Dependency, error) {
 	}
 
 	return deps, nil
+}
+
+// runGT executes a gt command in the given rig path.
+func (c *Client) runGT(rigPath string, args ...string) ([]byte, error) {
+	gtPath := os.Getenv("GT_PATH")
+	if gtPath == "" {
+		gtPath = "gt"
+	}
+
+	cmd := exec.Command(gtPath, args...)
+	cmd.Dir = filepath.Join(c.townRoot, rigPath)
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	slog.Debug("Running gt command", "args", args, "dir", cmd.Dir)
+
+	if err := cmd.Run(); err != nil {
+		slog.Error("gt command failed", "args", args, "stderr", stderr.String(), "error", err)
+		return nil, fmt.Errorf("%s: %s", err, stderr.String())
+	}
+
+	return stdout.Bytes(), nil
+}
+
+// molProgressOutput represents the gt mol progress --json output.
+type molProgressOutput struct {
+	IssueID     string `json:"issue_id"`
+	CurrentStep int    `json:"current_step"`
+	TotalSteps  int    `json:"total_steps"`
+	StepName    string `json:"step_name"`
+	Status      string `json:"status"`
+}
+
+// GetMoleculeProgress returns the progress of a molecule.
+func (c *Client) GetMoleculeProgress(rigPath, moleculeID string) (*types.MoleculeProgress, error) {
+	args := []string{"mol", "progress", moleculeID, "--json"}
+
+	output, err := c.runGT(rigPath, args...)
+	if err != nil {
+		return nil, fmt.Errorf("gt mol progress failed: %w", err)
+	}
+
+	var progress molProgressOutput
+	if err := json.Unmarshal(output, &progress); err != nil {
+		return nil, fmt.Errorf("failed to parse molecule progress: %w", err)
+	}
+
+	return &types.MoleculeProgress{
+		IssueID:     progress.IssueID,
+		CurrentStep: progress.CurrentStep,
+		TotalSteps:  progress.TotalSteps,
+		StepName:    progress.StepName,
+		Status:      progress.Status,
+	}, nil
+}
+
+// PeekAgent returns output lines from an agent's session.
+func (c *Client) PeekAgent(rigPath, agentID string, lineCount int) (*types.PeekOutput, error) {
+	args := []string{"peek", agentID, fmt.Sprintf("%d", lineCount)}
+
+	output, err := c.runGT(rigPath, args...)
+	if err != nil {
+		return nil, fmt.Errorf("gt peek failed: %w", err)
+	}
+
+	lines := strings.Split(string(output), "\n")
+	// Remove trailing empty line if present
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+
+	return &types.PeekOutput{
+		AgentID:   agentID,
+		Lines:     lines,
+		Timestamp: time.Now(),
+	}, nil
+}
+
+// GetRecentActivity returns recent activity events aggregated from issue updates.
+func (c *Client) GetRecentActivity(rigPath string, limit int) ([]types.ActivityEvent, error) {
+	// Get all issues sorted by updated_at
+	issues, err := c.ListIssues(rigPath, map[string]string{"all": "true"})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list issues: %w", err)
+	}
+
+	// Sort by updated_at descending
+	sortIssuesByUpdatedAt(issues)
+
+	// Take up to limit issues and convert to activity events
+	events := make([]types.ActivityEvent, 0, limit)
+	for i, issue := range issues {
+		if i >= limit {
+			break
+		}
+		event := types.ActivityEvent{
+			ID:        fmt.Sprintf("activity-%s-%d", issue.ID, issue.UpdatedAt.Unix()),
+			IssueID:   issue.ID,
+			IssueType: issue.IssueType,
+			Title:     issue.Title,
+			EventType: "update",
+			NewValue:  issue.Status,
+			Actor:     issue.Assignee,
+			Timestamp: issue.UpdatedAt,
+		}
+		events = append(events, event)
+	}
+
+	return events, nil
+}
+
+// sortIssuesByUpdatedAt sorts issues by updated_at descending (most recent first).
+func sortIssuesByUpdatedAt(issues []types.Issue) {
+	for i := 0; i < len(issues)-1; i++ {
+		for j := i + 1; j < len(issues); j++ {
+			if issues[j].UpdatedAt.After(issues[i].UpdatedAt) {
+				issues[i], issues[j] = issues[j], issues[i]
+			}
+		}
+	}
 }
