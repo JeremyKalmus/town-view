@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
-import type { Issue, IssueStatus } from '@/types'
+import type { Issue } from '@/types'
 import type { SelectOption } from '@/components/ui'
 import { StatusDropdown } from './StatusDropdown'
 import { PriorityDropdown } from './PriorityDropdown'
