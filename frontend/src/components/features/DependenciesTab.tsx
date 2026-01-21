@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import type { Issue, IssueDependencies } from '@/types'
+import { cachedFetch } from '@/services/cache'
 import { cn, getStatusIcon, getStatusBadgeClass, getPriorityBadgeClass, getPriorityLabel } from '@/lib/utils'
 
 interface DependenciesTabProps {
@@ -96,20 +97,25 @@ function AddDependencyModal({
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch(`/api/rigs/${rigId}/issues?all=true`)
-      .then((res) => res.json())
-      .then((data) => {
+    const fetchAllIssues = async () => {
+      const url = `/api/rigs/${rigId}/issues?all=true`
+      const result = await cachedFetch<Issue[]>(url, {
+        cacheTTL: 2 * 60 * 1000, // 2 minutes
+        returnStaleOnError: true,
+      })
+
+      if (result.data) {
         // Filter out current issue and existing blockers
-        const filtered = (data || []).filter(
+        const filtered = result.data.filter(
           (issue: Issue) =>
             issue.id !== issueId && !existingBlockerIds.includes(issue.id)
         )
         setIssues(filtered)
-        setLoading(false)
-      })
-      .catch(() => {
-        setLoading(false)
-      })
+      }
+      setLoading(false)
+    }
+
+    fetchAllIssues()
   }, [rigId, issueId, existingBlockerIds])
 
   const filteredIssues = issues.filter(
@@ -241,22 +247,28 @@ export function DependenciesTab({ rigId, issueId, onIssueClick }: DependenciesTa
   const [removeConfirm, setRemoveConfirm] = useState<Issue | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const fetchDependencies = useCallback(() => {
+  const fetchDependencies = useCallback(async () => {
     setLoading(true)
     setError(null)
-    fetch(`/api/rigs/${rigId}/issues/${issueId}/dependencies`)
-      .then((res) => {
-        if (!res.ok) throw new Error('Failed to fetch dependencies')
-        return res.json()
-      })
-      .then((data) => {
-        setDependencies(data)
-        setLoading(false)
-      })
-      .catch((err) => {
-        setError(err.message)
-        setLoading(false)
-      })
+
+    const url = `/api/rigs/${rigId}/issues/${issueId}/dependencies`
+    const result = await cachedFetch<IssueDependencies>(url, {
+      cacheTTL: 2 * 60 * 1000, // 2 minutes
+      returnStaleOnError: true,
+    })
+
+    if (result.data) {
+      setDependencies(result.data)
+      setLoading(false)
+      if (result.fromCache && result.error) {
+        console.warn('[IssueDeps] Using cached data:', result.error)
+      } else {
+        setError(null)
+      }
+    } else if (result.error) {
+      setError(result.error)
+      setLoading(false)
+    }
   }, [rigId, issueId])
 
   useEffect(() => {

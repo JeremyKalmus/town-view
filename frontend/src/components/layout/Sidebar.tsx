@@ -1,9 +1,6 @@
-import { Cog, Fuel, Keyboard } from 'lucide-react'
+import { Cog, Fuel } from 'lucide-react'
 import type { Rig } from '@/types'
-import { SkeletonRigList } from '@/components/ui'
 import { cn } from '@/lib/utils'
-import { ShortcutHint } from '@/components/ui/ShortcutHint'
-import { ThemeToggle } from '@/components/ui/ThemeToggle'
 
 interface SidebarProps {
   rigs: Rig[]
@@ -11,9 +8,17 @@ interface SidebarProps {
   onSelectRig: (rig: Rig) => void
   loading: boolean
   connected?: boolean
+  httpConnected?: boolean
 }
 
-export function Sidebar({ rigs, selectedRig, onSelectRig, loading, connected }: SidebarProps) {
+export function Sidebar({ rigs, selectedRig, onSelectRig, loading, connected, httpConnected = true }: SidebarProps) {
+  // Determine overall connection status
+  // Online = both WS and HTTP connected
+  // Degraded = WS connected but HTTP issues (or vice versa)
+  // Offline = neither connected (falls through to default case)
+  const isFullyConnected = connected && httpConnected
+  const isDegraded = (connected && !httpConnected) || (!connected && httpConnected)
+
   return (
     <aside className="w-64 bg-bg-secondary border-r border-border flex flex-col">
       {/* Logo header */}
@@ -30,7 +35,11 @@ export function Sidebar({ rigs, selectedRig, onSelectRig, loading, connected }: 
 
         {loading ? (
           <div className="px-2 py-4">
-            <SkeletonRigList count={3} />
+            <div className="animate-pulse space-y-2">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-10 bg-bg-tertiary rounded-md" />
+              ))}
+            </div>
           </div>
         ) : rigs.length === 0 ? (
           <div className="px-2 py-4 text-text-muted text-sm">
@@ -51,23 +60,22 @@ export function Sidebar({ rigs, selectedRig, onSelectRig, loading, connected }: 
       </div>
 
       {/* Footer */}
-      <div className="p-4 border-t border-border">
-        <div className="flex items-center justify-between text-xs text-text-muted mb-2">
-          <span>Gas Town</span>
-          <div className="flex items-center gap-3"><ThemeToggle /><div className="flex items-center gap-1">
-            <span
-              className={cn(
-                'w-2 h-2 rounded-full',
-                connected ? 'bg-status-closed animate-pulse' : 'bg-status-blocked'
-              )}
-            />
-            <span>{connected ? "Live" : "Offline"}</span></div>
-          </div>
-        </div>
-        <div className="flex items-center gap-1.5 text-xs text-text-muted">
-          <Keyboard className="w-3 h-3" />
-          <span>Shortcuts</span>
-          <ShortcutHint keys="?" size="sm" />
+      <div className="p-4 border-t border-border text-xs text-text-muted flex items-center justify-between">
+        <span>Gas Town</span>
+        <div className="flex items-center gap-1">
+          <span
+            className={cn(
+              'w-2 h-2 rounded-full',
+              isFullyConnected
+                ? 'bg-status-closed animate-pulse'
+                : isDegraded
+                ? 'bg-yellow-500 animate-pulse'
+                : 'bg-status-blocked'
+            )}
+          />
+          <span>
+            {isFullyConnected ? 'Live' : isDegraded ? 'Degraded' : 'Offline'}
+          </span>
         </div>
       </div>
     </aside>

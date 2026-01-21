@@ -1,50 +1,27 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { RigDashboard } from '@/components/features/RigDashboard'
+import { OfflineBanner } from '@/components/layout/OfflineBanner'
 import { Toast, ToastProvider, ToastViewport } from '@/components/ui/Toast'
-import { KeyboardShortcutsModal } from "@/components/ui/KeyboardShortcutsModal"
-import { ErrorBoundary } from "@/components/ui/ErrorBoundary"
-import { useRigStore } from "@/stores/rig-store"
-import { useToastStore } from "@/stores/toast-store"
-import { useWebSocket } from "@/hooks/useWebSocket"
-import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts"
-import { logError } from "@/lib/error-logger"
+import { useRigStore } from '@/stores/rig-store'
+import { useToastStore } from '@/stores/toast-store'
+import { useConnectivityStore } from '@/stores/connectivity-store'
+import { useWebSocket } from '@/hooks/useWebSocket'
+import { useOffline } from '@/hooks/useOffline'
+import { cachedFetch } from '@/services/cache'
 import type { Rig, WSMessage } from '@/types'
 
 function App() {
   const { selectedRig, setSelectedRig } = useRigStore()
   const { toast, hideToast } = useToastStore()
+  const { status: connectivityStatus } = useConnectivityStore()
   const [rigs, setRigs] = useState<Rig[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [updatedIssueIds, setUpdatedIssueIds] = useState<Set<string>>(new Set())
+  const [_isFromCache, setIsFromCache] = useState(false)
   const clearTimeoutRef = useRef<Map<string, number>>(new Map())
-  const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false)
-
-  // Global keyboard shortcuts
-  useKeyboardShortcuts({
-    onShowHelp: () => setShortcutsModalOpen(true),
-    onEscape: () => setShortcutsModalOpen(false),
-    // Navigation shortcuts - placeholder for future views
-    onNavigateDashboard: () => {
-      console.log('[Keyboard] Navigate to Dashboard')
-      // Future: switch to dashboard view
-    },
-    onNavigateRoadmap: () => {
-      console.log('[Keyboard] Navigate to Roadmap')
-      // Future: switch to roadmap view
-    },
-    onNavigateAudit: () => {
-      console.log('[Keyboard] Navigate to Audit')
-      // Future: switch to audit view
-    },
-    onSearch: () => {
-      console.log('[Keyboard] Focus search')
-      // Future: focus search input
-    },
-    enabled: !shortcutsModalOpen, // Disable shortcuts when modal is open (except Escape)
-  })
 
   // WebSocket for real-time updates
   const handleWSMessage = useCallback((msg: WSMessage) => {
@@ -92,56 +69,69 @@ function App() {
     onDisconnect: () => console.log('[WS] Disconnected'),
   })
 
+  // Offline detection and connectivity management
+  const { tryReconnect } = useOffline({
+    onReconnect: () => {
+      console.log('[Connectivity] Reconnected - refreshing data')
+      setRefreshKey((k) => k + 1)
+    },
+    onDisconnect: () => {
+      console.log('[Connectivity] Disconnected - using cached data')
+    },
+  })
+
   useEffect(() => {
     // Fetch rigs on mount or when refresh triggered
-    fetch('/api/rigs')
-      .then((res) => {
-        if (!res.ok) throw new Error('Failed to fetch rigs')
-        return res.json()
+    const fetchRigs = async () => {
+      const result = await cachedFetch<Rig[]>('/api/rigs', {
+        cacheTTL: 5 * 60 * 1000, // 5 minutes
+        returnStaleOnError: true,
       })
-      .then((data) => {
-        setRigs(data)
+
+      if (result.data) {
+        setRigs(result.data)
+        setIsFromCache(result.fromCache)
         // Select first rig by default
-        if (data.length > 0 && !selectedRig) {
-          setSelectedRig(data[0])
+        if (result.data.length > 0 && !selectedRig) {
+          setSelectedRig(result.data[0])
         }
         setLoading(false)
-      })
-      .catch((err) => {
-        setError(err.message)
+        // Clear error if we have data (even cached)
+        if (result.fromCache && result.error) {
+          // Keep error for display but don't block UI
+          console.warn('[Rigs] Using cached data:', result.error)
+        } else {
+          setError(null)
+        }
+      } else if (result.error) {
+        setError(result.error)
         setLoading(false)
-      })
+      }
+    }
+
+    fetchRigs()
   }, [selectedRig, setSelectedRig, refreshKey])
 
   return (
     <ToastProvider duration={4000}>
       <div className="flex h-screen overflow-hidden">
-        {/* Sidebar with error boundary */}
-        <ErrorBoundary
-          variant="inline"
-          title="Sidebar Error"
-          description="Failed to load the navigation sidebar."
-          onError={(error, errorInfo) => logError('Sidebar', error, errorInfo)}
-          className="w-64 bg-bg-secondary border-r border-border"
-        >
-          <Sidebar
-            rigs={rigs}
-            selectedRig={selectedRig}
-            onSelectRig={setSelectedRig}
-            loading={loading}
-            connected={connected}
-          />
-        </ErrorBoundary>
+        {/* Sidebar */}
+        <Sidebar
+          rigs={rigs}
+          selectedRig={selectedRig}
+          onSelectRig={setSelectedRig}
+          loading={loading}
+          connected={connected}
+          httpConnected={connectivityStatus === 'online'}
+        />
 
-        {/* Main content with error boundary */}
-        <main className="flex-1 overflow-auto">
-          <ErrorBoundary
-            variant="full"
-            title="Dashboard Error"
-            description="Something went wrong while loading the dashboard. This might be a temporary issue."
-            onError={(error, errorInfo) => logError('RigDashboard', error, errorInfo)}
-            className="h-full"
-          >
+        {/* Main content */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Offline banner */}
+          <OfflineBanner onRetry={tryReconnect} />
+
+          {/* Main content area */}
+          <main className="flex-1 overflow-auto">
             {error ? (
               <div className="flex items-center justify-center h-full">
                 <div className="card-accent p-6 max-w-md">
@@ -161,8 +151,8 @@ function App() {
                 <p className="text-text-muted">Select a rig from the sidebar</p>
               </div>
             )}
-          </ErrorBoundary>
-        </main>
+          </main>
+        </div>
       </div>
 
       {/* Toast notifications */}
@@ -174,12 +164,6 @@ function App() {
         onOpenChange={(open) => !open && hideToast()}
       />
       <ToastViewport />
-
-      {/* Keyboard shortcuts help modal */}
-      <KeyboardShortcutsModal
-        isOpen={shortcutsModalOpen}
-        onClose={() => setShortcutsModalOpen(false)}
-      />
     </ToastProvider>
   )
 }
