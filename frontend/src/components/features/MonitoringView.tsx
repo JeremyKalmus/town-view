@@ -1,11 +1,16 @@
 import { useEffect, useMemo, useState, useCallback } from 'react'
-import type { Rig, Agent, Issue } from '@/types'
+import type { Rig, Agent, Issue, MoleculeProgress, ActivityEvent, WSMessage } from '@/types'
 import { AgentCard } from './AgentCard'
 import { cachedFetch } from '@/services/cache'
 import { cn, getAgentRoleIcon, formatRelativeTime } from '@/lib/utils'
-import { SlideOutPanel } from '@/components/layout/SlideOutPanel'
-import { IssueEditorForm } from './issue-editor'
 import { SkeletonAgentGrid, SkeletonWorkList, ErrorState } from '@/components/ui/Skeleton'
+import { useWebSocket } from '@/hooks/useWebSocket'
+import { useMonitoringStore } from '@/stores/monitoring-store'
+import {
+  WorkItemRow,
+  ActivityFeed,
+  AgentPeekPanel,
+} from './monitoring'
 
 interface MonitoringViewProps {
   rig: Rig
@@ -49,9 +54,51 @@ export function MonitoringView({ rig, refreshKey = 0, updatedIssueIds = new Set(
   // Retry counter for manual retry
   const [retryCount, setRetryCount] = useState(0)
 
-  // Panel state for viewing hooked bead
-  const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null)
-  const [panelOpen, setPanelOpen] = useState(false)
+  // Agent peek panel state
+  const [peekPanelOpen, setPeekPanelOpen] = useState(false)
+  const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null)
+
+  // Monitoring store for progress and activity
+  const {
+    progressCache,
+    setProgress,
+    activityEvents,
+    setActivityEvents,
+    addActivityEvent,
+  } = useMonitoringStore()
+
+  // Handle WebSocket messages for monitoring events
+  const handleWebSocketMessage = useCallback((msg: WSMessage) => {
+    // Only process messages for this rig
+    if (msg.rig && msg.rig !== rig.id) return
+
+    switch (msg.type) {
+      case 'issue_changed':
+      case 'issue_update':
+        // Issue was updated, refresh will pick it up
+        break
+
+      default:
+        // Handle custom monitoring events via payload type
+        if (msg.payload) {
+          const payloadType = (msg.payload as { type?: string }).type
+
+          if (payloadType === 'activity_event') {
+            const event = msg.payload as unknown as ActivityEvent
+            addActivityEvent(event)
+          } else if (payloadType === 'molecule_progress') {
+            const progress = msg.payload as unknown as MoleculeProgress
+            setProgress(progress.issue_id, progress)
+          }
+        }
+        break
+    }
+  }, [rig.id, addActivityEvent, setProgress])
+
+  // Connect to WebSocket
+  useWebSocket({
+    onMessage: handleWebSocketMessage,
+  })
 
   // Fetch agents for rig
   useEffect(() => {
@@ -106,6 +153,23 @@ export function MonitoringView({ rig, refreshKey = 0, updatedIssueIds = new Set(
     fetchIssues()
   }, [rig.id, refreshKey, retryCount])
 
+  // Fetch initial activity events
+  useEffect(() => {
+    const fetchActivity = async () => {
+      try {
+        const response = await fetch(`/api/rigs/${rig.id}/activity?limit=50`)
+        if (response.ok) {
+          const events: ActivityEvent[] = await response.json()
+          setActivityEvents(events)
+        }
+      } catch (err) {
+        console.error('Failed to fetch activity:', err)
+      }
+    }
+
+    fetchActivity()
+  }, [rig.id, setActivityEvents])
+
   // Handle retry
   const handleRetry = useCallback(() => {
     setRetryCount((c) => c + 1)
@@ -150,29 +214,39 @@ export function MonitoringView({ rig, refreshKey = 0, updatedIssueIds = new Set(
     return map
   }, [agents])
 
-  // Create a map of issue IDs to issues for quick lookup
-  const issuesById = useMemo(() => {
-    const map = new Map<string, Issue>()
-    issues.forEach(issue => {
-      map.set(issue.id, issue)
-    })
-    return map
-  }, [issues])
+  // Calculate duration since issue started (for health badge)
+  const getIssueDuration = useCallback((issue: Issue): number => {
+    const updatedAt = new Date(issue.updated_at).getTime()
+    return Date.now() - updatedAt
+  }, [])
 
-  // Handle agent card click - open panel with hooked bead
+  // Handle agent card click - open peek panel
   const handleAgentClick = useCallback((agent: Agent) => {
     if (!agent.hook_bead) return
-    const issue = issuesById.get(agent.hook_bead)
-    if (issue) {
-      setSelectedIssue(issue)
-      setPanelOpen(true)
-    }
-  }, [issuesById])
+    setSelectedAgent(agent)
+    setPeekPanelOpen(true)
+  }, [])
 
-  // Handle panel close
-  const handlePanelClose = useCallback(() => {
-    setPanelOpen(false)
-    setSelectedIssue(null)
+  // Handle peek panel close
+  const handlePeekPanelClose = useCallback(() => {
+    setPeekPanelOpen(false)
+    setSelectedAgent(null)
+  }, [])
+
+  // Handle work item click - also opens peek panel for assigned agent
+  const handleWorkItemClick = useCallback((issue: Issue) => {
+    if (!issue.assignee) return
+    const agent = agentsByName.get(issue.assignee)
+    if (agent && agent.state === 'working') {
+      setSelectedAgent(agent)
+      setPeekPanelOpen(true)
+    }
+  }, [agentsByName])
+
+  // Handle activity event click - navigate to issue
+  const handleActivityClick = useCallback((event: ActivityEvent) => {
+    // Could navigate to issue or open panel here
+    console.log('Activity clicked:', event.issue_id)
   }, [])
 
   return (
@@ -228,7 +302,7 @@ export function MonitoringView({ rig, refreshKey = 0, updatedIssueIds = new Set(
         </div>
       )}
 
-      {/* In-flight work section */}
+      {/* In-flight work section - using WorkItemRow */}
       {!agentsError && (
         <div className="mb-8">
           <div className="flex items-center gap-2 mb-4">
@@ -250,16 +324,42 @@ export function MonitoringView({ rig, refreshKey = 0, updatedIssueIds = new Set(
               </div>
             ) : (
               <div className="divide-y divide-border">
-                {inFlightWork.map((issue) => (
-                  <InFlightWorkRow
-                    key={issue.id}
-                    issue={issue}
-                    agent={issue.assignee ? agentsByName.get(issue.assignee) : undefined}
-                    isUpdated={updatedIssueIds.has(issue.id)}
-                  />
-                ))}
+                {inFlightWork.map((issue) => {
+                  const agent = issue.assignee ? agentsByName.get(issue.assignee) : undefined
+                  const progress = progressCache.get(issue.id)
+                  return (
+                    <WorkItemRow
+                      key={issue.id}
+                      issue={issue}
+                      agent={agent}
+                      durationMs={getIssueDuration(issue)}
+                      progress={progress}
+                      isUpdated={updatedIssueIds.has(issue.id)}
+                      onClick={agent?.state === 'working' ? () => handleWorkItemClick(issue) : undefined}
+                    />
+                  )
+                })}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Activity Feed section */}
+      {!agentsError && (
+        <div className="mb-8">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-accent-primary text-lg">↻</span>
+            <h2 className="section-header">
+              RECENT ACTIVITY ({activityEvents.length})
+            </h2>
+          </div>
+          <div className="card max-h-[300px] overflow-hidden">
+            <ActivityFeed
+              events={activityEvents}
+              onEventClick={handleActivityClick}
+              className="max-h-[280px] p-2"
+            />
           </div>
         </div>
       )}
@@ -357,79 +457,14 @@ export function MonitoringView({ rig, refreshKey = 0, updatedIssueIds = new Set(
         </div>
       )}
 
-      {/* Issue Editor Panel for viewing hooked bead */}
-      <SlideOutPanel
-        isOpen={panelOpen}
-        onClose={handlePanelClose}
-        title={selectedIssue?.id}
-        className="w-[500px]"
-      >
-        {selectedIssue && (
-          <div className="p-4">
-            <IssueEditorForm
-              issue={selectedIssue}
-              disabled={true}
-            />
-          </div>
-        )}
-      </SlideOutPanel>
-    </div>
-  )
-}
-
-interface InFlightWorkRowProps {
-  issue: Issue
-  agent?: Agent
-  isUpdated?: boolean
-}
-
-/**
- * Row component for in-flight work section showing issue with assigned agent.
- */
-function InFlightWorkRow({ issue, agent, isUpdated = false }: InFlightWorkRowProps) {
-  // Extract short agent name from full path (e.g., "townview/polecats/rictus" -> "rictus")
-  const agentDisplayName = issue.assignee
-    ? issue.assignee.split('/').pop() || issue.assignee
-    : null
-
-  return (
-    <div className={cn(
-      "flex items-center gap-3 py-3 px-4 hover:bg-bg-tertiary/50 transition-colors",
-      isUpdated && "animate-flash-update"
-    )}>
-      {/* Issue ID */}
-      <span className="mono text-xs text-text-muted w-24 flex-shrink-0 truncate">
-        {issue.id}
-      </span>
-
-      {/* Title */}
-      <div className="flex-1 min-w-0">
-        <span className="truncate block text-text-primary">{issue.title}</span>
-      </div>
-
-      {/* Assigned agent indicator */}
-      {agentDisplayName ? (
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <span className="text-sm" title={agent?.role_type}>
-            {agent ? getAgentRoleIcon(agent.role_type) : '👤'}
-          </span>
-          <span className={cn(
-            'text-sm font-medium',
-            agent?.state === 'working' ? 'text-status-in-progress' : 'text-text-secondary'
-          )}>
-            {agentDisplayName}
-          </span>
-        </div>
-      ) : (
-        <span className="text-xs text-text-muted italic flex-shrink-0">
-          Unassigned
-        </span>
-      )}
-
-      {/* Type badge */}
-      <span className="text-xs px-2 py-0.5 rounded bg-bg-tertiary text-text-secondary flex-shrink-0">
-        {issue.issue_type}
-      </span>
+      {/* Agent Peek Panel */}
+      <AgentPeekPanel
+        isOpen={peekPanelOpen}
+        onClose={handlePeekPanelClose}
+        rigId={rig.id}
+        agentId={selectedAgent?.id || ''}
+        agentName={selectedAgent?.name}
+      />
     </div>
   )
 }
