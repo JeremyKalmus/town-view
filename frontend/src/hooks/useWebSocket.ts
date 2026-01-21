@@ -1,10 +1,10 @@
 import { useEffect, useRef, useCallback, useState } from 'react'
 
 interface WSMessage {
-  type: 'rig_update' | 'issue_update' | 'agent_update' | 'ping'
-  rigId?: string
-  data?: unknown
-  timestamp: string
+  type: 'rig_update' | 'issue_update' | 'issue_changed' | 'agent_update' | 'ping'
+  rig?: string
+  payload?: { id?: string; [key: string]: unknown }
+  timestamp?: string
 }
 
 interface UseWebSocketOptions {

@@ -4,9 +4,10 @@ import { cn, formatRelativeTime, getStatusIcon, getPriorityClass, getPriorityLab
 interface IssueRowProps {
   issue: Issue
   onClick?: () => void
+  isUpdated?: boolean
 }
 
-export function IssueRow({ issue, onClick }: IssueRowProps) {
+export function IssueRow({ issue, onClick, isUpdated = false }: IssueRowProps) {
   const statusClass = {
     open: 'text-status-open',
     in_progress: 'text-status-in-progress',
@@ -20,7 +21,8 @@ export function IssueRow({ issue, onClick }: IssueRowProps) {
     <div
       className={cn(
         'flex items-center gap-3 py-3 px-2 -mx-2 rounded-md transition-colors',
-        onClick && 'cursor-pointer hover:bg-bg-tertiary'
+        onClick && 'cursor-pointer hover:bg-bg-tertiary',
+        isUpdated && 'animate-flash-update'
       )}
       onClick={onClick}
     >

@@ -6,9 +6,10 @@ import { cn } from '@/lib/utils'
 interface RigDashboardProps {
   rig: Rig
   refreshKey?: number
+  updatedIssueIds?: Set<string>
 }
 
-export function RigDashboard({ rig, refreshKey = 0 }: RigDashboardProps) {
+export function RigDashboard({ rig, refreshKey = 0, updatedIssueIds = new Set() }: RigDashboardProps) {
   const [issues, setIssues] = useState<Issue[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -119,7 +120,7 @@ export function RigDashboard({ rig, refreshKey = 0 }: RigDashboardProps) {
         ) : (
           <div className="divide-y divide-border">
             {issues.map((issue) => (
-              <IssueRow key={issue.id} issue={issue} />
+              <IssueRow key={issue.id} issue={issue} isUpdated={updatedIssueIds.has(issue.id)} />
             ))}
           </div>
         )}
