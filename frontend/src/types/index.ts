@@ -125,3 +125,12 @@ export interface Dependency {
   to_id: string;
   type: 'blocks' | 'parent-child';
 }
+
+// Comment on an issue
+export interface Comment {
+  id: number;
+  issue_id: string;
+  author: string;
+  text: string;
+  created_at: string;
+}
