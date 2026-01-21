@@ -15,6 +15,7 @@ import { useRigStore } from '@/stores/rig-store'
 import { useToastStore } from '@/stores/toast-store'
 import { TreeView, VirtualizedTreeView, countTreeNodes, type TreeNodeData } from './TreeNode'
 import { FilterBar, getVisibleNodeIds } from './FilterBar'
+import { KPISummary, type KPIFilter } from './KPISummary'
 import { SlideOutPanel } from '@/components/layout/SlideOutPanel'
 import { IssueEditorForm } from './issue-editor'
 import { DependenciesTab } from './DependenciesTab'
@@ -320,6 +321,46 @@ export function PlanningView({ refreshKey = 0, updatedIssueIds }: PlanningViewPr
   // Handle clicking a blocker indicator in the tree (alias for dependency click)
   const handleBlockerClick = handleDependencyClick
 
+  // Handle KPI chip click to update filters
+  const handleKPIFilterChange = useCallback(
+    (filter: KPIFilter | null) => {
+      if (!filter) {
+        // Clear status and type filters, keep assignee and priority
+        setTreeFilters({
+          ...treeFilters,
+          status: 'all',
+          type: 'all',
+        })
+      } else if (filter.status) {
+        // Set status filter, clear type filter
+        setTreeFilters({
+          ...treeFilters,
+          status: filter.status,
+          type: 'all',
+        })
+      } else if (filter.type) {
+        // Set type filter, clear status filter
+        setTreeFilters({
+          ...treeFilters,
+          type: filter.type,
+          status: 'all',
+        })
+      }
+    },
+    [treeFilters, setTreeFilters]
+  )
+
+  // Derive active KPI filter from treeFilters
+  const activeKPIFilter: KPIFilter | undefined = useMemo(() => {
+    if (treeFilters.status !== 'all') {
+      return { status: treeFilters.status }
+    }
+    if (treeFilters.type !== 'all') {
+      return { type: treeFilters.type }
+    }
+    return undefined
+  }, [treeFilters.status, treeFilters.type])
+
   // Check if there are changes to save
   const hasChanges = selectedIssue && formData && (
     formData.title !== selectedIssue.title ||
@@ -340,8 +381,17 @@ export function PlanningView({ refreshKey = 0, updatedIssueIds }: PlanningViewPr
 
   return (
     <div className="flex flex-col h-full">
+      {/* KPI Summary */}
+      <div className="px-6 pt-4 pb-2 bg-bg-secondary">
+        <KPISummary
+          issues={issues}
+          activeFilter={activeKPIFilter}
+          onFilterChange={handleKPIFilterChange}
+        />
+      </div>
+
       {/* FilterBar */}
-      <div className="px-6 py-4 border-b border-border bg-bg-secondary">
+      <div className="px-6 py-3 border-b border-border bg-bg-secondary">
         <FilterBar
           filters={treeFilters}
           onFiltersChange={setTreeFilters}
