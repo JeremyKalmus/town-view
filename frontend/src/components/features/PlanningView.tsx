@@ -13,7 +13,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import type { Issue, Comment, HistoryEntry, Dependency } from '@/types'
 import { useRigStore } from '@/stores/rig-store'
 import { useToastStore } from '@/stores/toast-store'
-import { TreeView, type TreeNodeData } from './TreeNode'
+import { TreeView, VirtualizedTreeView, countTreeNodes, type TreeNodeData } from './TreeNode'
 import { FilterBar, getVisibleNodeIds } from './FilterBar'
 import { SlideOutPanel } from '@/components/layout/SlideOutPanel'
 import { IssueEditorForm } from './issue-editor'
@@ -195,6 +195,10 @@ export function PlanningView({ refreshKey = 0 }: PlanningViewProps) {
 
   const treeNodeData = convertToTreeNodeData(treeData)
 
+  // Count total nodes for virtualization threshold
+  const totalNodeCount = countTreeNodes(treeNodeData)
+  const useVirtualization = totalNodeCount > 100
+
   // Get unique assignees for filter dropdown
   const assignees = [...new Set(issues.map((i) => i.assignee).filter(Boolean))] as string[]
 
@@ -335,7 +339,10 @@ export function PlanningView({ refreshKey = 0 }: PlanningViewProps) {
       </div>
 
       {/* Tree content */}
-      <div className="flex-1 overflow-auto px-6 py-4">
+      <div className={cn(
+        "flex-1 px-6 py-4",
+        useVirtualization ? "" : "overflow-auto"
+      )}>
         {loading ? (
           <div className="space-y-2">
             {[...Array(8)].map((_, i) => (
@@ -350,6 +357,14 @@ export function PlanningView({ refreshKey = 0 }: PlanningViewProps) {
               ? 'No issues found in this rig'
               : 'No issues match the current filters'}
           </div>
+        ) : useVirtualization ? (
+          <VirtualizedTreeView
+            nodes={treeNodeData}
+            defaultExpanded={true}
+            onNodeClick={handleNodeClick}
+            onBlockerClick={handleBlockerClick}
+            height="100%"
+          />
         ) : (
           <TreeView
             nodes={treeNodeData}
