@@ -150,3 +150,11 @@ export interface IssueDependencies {
   blockers: Issue[];   // Issues that block this issue
   blocked_by: Issue[]; // Issues blocked by this issue
 }
+
+// Content version for diff view (bead description history)
+export interface ContentVersion {
+  id: string;
+  timestamp: string;
+  actor: string;
+  content: string;
+}
