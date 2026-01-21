@@ -1,0 +1,58 @@
+# Town View Config Seeds
+# Configuration patterns
+
+environment_variables:
+  - name: TOWN_ROOT
+    required: true
+    default: "~/gt"
+    description: "Path to Gas Town root directory"
+    sensitive: false
+
+  - name: PORT
+    required: false
+    default: "8080"
+    description: "HTTP server port"
+    sensitive: false
+
+  - name: BD_PATH
+    required: false
+    default: "bd"
+    description: "Path to bd CLI binary"
+    sensitive: false
+
+  - name: LOG_LEVEL
+    required: false
+    default: "info"
+    description: "Logging level (debug, info, warn, error)"
+    sensitive: false
+
+  - name: WATCH_DEBOUNCE_MS
+    required: false
+    default: "100"
+    description: "File watcher debounce milliseconds"
+    sensitive: false
+
+config_files:
+  - name: vite.config.ts
+    location: frontend/vite.config.ts
+    format: typescript
+    purpose: "Vite build configuration"
+
+  - name: tailwind.config.ts
+    location: frontend/tailwind.config.ts
+    format: typescript
+    purpose: "TailwindCSS configuration with custom theme"
+
+  - name: tsconfig.json
+    location: frontend/tsconfig.json
+    format: json
+    purpose: "TypeScript compiler options"
+
+  - name: .storybook/main.ts
+    location: frontend/.storybook/main.ts
+    format: typescript
+    purpose: "Storybook configuration"
+
+feature_flags:
+  # None initially - may add later
+  []

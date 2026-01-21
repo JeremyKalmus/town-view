@@ -1,0 +1,189 @@
+# Town View Data Seeds
+# Type definitions mirroring beads data model
+
+enums:
+  - name: IssueStatus
+    values:
+      - open
+      - in_progress
+      - blocked
+      - deferred
+      - closed
+      - tombstone
+    scope: global
+    source: "beads data model"
+
+  - name: IssuePriority
+    values:
+      - 0  # P0 Critical
+      - 1  # P1 High
+      - 2  # P2 Medium (default)
+      - 3  # P3 Low
+      - 4  # P4 Minimal
+    scope: global
+    source: "beads data model"
+
+  - name: IssueType
+    values:
+      - bug
+      - feature
+      - task
+      - epic
+      - chore
+      - merge-request
+      - molecule
+      - gate
+      - convoy
+      - agent
+    scope: global
+    source: "beads data model"
+
+  - name: AgentRoleType
+    values:
+      - witness
+      - refinery
+      - crew
+      - polecat
+      - deacon
+      - mayor
+    scope: global
+    source: "gastown agent model"
+
+  - name: AgentState
+    values:
+      - idle
+      - working
+      - stuck
+      - paused
+    scope: global
+    source: "gastown agent model"
+
+type_aliases:
+  # Go types
+  - name: Issue
+    location: internal/types/issue.go
+    definition: |
+      type Issue struct {
+        ID              string    `json:"id"`
+        Title           string    `json:"title"`
+        Description     string    `json:"description"`
+        Status          string    `json:"status"`
+        Priority        int       `json:"priority"`
+        IssueType       string    `json:"issue_type"`
+        Owner           string    `json:"owner,omitempty"`
+        Assignee        string    `json:"assignee,omitempty"`
+        CreatedAt       time.Time `json:"created_at"`
+        CreatedBy       string    `json:"created_by,omitempty"`
+        UpdatedAt       time.Time `json:"updated_at"`
+        ClosedAt        *time.Time `json:"closed_at,omitempty"`
+        CloseReason     string    `json:"close_reason,omitempty"`
+        Labels          []string  `json:"labels,omitempty"`
+        DependencyCount int       `json:"dependency_count"`
+        DependentCount  int       `json:"dependent_count"`
+      }
+
+  - name: Rig
+    location: internal/types/rig.go
+    definition: |
+      type Rig struct {
+        ID          string `json:"id"`
+        Name        string `json:"name"`
+        Prefix      string `json:"prefix"`
+        Path        string `json:"path"`
+        BeadsPath   string `json:"beads_path"`
+        IssueCount  int    `json:"issue_count"`
+        OpenCount   int    `json:"open_count"`
+        AgentCount  int    `json:"agent_count"`
+      }
+
+  - name: Agent
+    location: internal/types/agent.go
+    definition: |
+      type Agent struct {
+        ID        string `json:"id"`
+        Name      string `json:"name"`
+        RoleType  string `json:"role_type"`
+        Rig       string `json:"rig"`
+        State     string `json:"state"`
+        HookBead  string `json:"hook_bead,omitempty"`
+        UpdatedAt time.Time `json:"updated_at"`
+      }
+
+  # TypeScript types (frontend)
+  - name: Issue
+    location: src/types/issue.ts
+    definition: |
+      export interface Issue {
+        id: string;
+        title: string;
+        description: string;
+        status: IssueStatus;
+        priority: number;
+        issue_type: IssueType;
+        owner?: string;
+        assignee?: string;
+        created_at: string;
+        created_by?: string;
+        updated_at: string;
+        closed_at?: string;
+        close_reason?: string;
+        labels?: string[];
+        dependency_count: number;
+        dependent_count: number;
+      }
+
+  - name: Rig
+    location: src/types/rig.ts
+    definition: |
+      export interface Rig {
+        id: string;
+        name: string;
+        prefix: string;
+        path: string;
+        beads_path: string;
+        issue_count: number;
+        open_count: number;
+        agent_count: number;
+      }
+
+  - name: Agent
+    location: src/types/agent.ts
+    definition: |
+      export interface Agent {
+        id: string;
+        name: string;
+        role_type: AgentRoleType;
+        rig: string;
+        state: AgentState;
+        hook_bead?: string;
+        updated_at: string;
+      }
+
+validation_schemas:
+  - name: IssueUpdateSchema
+    location: src/schemas/issue.ts
+    validates: "Issue update payload"
+    library: zod
+    definition: |
+      z.object({
+        status: z.enum(['open', 'in_progress', 'blocked', 'deferred', 'closed']).optional(),
+        priority: z.number().min(0).max(4).optional(),
+        title: z.string().min(1).max(200).optional(),
+        description: z.string().optional(),
+        assignee: z.string().optional(),
+        labels: z.array(z.string()).optional(),
+      })
+
+  - name: IssueFilterSchema
+    location: src/schemas/filters.ts
+    validates: "Issue list filter params"
+    library: zod
+    definition: |
+      z.object({
+        status: z.enum(['open', 'in_progress', 'blocked', 'deferred', 'closed', 'all']).optional(),
+        type: z.string().optional(),
+        priority: z.number().optional(),
+        assignee: z.string().optional(),
+        limit: z.number().default(50),
+        offset: z.number().default(0),
+      })

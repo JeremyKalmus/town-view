@@ -1,0 +1,131 @@
+# Town View Backend Seeds
+# Patterns for Go backend with beads integration
+
+api_routes:
+  # Rig endpoints
+  - method: GET
+    path: /api/rigs
+    handler: handlers.ListRigs
+    auth: none  # Local only, no auth needed
+    description: "List all discovered rigs"
+
+  - method: GET
+    path: /api/rigs/:rigId
+    handler: handlers.GetRig
+    auth: none
+    description: "Get rig details and summary stats"
+
+  # Issue endpoints
+  - method: GET
+    path: /api/rigs/:rigId/issues
+    handler: handlers.ListIssues
+    auth: none
+    description: "List issues for a rig with filters"
+    query_params: [status, type, priority, assignee, limit, offset]
+
+  - method: GET
+    path: /api/rigs/:rigId/issues/:issueId
+    handler: handlers.GetIssue
+    auth: none
+    description: "Get single issue detail"
+
+  - method: PATCH
+    path: /api/rigs/:rigId/issues/:issueId
+    handler: handlers.UpdateIssue
+    auth: none
+    description: "Update issue fields"
+
+  - method: GET
+    path: /api/rigs/:rigId/issues/:issueId/history
+    handler: handlers.GetIssueHistory
+    auth: none
+    description: "Get issue change history"
+
+  # Agent endpoints
+  - method: GET
+    path: /api/rigs/:rigId/agents
+    handler: handlers.ListAgents
+    auth: none
+    description: "List agents for a rig"
+
+  # WebSocket
+  - method: GET
+    path: /ws
+    handler: handlers.WebSocketHandler
+    auth: none
+    description: "Real-time updates subscription"
+
+services:
+  - name: RigDiscovery
+    location: internal/rigs/discovery.go
+    responsibility: "Discover rigs from routes.jsonl and directory scanning"
+    dependencies: [filesystem]
+
+  - name: BeadsClient
+    location: internal/beads/client.go
+    responsibility: "Execute bd CLI commands and parse output"
+    dependencies: [exec]
+
+  - name: FileWatcher
+    location: internal/watcher/watcher.go
+    responsibility: "Watch .beads directories for changes"
+    dependencies: [fsnotify]
+
+  - name: WebSocketHub
+    location: internal/ws/hub.go
+    responsibility: "Manage WebSocket connections and broadcast changes"
+    dependencies: []
+
+  - name: IssueService
+    location: internal/issues/service.go
+    responsibility: "Business logic for issue operations"
+    dependencies: [BeadsClient]
+
+error_types:
+  - code: ERR_RIG_NOT_FOUND
+    message: "Rig not found: {rigId}"
+    http_status: 404
+
+  - code: ERR_ISSUE_NOT_FOUND
+    message: "Issue not found: {issueId}"
+    http_status: 404
+
+  - code: ERR_BD_COMMAND_FAILED
+    message: "Beads command failed: {command}"
+    http_status: 500
+
+  - code: ERR_INVALID_STATUS
+    message: "Invalid status: {status}"
+    http_status: 400
+
+  - code: ERR_INVALID_PRIORITY
+    message: "Invalid priority: {priority}"
+    http_status: 400
+
+logging:
+  format: structured_json
+  library: slog (stdlib)
+  levels: [debug, info, warn, error]
+  fields:
+    - request_id
+    - rig_id
+    - issue_id
+    - duration_ms
+
+events:
+  # WebSocket broadcast events
+  - name: issue_changed
+    payload: "{ rig: string, issue: Issue }"
+    when: "After bd update succeeds"
+
+  - name: issue_created
+    payload: "{ rig: string, issue: Issue }"
+    when: "New issue detected via file watcher"
+
+  - name: rig_discovered
+    payload: "{ rig: Rig }"
+    when: "New rig detected"
+
+  - name: agent_state_changed
+    payload: "{ rig: string, agent: Agent }"
+    when: "Agent bead state changes"

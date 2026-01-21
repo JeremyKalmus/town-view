@@ -1,0 +1,70 @@
+# Town View Testing Seeds
+# Testing patterns and fixtures
+
+test_fixtures:
+  - name: mockRig
+    location: src/__fixtures__/rigs.ts
+    creates: "Rig objects for testing"
+    variants: [default, empty, large]
+
+  - name: mockIssue
+    location: src/__fixtures__/issues.ts
+    creates: "Issue objects for testing"
+    variants: [open, closed, blocked, withDeps]
+
+  - name: mockAgent
+    location: src/__fixtures__/agents.ts
+    creates: "Agent objects for testing"
+    variants: [idle, working, stuck]
+
+mock_services:
+  - name: mockBeadsClient
+    location: internal/beads/client_mock.go
+    mocks: "BeadsClient for Go tests"
+
+  - name: mockApi
+    location: src/__mocks__/api.ts
+    mocks: "API client for frontend tests"
+
+test_utilities:
+  - name: renderWithProviders
+    location: src/test-utils/render.tsx
+    purpose: "Wrap components with necessary providers for testing"
+
+  - name: createTestStore
+    location: src/test-utils/store.ts
+    purpose: "Create isolated Zustand store for tests"
+
+test_structure:
+  unit:
+    location: "**/*.test.ts, **/*.test.tsx"
+    naming: "{filename}.test.{ext}"
+    runner: vitest
+
+  component:
+    location: "src/components/**/*.test.tsx"
+    naming: "{component}.test.tsx"
+    runner: vitest + @testing-library/react
+
+  integration:
+    location: "src/__tests__/integration/"
+    naming: "{feature}.integration.test.ts"
+    runner: vitest
+
+  e2e:
+    location: "e2e/"
+    naming: "{flow}.spec.ts"
+    runner: playwright
+
+  backend:
+    location: "internal/**/*_test.go"
+    naming: "{package}_test.go"
+    runner: go test
+
+storybook:
+  location: "src/**/*.stories.tsx"
+  naming: "{component}.stories.tsx"
+  addons:
+    - "@storybook/addon-essentials"
+    - "@storybook/addon-interactions"
+    - "@storybook/addon-a11y"

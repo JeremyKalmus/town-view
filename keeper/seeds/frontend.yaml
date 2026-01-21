@@ -1,0 +1,132 @@
+# Town View Frontend Seeds
+# Patterns for React + Vite + TailwindCSS + shadcn/ui
+
+components:
+  # Base UI components (shadcn/ui based)
+  - name: Button
+    location: src/components/ui/button.tsx
+    variants: [default, secondary, ghost, destructive]
+    when_to_use: "All clickable actions"
+    forbidden_extensions: []
+
+  - name: Card
+    location: src/components/ui/card.tsx
+    variants: [default, elevated, accent]
+    when_to_use: "Container for grouped content"
+    forbidden_extensions: []
+
+  - name: Badge
+    location: src/components/ui/badge.tsx
+    variants: [status, priority]
+    when_to_use: "Status and priority indicators"
+    forbidden_extensions: []
+
+  - name: Input
+    location: src/components/ui/input.tsx
+    variants: [default, search]
+    when_to_use: "Text input fields"
+    forbidden_extensions: []
+
+  - name: Select
+    location: src/components/ui/select.tsx
+    variants: [default]
+    when_to_use: "Dropdown selections"
+    forbidden_extensions: []
+
+  - name: Modal
+    location: src/components/ui/modal.tsx
+    variants: [default, confirmation]
+    when_to_use: "Dialogs and confirmations"
+    forbidden_extensions: []
+
+  - name: Toast
+    location: src/components/ui/toast.tsx
+    variants: [success, error, warning, info]
+    when_to_use: "Transient notifications"
+    forbidden_extensions: []
+
+  # Feature components
+  - name: IssueRow
+    location: src/components/features/issue-row.tsx
+    variants: [compact, detailed]
+    when_to_use: "Displaying issues in lists"
+    forbidden_extensions: []
+
+  - name: AgentCard
+    location: src/components/features/agent-card.tsx
+    variants: [default]
+    when_to_use: "Displaying agent status"
+    forbidden_extensions: []
+
+  - name: TreeNode
+    location: src/components/features/tree-node.tsx
+    variants: [default]
+    when_to_use: "Epic/task hierarchy display"
+    forbidden_extensions: []
+
+  - name: RigItem
+    location: src/components/features/rig-item.tsx
+    variants: [default, selected]
+    when_to_use: "Rig list items in sidebar"
+    forbidden_extensions: []
+
+  # Layout components
+  - name: Sidebar
+    location: src/components/layout/sidebar.tsx
+    variants: [default]
+    when_to_use: "Main navigation sidebar"
+    forbidden_extensions: []
+
+  - name: Header
+    location: src/components/layout/header.tsx
+    variants: [default]
+    when_to_use: "Page headers"
+    forbidden_extensions: []
+
+  - name: SlideOut
+    location: src/components/layout/slide-out.tsx
+    variants: [default]
+    when_to_use: "Side panel for editing"
+    forbidden_extensions: []
+
+hooks:
+  - name: useRigs
+    location: src/hooks/use-rigs.ts
+    purpose: "Fetch and cache rig list"
+    return_type: "{ rigs: Rig[], isLoading: boolean, error: Error | null }"
+
+  - name: useIssues
+    location: src/hooks/use-issues.ts
+    purpose: "Fetch issues for a rig with filters"
+    return_type: "{ issues: Issue[], isLoading: boolean, error: Error | null }"
+
+  - name: useWebSocket
+    location: src/hooks/use-websocket.ts
+    purpose: "Real-time updates subscription"
+    return_type: "{ connected: boolean, lastMessage: Message | null }"
+
+  - name: useIssueUpdate
+    location: src/hooks/use-issue-update.ts
+    purpose: "Mutation hook for updating issues"
+    return_type: "{ update: (id, changes) => Promise, isPending: boolean }"
+
+state_stores:
+  - name: rigStore
+    location: src/stores/rig-store.ts
+    manages: "Selected rig, rig list cache"
+    library: zustand
+
+  - name: uiStore
+    location: src/stores/ui-store.ts
+    manages: "Sidebar state, slide-out state, filters"
+    library: zustand
+
+design_tokens:
+  location: src/styles/tokens.css
+  format: css_custom_properties
+  categories:
+    - colors (status, priority, accent, neutral)
+    - typography (font families, sizes, weights)
+    - spacing (4px grid system)
+    - borders (radius, widths)
+    - shadows (elevation levels)

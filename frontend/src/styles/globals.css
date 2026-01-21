@@ -1,0 +1,160 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Base layer customizations */
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-bg-primary text-text-primary antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-bg-secondary;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-border rounded-sm;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-border-accent;
+  }
+
+  /* Focus ring */
+  :focus-visible {
+    @apply outline-none ring-2 ring-accent-chrome ring-offset-2 ring-offset-bg-primary;
+  }
+}
+
+/* Component layer */
+@layer components {
+  /* Card component */
+  .card {
+    @apply bg-bg-secondary border border-border rounded-lg p-4;
+  }
+
+  .card-elevated {
+    @apply card shadow-md;
+  }
+
+  .card-accent {
+    @apply card border-l-4 border-l-accent-rust;
+  }
+
+  /* Status badges */
+  .badge {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-xs font-medium;
+  }
+
+  .badge-status-open {
+    @apply bg-status-open/20 text-status-open;
+  }
+
+  .badge-status-in-progress {
+    @apply bg-status-in-progress/20 text-status-in-progress;
+  }
+
+  .badge-status-blocked {
+    @apply bg-status-blocked/20 text-status-blocked;
+  }
+
+  .badge-status-closed {
+    @apply bg-status-closed/20 text-status-closed;
+  }
+
+  .badge-status-deferred {
+    @apply bg-status-deferred/20 text-status-deferred;
+  }
+
+  /* Priority indicators */
+  .priority-dot {
+    @apply w-2 h-2 rounded-full;
+  }
+
+  .priority-p0 {
+    @apply bg-priority-p0;
+  }
+
+  .priority-p1 {
+    @apply bg-priority-p1;
+  }
+
+  .priority-p2 {
+    @apply bg-priority-p2;
+  }
+
+  .priority-p3 {
+    @apply bg-priority-p3;
+  }
+
+  .priority-p4 {
+    @apply bg-priority-p4;
+  }
+
+  /* Buttons */
+  .btn {
+    @apply inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-chrome disabled:pointer-events-none disabled:opacity-50;
+  }
+
+  .btn-primary {
+    @apply btn bg-accent-rust text-white hover:bg-accent-rust/90 h-9 px-4;
+  }
+
+  .btn-secondary {
+    @apply btn bg-bg-tertiary text-text-primary border border-border hover:bg-border h-9 px-4;
+  }
+
+  .btn-ghost {
+    @apply btn text-text-secondary hover:text-text-primary hover:bg-bg-tertiary h-9 px-4;
+  }
+
+  /* Dividers */
+  .divider {
+    @apply h-px bg-border;
+  }
+
+  .divider-accent {
+    @apply h-0.5 bg-gradient-to-r from-accent-rust to-transparent;
+  }
+
+  /* Section headers (Oswald font) */
+  .section-header {
+    @apply font-display text-sm font-semibold tracking-wider uppercase text-text-secondary;
+  }
+
+  /* Monospace text for IDs */
+  .mono {
+    @apply font-mono text-sm;
+  }
+}
+
+/* Utility layer */
+@layer utilities {
+  /* Animation utilities */
+  .animate-in {
+    animation: fadeIn 200ms ease-out;
+  }
+
+  .slide-in-right {
+    animation: slideIn 200ms ease-out;
+  }
+
+  /* Truncation */
+  .truncate-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+}

@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+*.exe
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+
+# Playwright screenshots
+.playwright-mcp/
+
+# Runtime state
+.runtime/
+state.json
+
+# Local Claude settings (handled by sparse checkout)
+.claude/
+server/townview
