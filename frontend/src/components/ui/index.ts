@@ -8,3 +8,5 @@ export { MultiSelect, type MultiSelectProps, type MultiSelectOption } from './Mu
 export { FormField, type FormFieldProps } from './FormField'
 export { VirtualList, VirtualListDynamic, useVirtualListScroll } from './VirtualList'
 export { ThemeToggle } from './ThemeToggle'
+export { KeyboardShortcutsModal } from './KeyboardShortcutsModal'
+export { ShortcutHint, ShortcutRow } from './ShortcutHint'

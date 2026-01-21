@@ -2,9 +2,11 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { RigDashboard } from '@/components/features/RigDashboard'
 import { Toast, ToastProvider, ToastViewport } from '@/components/ui/Toast'
+import { KeyboardShortcutsModal } from '@/components/ui/KeyboardShortcutsModal'
 import { useRigStore } from '@/stores/rig-store'
 import { useToastStore } from '@/stores/toast-store'
 import { useWebSocket } from '@/hooks/useWebSocket'
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import type { Rig, WSMessage } from '@/types'
 
 function App() {
@@ -16,6 +18,31 @@ function App() {
   const [refreshKey, setRefreshKey] = useState(0)
   const [updatedIssueIds, setUpdatedIssueIds] = useState<Set<string>>(new Set())
   const clearTimeoutRef = useRef<Map<string, number>>(new Map())
+  const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false)
+
+  // Global keyboard shortcuts
+  useKeyboardShortcuts({
+    onShowHelp: () => setShortcutsModalOpen(true),
+    onEscape: () => setShortcutsModalOpen(false),
+    // Navigation shortcuts - placeholder for future views
+    onNavigateDashboard: () => {
+      console.log('[Keyboard] Navigate to Dashboard')
+      // Future: switch to dashboard view
+    },
+    onNavigateRoadmap: () => {
+      console.log('[Keyboard] Navigate to Roadmap')
+      // Future: switch to roadmap view
+    },
+    onNavigateAudit: () => {
+      console.log('[Keyboard] Navigate to Audit')
+      // Future: switch to audit view
+    },
+    onSearch: () => {
+      console.log('[Keyboard] Focus search')
+      // Future: focus search input
+    },
+    enabled: !shortcutsModalOpen, // Disable shortcuts when modal is open (except Escape)
+  })
 
   // WebSocket for real-time updates
   const handleWSMessage = useCallback((msg: WSMessage) => {
@@ -129,6 +156,12 @@ function App() {
         onOpenChange={(open) => !open && hideToast()}
       />
       <ToastViewport />
+
+      {/* Keyboard shortcuts help modal */}
+      <KeyboardShortcutsModal
+        isOpen={shortcutsModalOpen}
+        onClose={() => setShortcutsModalOpen(false)}
+      />
     </ToastProvider>
   )
 }

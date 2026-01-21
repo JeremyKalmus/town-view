@@ -298,7 +298,7 @@ export function AssignmentComparison({ original, final, className }: AssignmentC
         label="Assignee"
         originalValue={original.assignee}
         finalValue={final.assignee}
-        renderValue={(v) => v || <span className="text-text-muted italic">Unassigned</span>}
+        renderValue={(v): React.ReactNode => v as React.ReactNode || <span className="text-text-muted italic">Unassigned</span>}
       />
 
       {/* Close reason (only relevant for final) */}
