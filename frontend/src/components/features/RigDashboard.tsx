@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import type { Rig, Issue, IssueStatus, IssueType, Dependency } from '@/types'
 import { IssueRow } from './IssueRow'
 import { DependencyArrows } from './DependencyArrows'
+import { SkeletonIssueList, SkeletonStatGrid } from '@/components/ui'
 import { cn } from '@/lib/utils'
 
 interface RigDashboardProps {
@@ -119,28 +120,34 @@ export function RigDashboard({ rig, refreshKey = 0, updatedIssueIds = new Set() 
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
-        <StatCard
-          label="Total Issues"
-          value={issues.length}
-          color="text-text-primary"
-        />
-        <StatCard
-          label="Open"
-          value={statusCounts['open'] || 0}
-          color="text-status-open"
-        />
-        <StatCard
-          label="In Progress"
-          value={statusCounts['in_progress'] || 0}
-          color="text-status-in-progress"
-        />
-        <StatCard
-          label="Closed"
-          value={statusCounts['closed'] || 0}
-          color="text-status-closed"
-        />
-      </div>
+      {loading ? (
+        <div className="mb-6">
+          <SkeletonStatGrid />
+        </div>
+      ) : (
+        <div className="grid grid-cols-4 gap-4 mb-6">
+          <StatCard
+            label="Total Issues"
+            value={issues.length}
+            color="text-text-primary"
+          />
+          <StatCard
+            label="Open"
+            value={statusCounts['open'] || 0}
+            color="text-status-open"
+          />
+          <StatCard
+            label="In Progress"
+            value={statusCounts['in_progress'] || 0}
+            color="text-status-in-progress"
+          />
+          <StatCard
+            label="Closed"
+            value={statusCounts['closed'] || 0}
+            color="text-status-closed"
+          />
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex items-center gap-4 mb-4">
@@ -204,7 +211,7 @@ export function RigDashboard({ rig, refreshKey = 0, updatedIssueIds = new Set() 
         </div>
 
         {loading ? (
-          <div className="py-8 text-center text-text-muted">Loading issues...</div>
+          <SkeletonIssueList count={6} />
         ) : error ? (
           <div className="py-8 text-center text-status-blocked">{error}</div>
         ) : issues.length === 0 ? (
