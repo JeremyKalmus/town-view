@@ -3,6 +3,7 @@ import { Sidebar } from '@/components/layout/Sidebar'
 import { PlanningView } from '@/components/features/PlanningView'
 import { MonitoringView } from '@/components/features/MonitoringView'
 import { AuditView } from '@/components/features/AuditView'
+import { TownDashboard, isHQRig } from '@/components/features/TownDashboard'
 import { OfflineBanner } from '@/components/layout/OfflineBanner'
 import { Toast, ToastProvider, ToastViewport } from '@/components/ui/Toast'
 import { ViewSwitcher } from '@/components/ui/ViewSwitcher'
@@ -168,6 +169,8 @@ function App() {
               <div className="flex items-center justify-center h-full">
                 <p className="text-text-muted">Select a rig from the sidebar</p>
               </div>
+            ) : isHQRig(selectedRig) ? (
+              <TownDashboard refreshKey={refreshKey} />
             ) : (
               <SimpleViewTransition viewKey={viewMode}>
                 {viewMode === 'planning' ? (
