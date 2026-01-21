@@ -55,8 +55,26 @@ export function RigDashboard({ rig, refreshKey = 0, updatedIssueIds = new Set() 
     }
   }, [])
 
+  // Track if this is the initial load or a rig/filter change (vs just a refresh)
+  const isInitialLoadRef = useRef(true)
+  const prevRigIdRef = useRef(rig.id)
+  const prevFiltersRef = useRef({ statusFilter, typeFilter })
+
   useEffect(() => {
-    setLoading(true)
+    // Only show loading skeleton on initial load or when rig/filters change
+    // Not on refresh (refreshKey change) - this preserves scroll position
+    const rigChanged = prevRigIdRef.current !== rig.id
+    const filtersChanged =
+      prevFiltersRef.current.statusFilter !== statusFilter ||
+      prevFiltersRef.current.typeFilter !== typeFilter
+
+    if (isInitialLoadRef.current || rigChanged || filtersChanged) {
+      setLoading(true)
+      isInitialLoadRef.current = false
+    }
+
+    prevRigIdRef.current = rig.id
+    prevFiltersRef.current = { statusFilter, typeFilter }
     setError(null)
 
     const params = new URLSearchParams()

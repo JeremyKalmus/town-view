@@ -95,8 +95,10 @@ function App() {
         )
         setRigs(uniqueRigs)
         setIsFromCache(result.fromCache)
-        // Select first rig by default
-        if (uniqueRigs.length > 0 && !selectedRig) {
+        // Select first rig by default (only if none selected)
+        // Use getState() to read current value without adding to dependencies
+        const currentSelectedRig = useRigStore.getState().selectedRig
+        if (uniqueRigs.length > 0 && !currentSelectedRig) {
           setSelectedRig(uniqueRigs[0])
         }
         setLoading(false)
@@ -114,7 +116,7 @@ function App() {
     }
 
     fetchRigs()
-  }, [selectedRig, setSelectedRig, refreshKey])
+  }, [setSelectedRig, refreshKey]) // Removed selectedRig - use getState() instead
 
   return (
     <ToastProvider duration={4000}>
