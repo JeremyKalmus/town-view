@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { Rig, Agent, Issue } from '@/types'
 import { AgentCard } from './AgentCard'
 import { cachedFetch } from '@/services/cache'
-import { cn, getAgentRoleIcon } from '@/lib/utils'
+import { cn, getAgentRoleIcon, formatRelativeTime } from '@/lib/utils'
 
 interface MonitoringViewProps {
   rig: Rig
@@ -96,6 +96,22 @@ export function MonitoringView({ rig, refreshKey = 0 }: MonitoringViewProps) {
       .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
   }, [issues])
 
+  // Get recently completed work (closed in last 24 hours)
+  const recentlyCompleted = useMemo(() => {
+    const twentyFourHoursAgo = Date.now() - 24 * 60 * 60 * 1000
+    return issues
+      .filter(issue => {
+        if (issue.status !== 'closed') return false
+        const closedAt = issue.closed_at ? new Date(issue.closed_at).getTime() : 0
+        return closedAt > twentyFourHoursAgo
+      })
+      .sort((a, b) => {
+        const aTime = a.closed_at ? new Date(a.closed_at).getTime() : 0
+        const bTime = b.closed_at ? new Date(b.closed_at).getTime() : 0
+        return bTime - aTime // Most recently closed first
+      })
+  }, [issues])
+
   // Create a map of agent names to agent objects for lookup
   const agentsByName = useMemo(() => {
     const map = new Map<string, Agent>()
@@ -149,6 +165,40 @@ export function MonitoringView({ rig, refreshKey = 0 }: MonitoringViewProps) {
             <div className="divide-y divide-border">
               {inFlightWork.map((issue) => (
                 <InFlightWorkRow
+                  key={issue.id}
+                  issue={issue}
+                  agent={issue.assignee ? agentsByName.get(issue.assignee) : undefined}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Recently completed section */}
+      <div className="mb-8">
+        <div className="flex items-center gap-2 mb-4">
+          <span className="text-status-closed text-lg">✓</span>
+          <h2 className="section-header">
+            RECENTLY COMPLETED ({recentlyCompleted.length})
+          </h2>
+          <span className="text-xs text-text-muted">(last 24h)</span>
+        </div>
+        <div className="card">
+          {issuesLoading ? (
+            <div className="animate-pulse flex flex-col gap-3 p-4">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-12 bg-bg-tertiary rounded" />
+              ))}
+            </div>
+          ) : recentlyCompleted.length === 0 ? (
+            <div className="py-8 text-center text-text-muted">
+              No work completed in the last 24 hours
+            </div>
+          ) : (
+            <div className="divide-y divide-border">
+              {recentlyCompleted.map((issue) => (
+                <RecentlyCompletedRow
                   key={issue.id}
                   issue={issue}
                   agent={issue.assignee ? agentsByName.get(issue.assignee) : undefined}
@@ -270,6 +320,59 @@ function InFlightWorkRow({ issue, agent }: InFlightWorkRowProps) {
       {/* Type badge */}
       <span className="text-xs px-2 py-0.5 rounded bg-bg-tertiary text-text-secondary flex-shrink-0">
         {issue.issue_type}
+      </span>
+    </div>
+  )
+}
+
+interface RecentlyCompletedRowProps {
+  issue: Issue
+  agent?: Agent
+}
+
+/**
+ * Row component for recently completed section showing closed issue with completion time.
+ */
+function RecentlyCompletedRow({ issue, agent }: RecentlyCompletedRowProps) {
+  // Extract short agent name from full path
+  const agentDisplayName = issue.assignee
+    ? issue.assignee.split('/').pop() || issue.assignee
+    : null
+
+  return (
+    <div className="flex items-center gap-3 py-3 px-4 hover:bg-bg-tertiary/50 transition-colors">
+      {/* Status icon */}
+      <span className="text-status-closed text-lg flex-shrink-0">✓</span>
+
+      {/* Issue ID */}
+      <span className="mono text-xs text-text-muted w-24 flex-shrink-0 truncate">
+        {issue.id}
+      </span>
+
+      {/* Title */}
+      <div className="flex-1 min-w-0">
+        <span className="truncate block text-text-primary">{issue.title}</span>
+      </div>
+
+      {/* Completed by agent indicator */}
+      {agentDisplayName ? (
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <span className="text-sm" title={agent?.role_type}>
+            {agent ? getAgentRoleIcon(agent.role_type) : '👤'}
+          </span>
+          <span className="text-sm text-text-secondary">
+            {agentDisplayName}
+          </span>
+        </div>
+      ) : (
+        <span className="text-xs text-text-muted italic flex-shrink-0">
+          Unassigned
+        </span>
+      )}
+
+      {/* Time since completion */}
+      <span className="text-xs text-text-muted flex-shrink-0 w-16 text-right">
+        {issue.closed_at ? formatRelativeTime(issue.closed_at) : '—'}
       </span>
     </div>
   )
