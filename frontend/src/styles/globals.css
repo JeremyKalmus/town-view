@@ -163,7 +163,7 @@
   }
 
   .btn-primary {
-    @apply btn bg-accent-rust text-white hover:bg-accent-rust/90 h-9 px-4;
+    @apply btn bg-accent-rust text-white hover:opacity-90 h-9 px-4;
   }
 
   .btn-secondary {
