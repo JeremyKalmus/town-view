@@ -143,9 +143,18 @@ func (c *Client) GetAgents(rigPath string) ([]types.Agent, error) {
 	return agents, nil
 }
 
+// countByStatusOutput represents the bd count --by-status --json output.
+type countByStatusOutput struct {
+	Total  int `json:"total"`
+	Groups []struct {
+		Group string `json:"group"`
+		Count int    `json:"count"`
+	} `json:"groups"`
+}
+
 // GetIssueCount returns counts by status for a rig.
 func (c *Client) GetIssueCount(rigPath string) (total, open int, err error) {
-	args := []string{"count", "--json"}
+	args := []string{"count", "--by-status", "--json"}
 
 	output, err := c.runBD(rigPath, args...)
 	if err != nil {
@@ -163,15 +172,17 @@ func (c *Client) GetIssueCount(rigPath string) (total, open int, err error) {
 		return total, open, nil
 	}
 
-	var counts map[string]int
+	var counts countByStatusOutput
 	if err := json.Unmarshal(output, &counts); err != nil {
 		return 0, 0, fmt.Errorf("failed to parse counts: %w", err)
 	}
 
-	for _, v := range counts {
-		total += v
+	total = counts.Total
+	for _, g := range counts.Groups {
+		if g.Group == "open" || g.Group == "in_progress" {
+			open += g.Count
+		}
 	}
-	open = counts["open"] + counts["in_progress"]
 	return total, open, nil
 }
 
