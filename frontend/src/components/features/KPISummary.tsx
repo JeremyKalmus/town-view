@@ -40,6 +40,8 @@ const TYPE_LABELS: Record<IssueType, string> = {
   gate: 'Gate',
   convoy: 'Convoy',
   agent: 'Agent',
+  event: 'Event',
+  rig: 'Rig',
 }
 
 /** Status display order */

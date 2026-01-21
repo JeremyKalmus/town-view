@@ -208,7 +208,7 @@ export function PlanningView({ refreshKey = 0, updatedIssueIds }: PlanningViewPr
 
   // Filter issues and build tree (pass dependencies for parent-child hierarchy)
   const filteredIssues = issues.filter((issue) => visibleIds.has(issue.id))
-  const treeData = buildTree(filteredIssues, dependencies)
+  const treeData = buildTree(filteredIssues)
 
   // Convert tree to TreeNodeData format with blocker info
   const convertToTreeNodeData = (nodes: ReturnType<typeof buildTree>): TreeNodeData[] => {

@@ -23,3 +23,4 @@ export {
   SkeletonRigList,
 } from './Skeleton'
 export { ViewSwitcher, type ViewSwitcherProps } from './ViewSwitcher'
+export { Badge, type BadgeProps, type BadgeVariant } from './Badge'
