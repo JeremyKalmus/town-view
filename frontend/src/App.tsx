@@ -1,11 +1,15 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { RigDashboard } from '@/components/features/RigDashboard'
+import { PlanningView } from '@/components/features/PlanningView'
+import { AuditView } from '@/components/features/AuditView'
 import { OfflineBanner } from '@/components/layout/OfflineBanner'
 import { Toast, ToastProvider, ToastViewport } from '@/components/ui/Toast'
+import { ViewSwitcher } from '@/components/ui/ViewSwitcher'
 import { useRigStore } from '@/stores/rig-store'
 import { useToastStore } from '@/stores/toast-store'
 import { useConnectivityStore } from '@/stores/connectivity-store'
+import { useUIStore } from '@/stores/ui-store'
 import { useWebSocket } from '@/hooks/useWebSocket'
 import { useOffline } from '@/hooks/useOffline'
 import { cachedFetch } from '@/services/cache'
@@ -15,6 +19,7 @@ function App() {
   const { selectedRig, setSelectedRig } = useRigStore()
   const { toast, hideToast } = useToastStore()
   const { status: connectivityStatus } = useConnectivityStore()
+  const { viewMode } = useUIStore()
   const [rigs, setRigs] = useState<Rig[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -136,6 +141,14 @@ function App() {
           {/* Offline banner */}
           <OfflineBanner onRetry={tryReconnect} />
 
+          {/* View switcher header */}
+          <div className="flex items-center justify-between px-6 py-3 border-b border-border bg-bg-secondary">
+            <h1 className="font-display text-lg font-semibold tracking-wide">
+              {selectedRig?.name.toUpperCase() || 'TOWN VIEW'}
+            </h1>
+            <ViewSwitcher />
+          </div>
+
           {/* Main content area */}
           <main className="flex-1 overflow-auto">
             {error ? (
@@ -150,12 +163,16 @@ function App() {
                   </p>
                 </div>
               </div>
-            ) : selectedRig ? (
-              <RigDashboard rig={selectedRig} refreshKey={refreshKey} updatedIssueIds={updatedIssueIds} />
-            ) : (
+            ) : !selectedRig ? (
               <div className="flex items-center justify-center h-full">
                 <p className="text-text-muted">Select a rig from the sidebar</p>
               </div>
+            ) : viewMode === 'planning' ? (
+              <PlanningView />
+            ) : viewMode === 'monitoring' ? (
+              <RigDashboard rig={selectedRig} refreshKey={refreshKey} updatedIssueIds={updatedIssueIds} />
+            ) : (
+              <AuditView />
             )}
           </main>
         </div>
