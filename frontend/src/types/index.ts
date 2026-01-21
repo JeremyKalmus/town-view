@@ -103,3 +103,18 @@ export interface IssueFilters {
   priority?: number;
   assignee?: string;
 }
+
+// Tree node interface for roadmap hierarchy
+export interface TreeNode {
+  id: string;
+  parentId?: string;
+  children?: TreeNode[];
+  isExpanded?: boolean;
+  depth: number;
+}
+
+// Keyboard navigation state for tree
+export interface TreeNavigationState {
+  focusedId: string | null;
+  expandedIds: Set<string>;
+}
