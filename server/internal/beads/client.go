@@ -118,8 +118,165 @@ func (c *Client) UpdateIssue(rigPath, issueID string, update types.IssueUpdate) 
 	return c.GetIssue(rigPath, issueID)
 }
 
-// GetAgents returns agent-type issues for a rig.
+// GetAgents returns agents for a rig using gt status --json for live data.
+// Falls back to beads-based lookup if gt status fails.
 func (c *Client) GetAgents(rigPath string) ([]types.Agent, error) {
+	// Extract rig name from path (e.g., "townview" from "townview" or "townview/crew/max")
+	rigName := strings.Split(rigPath, "/")[0]
+
+	// Try gt status --json first (live data from tmux + hooks)
+	agents, err := c.getAgentsFromStatus(rigName)
+	if err != nil {
+		slog.Warn("gt status failed, falling back to beads", "error", err)
+		return c.getAgentsFromBeads(rigPath)
+	}
+
+	return agents, nil
+}
+
+// getAgentsFromStatus returns agents by parsing gt status --json output.
+func (c *Client) getAgentsFromStatus(rigName string) ([]types.Agent, error) {
+	// Run gt status --json from town root
+	output, err := c.runGTFromRoot("status", "--json")
+	if err != nil {
+		return nil, fmt.Errorf("gt status failed: %w", err)
+	}
+
+	var status gtStatusOutput
+	if err := json.Unmarshal(output, &status); err != nil {
+		return nil, fmt.Errorf("failed to parse gt status output: %w", err)
+	}
+
+	// Find the rig
+	var targetRig *gtStatusRig
+	for i := range status.Rigs {
+		if status.Rigs[i].Name == rigName {
+			targetRig = &status.Rigs[i]
+			break
+		}
+	}
+
+	if targetRig == nil {
+		// Rig not found - might be HQ (mayor/deacon)
+		if rigName == "" || rigName == "hq" {
+			return c.convertTopLevelAgents(status.Agents), nil
+		}
+		return nil, fmt.Errorf("rig not found: %s", rigName)
+	}
+
+	// Build hook lookup map for bead IDs
+	hookMap := make(map[string]gtStatusHook)
+	for _, hook := range targetRig.Hooks {
+		hookMap[hook.Agent] = hook
+	}
+
+	// Convert rig agents to our Agent type
+	agents := make([]types.Agent, 0, len(targetRig.Agents))
+	for _, gtAgent := range targetRig.Agents {
+		agent := c.convertGTAgent(gtAgent, hookMap)
+		agents = append(agents, agent)
+	}
+
+	return agents, nil
+}
+
+// convertGTAgent converts a gt status agent to our Agent type.
+func (c *Client) convertGTAgent(gtAgent gtStatusAgent, hookMap map[string]gtStatusHook) types.Agent {
+	agent := types.Agent{
+		ID:        gtAgent.Address,
+		Name:      gtAgent.Name,
+		RoleType:  mapGTRole(gtAgent.Role),
+		UpdatedAt: timeNow(), // Use current time since gt status doesn't provide this
+	}
+
+	// Determine state from running status
+	if gtAgent.Running {
+		agent.State = "working"
+	} else {
+		agent.State = "idle"
+	}
+
+	// Check hook for work assignment
+	if hook, ok := hookMap[gtAgent.Address]; ok && hook.HasWork {
+		if hook.BeadID != "" {
+			agent.HookBead = hook.BeadID
+		} else {
+			// Mark as having work even without specific bead ID
+			agent.HookBead = "unknown"
+		}
+	}
+
+	// Extract rig from address (e.g., "townview/witness" -> "townview")
+	parts := strings.Split(gtAgent.Address, "/")
+	if len(parts) > 0 {
+		agent.Rig = parts[0]
+	}
+
+	return agent
+}
+
+// convertTopLevelAgents converts top-level agents (mayor, deacon) to Agent type.
+func (c *Client) convertTopLevelAgents(gtAgents []gtStatusAgent) []types.Agent {
+	agents := make([]types.Agent, 0, len(gtAgents))
+	for _, gtAgent := range gtAgents {
+		agent := types.Agent{
+			ID:        gtAgent.Address,
+			Name:      gtAgent.Name,
+			RoleType:  mapGTRole(gtAgent.Role),
+			Rig:       "hq",
+			UpdatedAt: timeNow(),
+		}
+		if gtAgent.Running {
+			agent.State = "working"
+		} else {
+			agent.State = "idle"
+		}
+		agents = append(agents, agent)
+	}
+	return agents
+}
+
+// mapGTRole maps gt status role names to our AgentRoleType values.
+func mapGTRole(gtRole string) string {
+	switch gtRole {
+	case "coordinator":
+		return "mayor"
+	case "health-check":
+		return "deacon"
+	case "witness", "refinery", "polecat", "crew":
+		return gtRole
+	default:
+		return gtRole
+	}
+}
+
+// runGTFromRoot executes a gt command from the town root directory.
+func (c *Client) runGTFromRoot(args ...string) ([]byte, error) {
+	gtPath := os.Getenv("GT_PATH")
+	if gtPath == "" {
+		gtPath = "gt"
+	}
+
+	cmd := exec.Command(gtPath, args...)
+	cmd.Dir = c.townRoot
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	slog.Debug("Running gt command from root", "args", args, "dir", c.townRoot)
+
+	if err := cmd.Run(); err != nil {
+		slog.Error("gt command failed", "args", args, "stderr", stderr.String(), "error", err)
+		return nil, fmt.Errorf("%s: %s", err, stderr.String())
+	}
+
+	return stdout.Bytes(), nil
+}
+
+// getAgentsFromBeads returns agents using the legacy beads-based lookup.
+// Used as fallback when gt status is unavailable.
+func (c *Client) getAgentsFromBeads(rigPath string) ([]types.Agent, error) {
 	args := []string{"list", "--json", "--type", "agent", "--all", "-n", "0"}
 
 	output, err := c.runBD(rigPath, args...)
@@ -142,6 +299,46 @@ func (c *Client) GetAgents(rigPath string) ([]types.Agent, error) {
 	}
 
 	return agents, nil
+}
+
+// gtStatusOutput represents the gt status --json output.
+type gtStatusOutput struct {
+	Name     string           `json:"name"`
+	Location string           `json:"location"`
+	Agents   []gtStatusAgent  `json:"agents"` // Top-level agents (mayor, deacon)
+	Rigs     []gtStatusRig    `json:"rigs"`
+}
+
+// gtStatusRig represents a rig in gt status --json output.
+type gtStatusRig struct {
+	Name        string          `json:"name"`
+	Polecats    []string        `json:"polecats"`
+	PolecatCount int            `json:"polecat_count"`
+	Crews       []string        `json:"crews"`
+	CrewCount   int             `json:"crew_count"`
+	HasWitness  bool            `json:"has_witness"`
+	HasRefinery bool            `json:"has_refinery"`
+	Hooks       []gtStatusHook  `json:"hooks"`
+	Agents      []gtStatusAgent `json:"agents"`
+}
+
+// gtStatusAgent represents an agent in gt status --json output.
+type gtStatusAgent struct {
+	Name       string `json:"name"`
+	Address    string `json:"address"`
+	Session    string `json:"session"`
+	Role       string `json:"role"`
+	Running    bool   `json:"running"`
+	HasWork    bool   `json:"has_work"`
+	UnreadMail int    `json:"unread_mail"`
+}
+
+// gtStatusHook represents a hook entry in gt status --json output.
+type gtStatusHook struct {
+	Agent   string `json:"agent"`
+	Role    string `json:"role"`
+	HasWork bool   `json:"has_work"`
+	BeadID  string `json:"bead_id,omitempty"` // May be present if has_work is true
 }
 
 // countByStatusOutput represents the bd count --by-status --json output.

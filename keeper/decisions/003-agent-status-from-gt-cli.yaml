@@ -1,0 +1,104 @@
+keeper_decision:
+  id: ADR-003
+  date: 2026-01-21
+  spec: "Refactor MonitoringView backend to use gt status --json for agent data"
+  mode: growth
+  status: approved
+
+  supersedes:
+    - adr: ADR-002
+      constraint: "Direct tmux integration forbidden"
+      reason: |
+        Original constraint assumed agent beads would be maintained by Gas Town.
+        Evidence shows agent beads are stale/closed while sessions are running.
+        The gt CLI provides an abstraction layer over tmux - this is NOT direct
+        tmux integration. Using gt status --json is the canonical approach.
+
+  reuse:
+    frontend:
+      - Agent type (no changes needed - fields match gt status output)
+      - AgentCard component (no changes)
+      - MonitoringView (no changes to component, just data source)
+      - useWebSocket (for real-time updates)
+    backend:
+      - GET /api/rigs/:rigId/agents (route unchanged, implementation changes)
+      - handlers.ListAgents (handler unchanged, calls updated method)
+    data:
+      - Agent type (fields already compatible: id, name, role_type, state, hook_bead)
+      - AgentState enum (idle, working, stuck, paused)
+      - AgentRoleType enum (witness, refinery, crew, polecat, deacon, mayor)
+
+  extensions:
+    backend:
+      BeadsClient:
+        add_method: "GetAgentsFromStatus(rigID string) ([]Agent, error)"
+        description: |
+          Execute 'gt status --json' and parse output to extract agents.
+          Filters to specified rig. Maps gt status fields to Agent type:
+          - running: true -> state: "working"
+          - running: false -> state: "idle"
+          - has_work: true -> sets hook_bead (need to fetch from hooks)
+    config:
+      environment_variables:
+        add_var: "GT_PATH"
+        default: "gt"
+        description: "Path to gt CLI binary"
+
+  new_seeds: []
+  # No new seeds required - this is a pure implementation change
+
+  forbidden:
+    - Direct tmux list-sessions calls from Go code (use gt CLI abstraction)
+    - Removing beads-based agent tracking entirely (keep for historical/audit purposes)
+    - Breaking the Agent type contract (frontend expects same shape)
+
+  constraints:
+    - Must call gt CLI, not tmux directly (gt is the abstraction layer)
+    - Agent response shape must remain backward-compatible
+    - If gt status fails, fall back to beads-based GetAgents (graceful degradation)
+    - The "running" field from gt status maps to state: working/idle
+    - The "has_work" field indicates hook presence (may need additional hook file read for bead ID)
+    - Must filter agents by rig when returning /api/rigs/:rigId/agents
+
+  implementation_notes:
+    gt_status_output_mapping:
+      - gt_field: "running"
+        agent_field: "state"
+        mapping: "true -> 'working', false -> 'idle'"
+      - gt_field: "name"
+        agent_field: "name"
+        mapping: "direct"
+      - gt_field: "address"
+        agent_field: "id"
+        mapping: "direct"
+      - gt_field: "role"
+        agent_field: "role_type"
+        mapping: "coordinator->mayor, health-check->deacon, witness->witness, etc."
+      - gt_field: "has_work"
+        agent_field: "hook_bead"
+        mapping: "Requires reading hook file to get actual bead ID"
+
+  rationale: |
+    This change addresses a fundamental architectural issue: the beads-based agent
+    tracking was designed assuming Gas Town would maintain agent bead states. In
+    practice, agent beads are often closed or stale while tmux sessions are actively
+    running.
+
+    The gt CLI already provides the correct abstraction:
+    - `gt status --json` aggregates tmux sessions, hook files, and mail
+    - It is the canonical source of truth for "what is running right now"
+    - It is already used by humans and agents to check town state
+
+    This is NOT direct tmux integration (which ADR-002 prohibited). The gt CLI is
+    the proper abstraction layer that handles:
+    - Session discovery (from tmux)
+    - Work status (from hook files)
+    - Agent identity (from session naming conventions)
+
+    The Agent type already has the right fields - no frontend changes needed.
+    The route stays the same - only the data source changes.
+
+    Fallback to beads-based lookup ensures graceful degradation if gt CLI is
+    unavailable.
+
+    APPROVED: This is a necessary correction to make MonitoringView useful.

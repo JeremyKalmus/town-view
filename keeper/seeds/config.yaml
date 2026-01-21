@@ -20,6 +20,12 @@ environment_variables:
     description: "Path to bd CLI binary"
     sensitive: false
 
+  - name: GT_PATH
+    required: false
+    default: "gt"
+    description: "Path to gt CLI binary (Gas Town)"
+    sensitive: false
+
   - name: LOG_LEVEL
     required: false
     default: "info"

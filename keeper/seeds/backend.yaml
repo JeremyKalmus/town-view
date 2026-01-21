@@ -63,8 +63,12 @@ services:
 
   - name: BeadsClient
     location: internal/beads/client.go
-    responsibility: "Execute bd CLI commands and parse output"
+    responsibility: "Execute bd and gt CLI commands and parse output"
     dependencies: [exec]
+    methods:
+      - GetAgents: "Returns agents using gt status --json (live tmux data), falls back to beads"
+      - getAgentsFromStatus: "Parse gt status --json for live agent data"
+      - getAgentsFromBeads: "Legacy beads-based agent lookup (fallback)"
 
   - name: FileWatcher
     location: internal/watcher/watcher.go
