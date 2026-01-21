@@ -269,4 +269,42 @@
   .tree-indent-3 { @apply pl-12; }
   .tree-indent-4 { @apply pl-16; }
   .tree-indent-5 { @apply pl-20; }
+
+  /* Modal components */
+  .modal-backdrop {
+    @apply fixed inset-0 bg-black/60 backdrop-blur-sm z-50;
+  }
+
+  .modal {
+    @apply fixed inset-0 z-50 flex items-center justify-center;
+  }
+
+  .modal-content {
+    @apply relative bg-bg-secondary border border-border rounded-xl shadow-lg max-w-lg w-full mx-4 animate-fade-in;
+  }
+
+  .modal-header {
+    @apply flex items-center justify-between p-4 border-b border-border;
+  }
+
+  .modal-body {
+    @apply p-4;
+  }
+
+  .modal-footer {
+    @apply flex justify-end gap-3 p-4 border-t border-border;
+  }
+
+  /* Diff display styles */
+  .diff-table {
+    @apply w-full text-sm;
+  }
+
+  .diff-old {
+    @apply text-status-blocked line-through;
+  }
+
+  .diff-new {
+    @apply text-status-closed;
+  }
 }
