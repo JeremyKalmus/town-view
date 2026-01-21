@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { Rig, Issue } from '@/types'
+import type { Rig, Issue, IssueStatus, IssueType } from '@/types'
 import { IssueRow } from './IssueRow'
 import { cn } from '@/lib/utils'
 
@@ -8,11 +8,29 @@ interface RigDashboardProps {
   refreshKey?: number
 }
 
+const STATUS_OPTIONS: Array<{ value: IssueStatus | 'all'; label: string }> = [
+  { value: 'all', label: 'All Statuses' },
+  { value: 'open', label: 'Open' },
+  { value: 'in_progress', label: 'In Progress' },
+  { value: 'blocked', label: 'Blocked' },
+  { value: 'closed', label: 'Closed' },
+]
+
+const TYPE_OPTIONS: Array<{ value: IssueType | 'all'; label: string }> = [
+  { value: 'all', label: 'All Types' },
+  { value: 'bug', label: 'Bug' },
+  { value: 'feature', label: 'Feature' },
+  { value: 'task', label: 'Task' },
+  { value: 'epic', label: 'Epic' },
+  { value: 'chore', label: 'Chore' },
+]
+
 export function RigDashboard({ rig, refreshKey = 0 }: RigDashboardProps) {
   const [issues, setIssues] = useState<Issue[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [statusFilter, setStatusFilter] = useState<IssueStatus | 'all'>('all')
+  const [typeFilter, setTypeFilter] = useState<IssueType | 'all'>('all')
 
   useEffect(() => {
     setLoading(true)
@@ -23,6 +41,9 @@ export function RigDashboard({ rig, refreshKey = 0 }: RigDashboardProps) {
       params.set('status', statusFilter)
     } else {
       params.set('all', 'true')
+    }
+    if (typeFilter !== 'all') {
+      params.set('type', typeFilter)
     }
 
     fetch(`/api/rigs/${rig.id}/issues?${params}`)
@@ -38,7 +59,7 @@ export function RigDashboard({ rig, refreshKey = 0 }: RigDashboardProps) {
         setError(err.message)
         setLoading(false)
       })
-  }, [rig.id, statusFilter, refreshKey])
+  }, [rig.id, statusFilter, typeFilter, refreshKey])
 
   // Group issues by status for summary
   const statusCounts = issues.reduce(
@@ -86,22 +107,41 @@ export function RigDashboard({ rig, refreshKey = 0 }: RigDashboardProps) {
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-2 mb-4">
-        <span className="text-sm text-text-secondary">Filter:</span>
-        {['all', 'open', 'in_progress', 'blocked', 'closed'].map((status) => (
-          <button
-            key={status}
-            onClick={() => setStatusFilter(status)}
-            className={cn(
-              'px-3 py-1 rounded-md text-sm transition-colors',
-              statusFilter === status
-                ? 'bg-accent-rust text-white'
-                : 'bg-bg-tertiary text-text-secondary hover:text-text-primary'
-            )}
+      <div className="flex items-center gap-4 mb-4">
+        <div className="flex items-center gap-2">
+          <label htmlFor="status-filter" className="text-sm text-text-secondary">
+            Status:
+          </label>
+          <select
+            id="status-filter"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as IssueStatus | 'all')}
+            className="bg-bg-tertiary border border-border rounded-md px-3 py-1.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-rust"
           >
-            {status === 'all' ? 'All' : status.replace('_', ' ')}
-          </button>
-        ))}
+            {STATUS_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex items-center gap-2">
+          <label htmlFor="type-filter" className="text-sm text-text-secondary">
+            Type:
+          </label>
+          <select
+            id="type-filter"
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value as IssueType | 'all')}
+            className="bg-bg-tertiary border border-border rounded-md px-3 py-1.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-rust"
+          >
+            {TYPE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Issue list */}
