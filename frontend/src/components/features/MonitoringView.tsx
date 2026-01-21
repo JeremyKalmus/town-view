@@ -5,6 +5,7 @@ import { cachedFetch } from '@/services/cache'
 import { cn, getAgentRoleIcon, formatRelativeTime } from '@/lib/utils'
 import { SlideOutPanel } from '@/components/layout/SlideOutPanel'
 import { IssueEditorForm } from './issue-editor'
+import { SkeletonAgentGrid, SkeletonWorkList } from '@/components/ui/Skeleton'
 
 interface MonitoringViewProps {
   rig: Rig
@@ -212,11 +213,7 @@ export function MonitoringView({ rig, refreshKey = 0, updatedIssueIds = new Set(
         </div>
         <div className="card">
           {issuesLoading ? (
-            <div className="animate-pulse flex flex-col gap-3 p-4">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="h-12 bg-bg-tertiary rounded" />
-              ))}
-            </div>
+            <SkeletonWorkList count={3} />
           ) : inFlightWork.length === 0 ? (
             <div className="py-8 text-center text-text-muted">
               No work currently in progress
@@ -247,11 +244,7 @@ export function MonitoringView({ rig, refreshKey = 0, updatedIssueIds = new Set(
         </div>
         <div className="card">
           {issuesLoading ? (
-            <div className="animate-pulse flex flex-col gap-3 p-4">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="h-12 bg-bg-tertiary rounded" />
-              ))}
-            </div>
+            <SkeletonWorkList count={3} />
           ) : recentlyCompleted.length === 0 ? (
             <div className="py-8 text-center text-text-muted">
               No work completed in the last 24 hours
@@ -277,15 +270,7 @@ export function MonitoringView({ rig, refreshKey = 0, updatedIssueIds = new Set(
           WORKING AGENTS ({workingAgents.length})
         </h2>
         {loading ? (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="card animate-pulse">
-                <div className="h-4 bg-bg-tertiary rounded w-3/4 mb-3" />
-                <div className="h-3 bg-bg-tertiary rounded w-1/2 mb-2" />
-                <div className="h-8 bg-bg-tertiary rounded mt-3" />
-              </div>
-            ))}
-          </div>
+          <SkeletonAgentGrid count={4} />
         ) : workingAgents.length === 0 ? (
           <div className="card">
             <div className="py-8 text-center text-text-muted">
@@ -311,15 +296,7 @@ export function MonitoringView({ rig, refreshKey = 0, updatedIssueIds = new Set(
           IDLE AGENTS ({idleAgents.length})
         </h2>
         {loading ? (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {[1, 2].map((i) => (
-              <div key={i} className="card animate-pulse">
-                <div className="h-4 bg-bg-tertiary rounded w-3/4 mb-3" />
-                <div className="h-3 bg-bg-tertiary rounded w-1/2 mb-2" />
-                <div className="h-8 bg-bg-tertiary rounded mt-3" />
-              </div>
-            ))}
-          </div>
+          <SkeletonAgentGrid count={2} />
         ) : idleAgents.length === 0 ? (
           <div className="card">
             <div className="py-8 text-center text-text-muted">
