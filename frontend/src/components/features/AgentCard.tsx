@@ -4,6 +4,8 @@ import { cn, formatRelativeTime, getAgentStateIcon, getAgentStateClass, getAgent
 interface AgentCardProps {
   agent: Agent
   onClick?: () => void
+  /** Compact variant for minimal status-only display */
+  variant?: 'default' | 'compact'
 }
 
 /**
@@ -23,11 +25,53 @@ function getEffectiveState(agent: Agent): AgentState {
   return 'idle'
 }
 
-export function AgentCard({ agent, onClick }: AgentCardProps) {
+export function AgentCard({ agent, onClick, variant = 'default' }: AgentCardProps) {
   const effectiveState = getEffectiveState(agent)
   const stateClass = getAgentStateClass(effectiveState)
   const stateBgClass = getAgentStateBgClass(effectiveState)
 
+  // Compact variant: minimal status-only display
+  if (variant === 'compact') {
+    return (
+      <div
+        className={cn(
+          'flex items-center gap-3 p-3 rounded-lg border border-border bg-bg-secondary transition-all',
+          onClick && 'cursor-pointer hover:border-border-accent hover:bg-bg-tertiary',
+          effectiveState === 'stuck' && 'border-l-4 border-l-status-blocked'
+        )}
+        onClick={onClick}
+      >
+        {/* State indicator dot */}
+        <div className={cn('health-dot flex-shrink-0', `health-dot-${effectiveState}`)}>
+          {getAgentStateIcon(effectiveState)}
+        </div>
+
+        {/* Role icon + Name */}
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <span className="text-base" title={agent.role_type}>
+            {getAgentRoleIcon(agent.role_type)}
+          </span>
+          <div className="flex flex-col min-w-0">
+            <span className="font-medium text-sm truncate capitalize">
+              {agent.role_type}
+            </span>
+            {agent.hook_bead && (
+              <span className="mono text-xs text-status-in-progress truncate">
+                {agent.hook_bead}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* State label */}
+        <span className={cn('text-xs font-medium capitalize', stateClass)}>
+          {effectiveState}
+        </span>
+      </div>
+    )
+  }
+
+  // Default variant: full card display
   return (
     <div
       className={cn(

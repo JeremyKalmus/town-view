@@ -173,3 +173,110 @@ export const AllStates: Story = {
     </div>
   ),
 }
+
+// Compact variant stories
+export const CompactWorking: Story = {
+  args: {
+    agent: mockAgent,
+    variant: 'compact',
+  },
+}
+
+export const CompactIdle: Story = {
+  args: {
+    agent: {
+      ...mockAgent,
+      id: 'gt-idle-compact',
+      name: 'idle-worker',
+      state: 'idle',
+      hook_bead: undefined,
+    },
+    variant: 'compact',
+  },
+}
+
+export const CompactStuck: Story = {
+  args: {
+    agent: {
+      ...mockAgent,
+      id: 'gt-stuck-compact',
+      name: 'troubled-worker',
+      state: 'stuck',
+      hook_bead: 'to-l10.3',
+    },
+    variant: 'compact',
+  },
+}
+
+export const CompactPaused: Story = {
+  args: {
+    agent: {
+      ...mockAgent,
+      id: 'gt-paused-compact',
+      name: 'paused-worker',
+      state: 'paused',
+      hook_bead: 'to-l5.2',
+    },
+    variant: 'compact',
+  },
+}
+
+export const CompactAllStates: Story = {
+  render: () => (
+    <div className="space-y-3 max-w-md">
+      {(['idle', 'working', 'stuck', 'paused'] as const).map((state) => (
+        <AgentCard
+          key={state}
+          agent={{
+            ...mockAgent,
+            id: `gt-compact-${state}`,
+            name: `${state}-agent`,
+            state,
+            hook_bead: state === 'idle' ? undefined : 'to-example',
+          }}
+          variant="compact"
+        />
+      ))}
+    </div>
+  ),
+}
+
+export const CompactInfrastructure: Story = {
+  render: () => (
+    <div className="space-y-3 max-w-md">
+      <AgentCard
+        agent={{
+          ...mockAgent,
+          id: 'gt-mayor',
+          name: 'coordinator',
+          role_type: 'mayor',
+          state: 'working',
+          hook_bead: 'to-convoy-123',
+        }}
+        variant="compact"
+      />
+      <AgentCard
+        agent={{
+          ...mockAgent,
+          id: 'gt-deacon',
+          name: 'scheduler',
+          role_type: 'deacon',
+          state: 'working',
+          hook_bead: 'to-batch-042',
+        }}
+        variant="compact"
+      />
+      <AgentCard
+        agent={{
+          ...mockAgent,
+          id: 'gt-refinery',
+          name: 'processor',
+          role_type: 'refinery',
+          state: 'idle',
+          hook_bead: undefined,
+        }}
+        variant="compact"
+      />
+    </div>
+  ),
+}
