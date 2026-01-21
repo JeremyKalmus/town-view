@@ -51,6 +51,8 @@ interface TreeNodeProps {
   onNodeClick?: (issue: Issue) => void
   onBlockerClick?: (blockerId: string) => void
   showDescriptionPreview?: boolean
+  /** Set of issue IDs that were recently updated (for flash animation) */
+  updatedIssueIds?: Set<string>
 }
 
 export function TreeNode({
@@ -60,6 +62,7 @@ export function TreeNode({
   onNodeClick,
   onBlockerClick,
   showDescriptionPreview = false,
+  updatedIssueIds,
 }: TreeNodeProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded)
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false)
@@ -67,6 +70,7 @@ export function TreeNode({
   const childrenRef = useRef<HTMLDivElement>(null)
 
   const hasChildren = data.children && data.children.length > 0
+  const isUpdated = updatedIssueIds?.has(data.issue.id) ?? false
 
   // Measure children height for animation
   useEffect(() => {
@@ -114,7 +118,8 @@ export function TreeNode({
           'flex items-center gap-2 py-2 px-2 -mx-2 rounded-md',
           'transition-colors duration-100',
           'hover:bg-bg-tertiary cursor-pointer',
-          'group'
+          'group',
+          isUpdated && 'animate-flash-update bg-accent-rust/10'
         )}
         style={{ paddingLeft: `${depth * 20 + 8}px` }}
         onClick={handleNodeClick}
@@ -303,6 +308,7 @@ export function TreeNode({
                 onNodeClick={onNodeClick}
                 onBlockerClick={onBlockerClick}
                 showDescriptionPreview={showDescriptionPreview}
+                updatedIssueIds={updatedIssueIds}
               />
             ))}
           </div>
@@ -320,9 +326,11 @@ interface TreeViewProps {
   onBlockerClick?: (blockerId: string) => void
   showDescriptionPreview?: boolean
   className?: string
+  /** Set of issue IDs that were recently updated (for flash animation) */
+  updatedIssueIds?: Set<string>
 }
 
-export function TreeView({ nodes, defaultExpanded = false, onNodeClick, onBlockerClick, showDescriptionPreview = false, className }: TreeViewProps) {
+export function TreeView({ nodes, defaultExpanded = false, onNodeClick, onBlockerClick, showDescriptionPreview = false, className, updatedIssueIds }: TreeViewProps) {
   return (
     <div className={cn('py-2', className)}>
       {nodes.map((node) => (
@@ -334,6 +342,7 @@ export function TreeView({ nodes, defaultExpanded = false, onNodeClick, onBlocke
           onNodeClick={onNodeClick}
           onBlockerClick={onBlockerClick}
           showDescriptionPreview={showDescriptionPreview}
+          updatedIssueIds={updatedIssueIds}
         />
       ))}
     </div>
