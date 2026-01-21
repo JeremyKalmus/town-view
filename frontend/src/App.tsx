@@ -1,20 +1,26 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { RigDashboard } from '@/components/features/RigDashboard'
+import { OfflineBanner } from '@/components/layout/OfflineBanner'
 import { Toast, ToastProvider, ToastViewport } from '@/components/ui/Toast'
 import { useRigStore } from '@/stores/rig-store'
 import { useToastStore } from '@/stores/toast-store'
+import { useConnectivityStore } from '@/stores/connectivity-store'
 import { useWebSocket } from '@/hooks/useWebSocket'
+import { useOffline } from '@/hooks/useOffline'
+import { cachedFetch } from '@/services/cache'
 import type { Rig, WSMessage } from '@/types'
 
 function App() {
   const { selectedRig, setSelectedRig } = useRigStore()
   const { toast, hideToast } = useToastStore()
+  const { status: connectivityStatus } = useConnectivityStore()
   const [rigs, setRigs] = useState<Rig[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [updatedIssueIds, setUpdatedIssueIds] = useState<Set<string>>(new Set())
+  const [_isFromCache, setIsFromCache] = useState(false)
   const clearTimeoutRef = useRef<Map<string, number>>(new Map())
 
   // WebSocket for real-time updates
@@ -63,25 +69,47 @@ function App() {
     onDisconnect: () => console.log('[WS] Disconnected'),
   })
 
+  // Offline detection and connectivity management
+  const { tryReconnect } = useOffline({
+    onReconnect: () => {
+      console.log('[Connectivity] Reconnected - refreshing data')
+      setRefreshKey((k) => k + 1)
+    },
+    onDisconnect: () => {
+      console.log('[Connectivity] Disconnected - using cached data')
+    },
+  })
+
   useEffect(() => {
     // Fetch rigs on mount or when refresh triggered
-    fetch('/api/rigs')
-      .then((res) => {
-        if (!res.ok) throw new Error('Failed to fetch rigs')
-        return res.json()
+    const fetchRigs = async () => {
+      const result = await cachedFetch<Rig[]>('/api/rigs', {
+        cacheTTL: 5 * 60 * 1000, // 5 minutes
+        returnStaleOnError: true,
       })
-      .then((data) => {
-        setRigs(data)
+
+      if (result.data) {
+        setRigs(result.data)
+        setIsFromCache(result.fromCache)
         // Select first rig by default
-        if (data.length > 0 && !selectedRig) {
-          setSelectedRig(data[0])
+        if (result.data.length > 0 && !selectedRig) {
+          setSelectedRig(result.data[0])
         }
         setLoading(false)
-      })
-      .catch((err) => {
-        setError(err.message)
+        // Clear error if we have data (even cached)
+        if (result.fromCache && result.error) {
+          // Keep error for display but don't block UI
+          console.warn('[Rigs] Using cached data:', result.error)
+        } else {
+          setError(null)
+        }
+      } else if (result.error) {
+        setError(result.error)
         setLoading(false)
-      })
+      }
+    }
+
+    fetchRigs()
   }, [selectedRig, setSelectedRig, refreshKey])
 
   return (
@@ -94,30 +122,37 @@ function App() {
           onSelectRig={setSelectedRig}
           loading={loading}
           connected={connected}
+          httpConnected={connectivityStatus === 'online'}
         />
 
         {/* Main content */}
-        <main className="flex-1 overflow-auto">
-          {error ? (
-            <div className="flex items-center justify-center h-full">
-              <div className="card-accent p-6 max-w-md">
-                <h2 className="text-lg font-semibold text-status-blocked mb-2">
-                  Connection Error
-                </h2>
-                <p className="text-text-secondary mb-4">{error}</p>
-                <p className="text-sm text-text-muted">
-                  Make sure the Town View server is running on port 8080.
-                </p>
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Offline banner */}
+          <OfflineBanner onRetry={tryReconnect} />
+
+          {/* Main content area */}
+          <main className="flex-1 overflow-auto">
+            {error ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="card-accent p-6 max-w-md">
+                  <h2 className="text-lg font-semibold text-status-blocked mb-2">
+                    Connection Error
+                  </h2>
+                  <p className="text-text-secondary mb-4">{error}</p>
+                  <p className="text-sm text-text-muted">
+                    Make sure the Town View server is running on port 8080.
+                  </p>
+                </div>
               </div>
-            </div>
-          ) : selectedRig ? (
-            <RigDashboard rig={selectedRig} refreshKey={refreshKey} updatedIssueIds={updatedIssueIds} />
-          ) : (
-            <div className="flex items-center justify-center h-full">
-              <p className="text-text-muted">Select a rig from the sidebar</p>
-            </div>
-          )}
-        </main>
+            ) : selectedRig ? (
+              <RigDashboard rig={selectedRig} refreshKey={refreshKey} updatedIssueIds={updatedIssueIds} />
+            ) : (
+              <div className="flex items-center justify-center h-full">
+                <p className="text-text-muted">Select a rig from the sidebar</p>
+              </div>
+            )}
+          </main>
+        </div>
       </div>
 
       {/* Toast notifications */}

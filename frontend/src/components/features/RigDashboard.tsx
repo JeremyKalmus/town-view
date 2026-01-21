@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import type { Rig, Issue, IssueStatus, IssueType, Dependency } from '@/types'
 import { IssueRow } from './IssueRow'
 import { DependencyArrows } from './DependencyArrows'
+import { cachedFetch } from '@/services/cache'
 import { cn } from '@/lib/utils'
 
 interface RigDashboardProps {
@@ -61,19 +62,28 @@ export function RigDashboard({ rig, refreshKey = 0, updatedIssueIds = new Set() 
       params.set('type', typeFilter)
     }
 
-    fetch(`/api/rigs/${rig.id}/issues?${params}`)
-      .then((res) => {
-        if (!res.ok) throw new Error('Failed to fetch issues')
-        return res.json()
+    const fetchIssues = async () => {
+      const url = `/api/rigs/${rig.id}/issues?${params}`
+      const result = await cachedFetch<Issue[]>(url, {
+        cacheTTL: 2 * 60 * 1000, // 2 minutes for issues
+        returnStaleOnError: true,
       })
-      .then((data) => {
-        setIssues(data || [])
+
+      if (result.data) {
+        setIssues(result.data)
         setLoading(false)
-      })
-      .catch((err) => {
-        setError(err.message)
+        if (result.fromCache && result.error) {
+          console.warn('[Issues] Using cached data:', result.error)
+        } else {
+          setError(null)
+        }
+      } else if (result.error) {
+        setError(result.error)
         setLoading(false)
-      })
+      }
+    }
+
+    fetchIssues()
   }, [rig.id, statusFilter, typeFilter, refreshKey])
 
   // Fetch dependencies when arrows are enabled
@@ -83,18 +93,25 @@ export function RigDashboard({ rig, refreshKey = 0, updatedIssueIds = new Set() 
       return
     }
 
-    fetch(`/api/rigs/${rig.id}/dependencies`)
-      .then((res) => {
-        if (!res.ok) throw new Error('Failed to fetch dependencies')
-        return res.json()
+    const fetchDependencies = async () => {
+      const url = `/api/rigs/${rig.id}/dependencies`
+      const result = await cachedFetch<Dependency[]>(url, {
+        cacheTTL: 2 * 60 * 1000, // 2 minutes
+        returnStaleOnError: true,
       })
-      .then((data) => {
-        setDependencies(data || [])
-      })
-      .catch((err) => {
-        console.error('Failed to fetch dependencies:', err)
+
+      if (result.data) {
+        setDependencies(result.data)
+        if (result.fromCache && result.error) {
+          console.warn('[Dependencies] Using cached data:', result.error)
+        }
+      } else {
+        console.error('Failed to fetch dependencies:', result.error)
         setDependencies([])
-      })
+      }
+    }
+
+    fetchDependencies()
   }, [rig.id, showArrows, refreshKey])
 
   // Group issues by status for summary
