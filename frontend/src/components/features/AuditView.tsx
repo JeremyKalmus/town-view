@@ -201,10 +201,15 @@ export function AuditView() {
 
       {/* Date Range Picker */}
       <div className="card mb-6">
-        <div className="mb-3">
+        <div className="mb-3 flex items-center gap-2">
           <span className="text-sm font-medium text-text-secondary">
             Filter by Date Range
           </span>
+          {(dateRange.startDate || dateRange.endDate) && (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-accent-rust/20 text-accent-rust">
+              Active
+            </span>
+          )}
         </div>
         <DateRangePicker value={dateRange} onChange={setDateRange} />
       </div>
@@ -238,9 +243,13 @@ export function AuditView() {
           </div>
         ) : completedWork.length === 0 ? (
           <div className="py-12 text-center text-text-muted">
-            {selectedConvoy
-              ? 'No completed work found for this convoy'
-              : 'No completed work found in the selected date range'}
+            {selectedConvoy && (dateRange.startDate || dateRange.endDate)
+              ? 'No completed work found for this convoy in the selected date range'
+              : selectedConvoy
+                ? 'No completed work found for this convoy'
+                : dateRange.startDate || dateRange.endDate
+                  ? 'No completed work found in the selected date range'
+                  : 'No completed work found'}
           </div>
         ) : (
           <div className="flex flex-col gap-2">
