@@ -4,6 +4,7 @@ import { cn, formatRelativeTime, getAgentStateIcon, getAgentStateClass, getAgent
 interface AgentCardProps {
   agent: Agent
   onClick?: () => void
+  variant?: 'default' | 'compact'
 }
 
 /**
@@ -23,11 +24,47 @@ function getEffectiveState(agent: Agent): AgentState {
   return 'idle'
 }
 
-export function AgentCard({ agent, onClick }: AgentCardProps) {
+export function AgentCard({ agent, onClick, variant = 'default' }: AgentCardProps) {
   const effectiveState = getEffectiveState(agent)
   const stateClass = getAgentStateClass(effectiveState)
   const stateBgClass = getAgentStateBgClass(effectiveState)
 
+  // Compact variant: minimal status-only display
+  if (variant === 'compact') {
+    return (
+      <div
+        className={cn(
+          'card p-3 transition-all',
+          onClick && 'cursor-pointer hover:border-border-accent hover:shadow-md',
+          effectiveState === 'stuck' && 'border-l-4 border-l-status-blocked'
+        )}
+        onClick={onClick}
+      >
+        {/* Single row: Icon + Name + State */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-base flex-shrink-0" title={agent.role_type}>
+              {getAgentRoleIcon(agent.role_type)}
+            </span>
+            <span className="font-medium truncate text-sm">{agent.name}</span>
+          </div>
+          <div className={cn('badge text-xs', stateBgClass, stateClass)}>
+            <span>{getAgentStateIcon(effectiveState)}</span>
+            <span className="capitalize">{effectiveState}</span>
+          </div>
+        </div>
+
+        {/* Hooked bead (if working) */}
+        {agent.hook_bead && (
+          <div className="mt-2 mono text-xs text-status-in-progress truncate">
+            {agent.hook_bead}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // Default variant: full display
   return (
     <div
       className={cn(

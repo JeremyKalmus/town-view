@@ -5,3 +5,4 @@ export { HealthBadge, type HealthStatus, computeHealthStatus, formatDuration } f
 export { ProgressIndicator, ProgressIndicatorSkeleton } from './ProgressIndicator'
 export { BlockingContext, type BlockingContextProps } from './BlockingContext'
 export { ActivityFeed } from './ActivityFeed'
+export { InfrastructureHealth } from './InfrastructureHealth'
