@@ -45,6 +45,13 @@ components:
     when_to_use: "Transient notifications"
     forbidden_extensions: []
 
+  - name: VirtualList
+    location: src/components/ui/VirtualList.tsx
+    variants: [fixed-height, dynamic-height]
+    when_to_use: "Lists with 100+ items for performance"
+    forbidden_extensions: []
+    notes: "Use itemHeight for fixed, estimatedItemHeight for dynamic"
+
   # Feature components
   - name: IssueRow
     location: src/components/features/issue-row.tsx

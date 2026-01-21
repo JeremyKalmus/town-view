@@ -1,8 +1,9 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
-import type { Rig, Issue, IssueStatus, IssueType, Dependency } from '@/types'
+import type { Rig, Issue, IssueStatus, IssueType, Dependency, Agent } from '@/types'
 import { IssueRow } from './IssueRow'
+import { AgentCard } from './AgentCard'
 import { DependencyArrows } from './DependencyArrows'
-import { SkeletonIssueList, SkeletonStatGrid } from "@/components/ui"
+import { SkeletonIssueList, SkeletonStatGrid, VirtualList } from "@/components/ui"
 import { cachedFetch } from "@/services/cache"
 import { cn } from '@/lib/utils'
 
@@ -29,6 +30,9 @@ const TYPE_OPTIONS: Array<{ value: IssueType | 'all'; label: string }> = [
   { value: 'chore', label: 'Chore' },
 ]
 
+// Fixed height for issue rows (px) - accommodates rows with labels
+const ISSUE_ROW_HEIGHT = 56
+
 export function RigDashboard({ rig, refreshKey = 0, updatedIssueIds = new Set() }: RigDashboardProps) {
   const [issues, setIssues] = useState<Issue[]>([])
   const [loading, setLoading] = useState(true)
@@ -37,6 +41,8 @@ export function RigDashboard({ rig, refreshKey = 0, updatedIssueIds = new Set() 
   const [typeFilter, setTypeFilter] = useState<IssueType | 'all'>('all')
   const [showArrows, setShowArrows] = useState(false)
   const [dependencies, setDependencies] = useState<Dependency[]>([])
+  const [agents, setAgents] = useState<Agent[]>([])
+  const [agentsLoading, setAgentsLoading] = useState(true)
   const nodeRefs = useRef<Map<string, HTMLElement | null>>(new Map())
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -87,6 +93,32 @@ export function RigDashboard({ rig, refreshKey = 0, updatedIssueIds = new Set() 
     fetchIssues()
   }, [rig.id, statusFilter, typeFilter, refreshKey])
 
+  // Fetch agents for rig
+  useEffect(() => {
+    setAgentsLoading(true)
+
+    const fetchAgents = async () => {
+      const url = `/api/rigs/${rig.id}/agents`
+      const result = await cachedFetch<Agent[]>(url, {
+        cacheTTL: 2 * 60 * 1000, // 2 minutes
+        returnStaleOnError: true,
+      })
+
+      if (result.data) {
+        setAgents(result.data)
+        if (result.fromCache && result.error) {
+          console.warn('[Agents] Using cached data:', result.error)
+        }
+      } else {
+        console.error('Failed to fetch agents:', result.error)
+        setAgents([])
+      }
+      setAgentsLoading(false)
+    }
+
+    fetchAgents()
+  }, [rig.id, refreshKey])
+
   // Fetch dependencies when arrows are enabled
   useEffect(() => {
     if (!showArrows) {
@@ -135,6 +167,25 @@ export function RigDashboard({ rig, refreshKey = 0, updatedIssueIds = new Set() 
           Prefix: <span className="mono">{rig.prefix}</span> &middot; Path: {rig.path}
         </p>
       </div>
+
+      {/* Agent Cards */}
+      {agentsLoading ? (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="card animate-pulse">
+              <div className="h-4 bg-bg-tertiary rounded w-3/4 mb-3" />
+              <div className="h-3 bg-bg-tertiary rounded w-1/2 mb-2" />
+              <div className="h-8 bg-bg-tertiary rounded mt-3" />
+            </div>
+          ))}
+        </div>
+      ) : agents.length > 0 ? (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          {agents.map((agent) => (
+            <AgentCard key={agent.id} agent={agent} />
+          ))}
+        </div>
+      ) : null}
 
       {/* Stats */}
       {loading ? (
@@ -234,16 +285,21 @@ export function RigDashboard({ rig, refreshKey = 0, updatedIssueIds = new Set() 
         ) : issues.length === 0 ? (
           <div className="py-8 text-center text-text-muted">No issues found</div>
         ) : (
-          <div className="divide-y divide-border">
-            {issues.map((issue) => (
-              <IssueRow
-                key={issue.id}
-                issue={issue}
-                isUpdated={updatedIssueIds.has(issue.id)}
-                nodeRef={(el) => setNodeRef(issue.id, el)}
-              />
-            ))}
-          </div>
+          <VirtualList
+            items={issues}
+            itemHeight={ISSUE_ROW_HEIGHT}
+            className="h-[600px]"
+            getKey={(issue) => issue.id}
+            renderItem={(issue) => (
+              <div className="border-b border-border">
+                <IssueRow
+                  issue={issue}
+                  isUpdated={updatedIssueIds.has(issue.id)}
+                  nodeRef={(el) => setNodeRef(issue.id, el)}
+                />
+              </div>
+            )}
+          />
         )}
 
         {/* Dependency arrows overlay */}
