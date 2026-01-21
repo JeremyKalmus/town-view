@@ -65,6 +65,9 @@ export function PlanningView({ refreshKey = 0 }: PlanningViewProps) {
   // Dependencies state for blocker indicators
   const [dependencies, setDependencies] = useState<Dependency[]>([])
 
+  // Keyboard navigation state
+  const [focusedId, setFocusedId] = useState<string | null>(null)
+
   // Fetch issues
   useEffect(() => {
     if (!selectedRig) return
@@ -195,6 +198,31 @@ export function PlanningView({ refreshKey = 0 }: PlanningViewProps) {
 
   const treeNodeData = convertToTreeNodeData(treeData)
 
+  // Flatten tree nodes into a list for keyboard navigation
+  // Since defaultExpanded=true, all nodes are visible
+  const flattenNodes = useCallback((nodes: TreeNodeData[]): string[] => {
+    const result: string[] = []
+    const traverse = (nodeList: TreeNodeData[]) => {
+      for (const node of nodeList) {
+        result.push(node.issue.id)
+        if (node.children) {
+          traverse(node.children)
+        }
+      }
+    }
+    traverse(nodes)
+    return result
+  }, [])
+
+  const flatNodeIds = useMemo(() => flattenNodes(treeNodeData), [flattenNodes, treeNodeData])
+
+  // Map issue IDs to issues for quick lookup
+  const issueMap = useMemo(() => {
+    const map = new Map<string, Issue>()
+    issues.forEach((issue) => map.set(issue.id, issue))
+    return map
+  }, [issues])
+
   // Get unique assignees for filter dropdown
   const assignees = [...new Set(issues.map((i) => i.assignee).filter(Boolean))] as string[]
 
@@ -305,6 +333,77 @@ export function PlanningView({ refreshKey = 0 }: PlanningViewProps) {
   // Handle clicking a blocker indicator in the tree (alias for dependency click)
   const handleBlockerClick = handleDependencyClick
 
+  // Keyboard navigation handler
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't handle if focus is in an input/textarea
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        e.target instanceof HTMLSelectElement
+      ) {
+        return
+      }
+
+      // Escape closes the panel
+      if (e.key === 'Escape') {
+        if (panelOpen) {
+          e.preventDefault()
+          handlePanelClose()
+        }
+        return
+      }
+
+      // Only handle navigation keys if tree is loaded and has nodes
+      if (loading || flatNodeIds.length === 0) return
+
+      switch (e.key) {
+        case 'ArrowDown': {
+          e.preventDefault()
+          if (focusedId === null) {
+            // Focus first node
+            setFocusedId(flatNodeIds[0])
+          } else {
+            const currentIndex = flatNodeIds.indexOf(focusedId)
+            if (currentIndex < flatNodeIds.length - 1) {
+              setFocusedId(flatNodeIds[currentIndex + 1])
+            }
+          }
+          break
+        }
+        case 'ArrowUp': {
+          e.preventDefault()
+          if (focusedId === null) {
+            // Focus last node
+            setFocusedId(flatNodeIds[flatNodeIds.length - 1])
+          } else {
+            const currentIndex = flatNodeIds.indexOf(focusedId)
+            if (currentIndex > 0) {
+              setFocusedId(flatNodeIds[currentIndex - 1])
+            }
+          }
+          break
+        }
+        case 'Enter': {
+          e.preventDefault()
+          if (focusedId) {
+            const issue = issueMap.get(focusedId)
+            if (issue) {
+              setSelectedIssue(issue)
+              setActiveTab('edit')
+              setPanelOpen(true)
+              setFormData(null)
+            }
+          }
+          break
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [focusedId, flatNodeIds, panelOpen, loading, issueMap, handlePanelClose])
+
   // Check if there are changes to save
   const hasChanges = selectedIssue && formData && (
     formData.title !== selectedIssue.title ||
@@ -356,6 +455,7 @@ export function PlanningView({ refreshKey = 0 }: PlanningViewProps) {
             defaultExpanded={true}
             onNodeClick={handleNodeClick}
             onBlockerClick={handleBlockerClick}
+            focusedId={focusedId}
           />
         )}
       </div>

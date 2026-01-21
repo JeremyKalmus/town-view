@@ -51,6 +51,8 @@ interface TreeNodeProps {
   onNodeClick?: (issue: Issue) => void
   onBlockerClick?: (blockerId: string) => void
   showDescriptionPreview?: boolean
+  /** ID of the currently focused node for keyboard navigation */
+  focusedId?: string | null
 }
 
 export function TreeNode({
@@ -60,6 +62,7 @@ export function TreeNode({
   onNodeClick,
   onBlockerClick,
   showDescriptionPreview = false,
+  focusedId,
 }: TreeNodeProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded)
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false)
@@ -106,6 +109,8 @@ export function TreeNode({
     tombstone: 'bg-bg-tertiary text-text-muted border-border',
   }[data.issue.status] || 'bg-status-open/20 text-status-open border-status-open/30'
 
+  const isFocused = focusedId === data.issue.id
+
   return (
     <div className="select-none">
       {/* Node row */}
@@ -114,7 +119,8 @@ export function TreeNode({
           'flex items-center gap-2 py-2 px-2 -mx-2 rounded-md',
           'transition-colors duration-100',
           'hover:bg-bg-tertiary cursor-pointer',
-          'group'
+          'group',
+          isFocused && 'bg-accent-rust/10 ring-1 ring-accent-rust/50'
         )}
         style={{ paddingLeft: `${depth * 20 + 8}px` }}
         onClick={handleNodeClick}
@@ -303,6 +309,7 @@ export function TreeNode({
                 onNodeClick={onNodeClick}
                 onBlockerClick={onBlockerClick}
                 showDescriptionPreview={showDescriptionPreview}
+                focusedId={focusedId}
               />
             ))}
           </div>
@@ -320,11 +327,13 @@ interface TreeViewProps {
   onBlockerClick?: (blockerId: string) => void
   showDescriptionPreview?: boolean
   className?: string
+  /** ID of the currently focused node for keyboard navigation */
+  focusedId?: string | null
 }
 
-export function TreeView({ nodes, defaultExpanded = false, onNodeClick, onBlockerClick, showDescriptionPreview = false, className }: TreeViewProps) {
+export function TreeView({ nodes, defaultExpanded = false, onNodeClick, onBlockerClick, showDescriptionPreview = false, className, focusedId }: TreeViewProps) {
   return (
-    <div className={cn('py-2', className)}>
+    <div className={cn('py-2', className)} role="tree" tabIndex={0}>
       {nodes.map((node) => (
         <TreeNode
           key={node.issue.id}
@@ -334,6 +343,7 @@ export function TreeView({ nodes, defaultExpanded = false, onNodeClick, onBlocke
           onNodeClick={onNodeClick}
           onBlockerClick={onBlockerClick}
           showDescriptionPreview={showDescriptionPreview}
+          focusedId={focusedId}
         />
       ))}
     </div>
