@@ -103,3 +103,10 @@ export interface IssueFilters {
   priority?: number;
   assignee?: string;
 }
+
+// Dependency represents a relationship between issues
+export interface Dependency {
+  from_id: string;
+  to_id: string;
+  type: 'blocks' | 'parent-child';
+}

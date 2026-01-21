@@ -5,9 +5,10 @@ interface IssueRowProps {
   issue: Issue
   onClick?: () => void
   isUpdated?: boolean
+  nodeRef?: (el: HTMLDivElement | null) => void
 }
 
-export function IssueRow({ issue, onClick, isUpdated = false }: IssueRowProps) {
+export function IssueRow({ issue, onClick, isUpdated = false, nodeRef }: IssueRowProps) {
   const statusBadgeClass = {
     open: 'bg-status-open/20 text-status-open border-status-open/30',
     in_progress: 'bg-status-in-progress/20 text-status-in-progress border-status-in-progress/30',
@@ -19,6 +20,7 @@ export function IssueRow({ issue, onClick, isUpdated = false }: IssueRowProps) {
 
   return (
     <div
+      ref={nodeRef}
       className={cn(
         'flex items-center gap-3 py-3 px-2 -mx-2 rounded-md transition-colors',
         onClick && 'cursor-pointer hover:bg-bg-tertiary',

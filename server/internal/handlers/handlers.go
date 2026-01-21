@@ -172,6 +172,26 @@ func (h *Handlers) ListAgents(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, agents)
 }
 
+// ListDependencies handles GET /api/rigs/{rigId}/dependencies
+func (h *Handlers) ListDependencies(w http.ResponseWriter, r *http.Request) {
+	rigID := r.PathValue("rigId")
+
+	rig, err := h.rigDiscovery.GetRig(rigID)
+	if err != nil || rig == nil {
+		http.Error(w, "Rig not found", http.StatusNotFound)
+		return
+	}
+
+	deps, err := h.beadsClient.GetDependencies(rig.Path)
+	if err != nil {
+		slog.Error("Failed to list dependencies", "rigId", rigID, "error", err)
+		http.Error(w, "Failed to list dependencies", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, deps)
+}
+
 // WebSocket handles GET /ws
 func (h *Handlers) WebSocket(w http.ResponseWriter, r *http.Request) {
 	h.wsHub.ServeWS(w, r)

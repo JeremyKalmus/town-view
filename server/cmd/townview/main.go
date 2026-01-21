@@ -82,6 +82,7 @@ func main() {
 	mux.HandleFunc("GET /api/rigs/{rigId}/issues/{issueId}", h.GetIssue)
 	mux.HandleFunc("PATCH /api/rigs/{rigId}/issues/{issueId}", h.UpdateIssue)
 	mux.HandleFunc("GET /api/rigs/{rigId}/agents", h.ListAgents)
+	mux.HandleFunc("GET /api/rigs/{rigId}/dependencies", h.ListDependencies)
 
 	// WebSocket
 	mux.HandleFunc("GET /ws", h.WebSocket)

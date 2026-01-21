@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
-import type { Rig, Issue, IssueStatus, IssueType } from '@/types'
+import { useEffect, useState, useRef, useCallback } from 'react'
+import type { Rig, Issue, IssueStatus, IssueType, Dependency } from '@/types'
 import { IssueRow } from './IssueRow'
+import { DependencyArrows } from './DependencyArrows'
 import { cn } from '@/lib/utils'
 
 interface RigDashboardProps {
@@ -32,6 +33,19 @@ export function RigDashboard({ rig, refreshKey = 0, updatedIssueIds = new Set() 
   const [error, setError] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<IssueStatus | 'all'>('all')
   const [typeFilter, setTypeFilter] = useState<IssueType | 'all'>('all')
+  const [showArrows, setShowArrows] = useState(false)
+  const [dependencies, setDependencies] = useState<Dependency[]>([])
+  const nodeRefs = useRef<Map<string, HTMLElement | null>>(new Map())
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  // Callback to set node ref
+  const setNodeRef = useCallback((id: string, element: HTMLElement | null) => {
+    if (element) {
+      nodeRefs.current.set(id, element)
+    } else {
+      nodeRefs.current.delete(id)
+    }
+  }, [])
 
   useEffect(() => {
     setLoading(true)
@@ -61,6 +75,27 @@ export function RigDashboard({ rig, refreshKey = 0, updatedIssueIds = new Set() 
         setLoading(false)
       })
   }, [rig.id, statusFilter, typeFilter, refreshKey])
+
+  // Fetch dependencies when arrows are enabled
+  useEffect(() => {
+    if (!showArrows) {
+      setDependencies([])
+      return
+    }
+
+    fetch(`/api/rigs/${rig.id}/dependencies`)
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to fetch dependencies')
+        return res.json()
+      })
+      .then((data) => {
+        setDependencies(data || [])
+      })
+      .catch((err) => {
+        console.error('Failed to fetch dependencies:', err)
+        setDependencies([])
+      })
+  }, [rig.id, showArrows, refreshKey])
 
   // Group issues by status for summary
   const statusCounts = issues.reduce(
@@ -143,10 +178,27 @@ export function RigDashboard({ rig, refreshKey = 0, updatedIssueIds = new Set() 
             ))}
           </select>
         </div>
+        <div className="flex items-center gap-2 ml-auto">
+          <label htmlFor="show-arrows" className="text-sm text-text-secondary cursor-pointer">
+            Dependencies:
+          </label>
+          <button
+            id="show-arrows"
+            onClick={() => setShowArrows(!showArrows)}
+            className={cn(
+              'px-3 py-1.5 text-sm rounded-md border transition-colors',
+              showArrows
+                ? 'bg-accent-rust/20 text-accent-rust border-accent-rust/30'
+                : 'bg-bg-tertiary text-text-secondary border-border hover:border-text-muted'
+            )}
+          >
+            {showArrows ? 'Hide Arrows' : 'Show Arrows'}
+          </button>
+        </div>
       </div>
 
       {/* Issue list */}
-      <div className="card">
+      <div className="card relative" ref={containerRef}>
         <div className="border-b border-border pb-2 mb-2">
           <h2 className="section-header">ISSUES</h2>
         </div>
@@ -160,10 +212,23 @@ export function RigDashboard({ rig, refreshKey = 0, updatedIssueIds = new Set() 
         ) : (
           <div className="divide-y divide-border">
             {issues.map((issue) => (
-              <IssueRow key={issue.id} issue={issue} isUpdated={updatedIssueIds.has(issue.id)} />
+              <IssueRow
+                key={issue.id}
+                issue={issue}
+                isUpdated={updatedIssueIds.has(issue.id)}
+                nodeRef={(el) => setNodeRef(issue.id, el)}
+              />
             ))}
           </div>
         )}
+
+        {/* Dependency arrows overlay */}
+        <DependencyArrows
+          dependencies={dependencies}
+          nodeRefs={nodeRefs.current}
+          containerRef={containerRef}
+          visible={showArrows}
+        />
       </div>
     </div>
   )

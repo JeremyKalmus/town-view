@@ -21,6 +21,14 @@ type Issue struct {
 	Labels          []string   `json:"labels,omitempty"`
 	DependencyCount int        `json:"dependency_count"`
 	DependentCount  int        `json:"dependent_count"`
+	Parent          string     `json:"parent,omitempty"`
+}
+
+// Dependency represents a dependency relationship between issues.
+type Dependency struct {
+	FromID   string `json:"from_id"`
+	ToID     string `json:"to_id"`
+	Type     string `json:"type"` // "blocks", "parent-child"
 }
 
 // Rig represents a Gas Town rig.

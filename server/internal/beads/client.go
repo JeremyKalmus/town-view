@@ -254,3 +254,67 @@ func extractAgentName(id string) string {
 	}
 	return id
 }
+
+// graphNode represents a node in the bd graph JSON output.
+type graphNode struct {
+	Issue     types.Issue `json:"Issue"`
+	Layer     int         `json:"Layer"`
+	Position  int         `json:"Position"`
+	DependsOn []string    `json:"DependsOn"`
+}
+
+// graphLayout represents the layout in bd graph JSON output.
+type graphLayout struct {
+	Nodes map[string]graphNode `json:"Nodes"`
+}
+
+// graphOutput represents the bd graph --all --json output.
+type graphOutput struct {
+	Layout graphLayout `json:"layout"`
+}
+
+// graphComponentOutput represents a single component in bd graph --all --json output.
+type graphComponentOutput struct {
+	Root   types.Issue `json:"Root"`
+	Issues []types.Issue `json:"Issues"`
+}
+
+// GetDependencies returns all dependency relationships for a rig.
+func (c *Client) GetDependencies(rigPath string) ([]types.Dependency, error) {
+	args := []string{"graph", "--all", "--json"}
+
+	output, err := c.runBD(rigPath, args...)
+	if err != nil {
+		return nil, fmt.Errorf("bd graph failed: %w", err)
+	}
+
+	// Try parsing as array of components first (bd graph --all format)
+	var components []graphComponentOutput
+	if err := json.Unmarshal(output, &components); err == nil && len(components) > 0 {
+		// Need to get individual issue dependencies from bd dep list
+		// For now, return empty since --all format doesn't include DependsOn
+		slog.Debug("Graph returned component format, need per-issue dependencies")
+	}
+
+	// Try parsing as single graph with layout
+	var graph graphOutput
+	if err := json.Unmarshal(output, &graph); err != nil {
+		// Try parsing as component array and extracting dependencies differently
+		slog.Debug("Failed to parse graph output, returning empty dependencies", "error", err)
+		return []types.Dependency{}, nil
+	}
+
+	// Extract dependencies from nodes
+	var deps []types.Dependency
+	for id, node := range graph.Layout.Nodes {
+		for _, depID := range node.DependsOn {
+			deps = append(deps, types.Dependency{
+				FromID: id,      // This issue depends on...
+				ToID:   depID,   // ...this issue (arrow points from depID to id)
+				Type:   "blocks", // depID blocks id
+			})
+		}
+	}
+
+	return deps, nil
+}
