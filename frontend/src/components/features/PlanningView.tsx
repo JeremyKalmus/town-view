@@ -400,7 +400,7 @@ export function PlanningView({ refreshKey = 0 }: PlanningViewProps) {
                   <div className="mt-6 flex justify-end">
                     <button
                       onClick={handleSaveClick}
-                      disabled={!isFormValid || isSaving || !hasChanges}
+                      disabled={!isFormValid || isSaving || !hasChanges || showConfirmModal}
                       className={cn(
                         'px-4 py-2 rounded-md text-sm font-medium',
                         'bg-accent-rust text-white',
