@@ -14,13 +14,19 @@ import (
 	"github.com/gastown/townview/internal/ws"
 )
 
+// pendingEvent tracks a pending file change event.
+type pendingEvent struct {
+	lastMod time.Time
+	isMail  bool
+}
+
 // Watcher monitors .beads directories for changes.
 type Watcher struct {
 	townRoot   string
 	wsHub      *ws.Hub
 	watcher    *fsnotify.Watcher
 	debounce   time.Duration
-	pending    map[string]time.Time
+	pending    map[string]*pendingEvent
 	mu         sync.Mutex
 	stopCh     chan struct{}
 }
@@ -38,7 +44,7 @@ func New(townRoot string, wsHub *ws.Hub) *Watcher {
 		townRoot: townRoot,
 		wsHub:    wsHub,
 		debounce: debounce,
-		pending:  make(map[string]time.Time),
+		pending:  make(map[string]*pendingEvent),
 		stopCh:   make(chan struct{}),
 	}
 }
@@ -142,9 +148,15 @@ func (w *Watcher) handleEvent(event fsnotify.Event) {
 		return
 	}
 
+	// Track if this is a mail-related change for specific event broadcast
+	isMail := strings.Contains(filename, "mail") || strings.Contains(event.Name, "mail")
+
 	// Debounce
 	w.mu.Lock()
-	w.pending[event.Name] = time.Now()
+	w.pending[event.Name] = &pendingEvent{
+		lastMod: time.Now(),
+		isMail:  isMail,
+	}
 	w.mu.Unlock()
 }
 
@@ -170,15 +182,15 @@ func (w *Watcher) flushPending() {
 	defer w.mu.Unlock()
 
 	now := time.Now()
-	for path, lastMod := range w.pending {
-		if now.Sub(lastMod) < w.debounce {
+	for path, event := range w.pending {
+		if now.Sub(event.lastMod) < w.debounce {
 			continue
 		}
 
 		// Determine rig from path
 		rig := w.rigFromPath(path)
 
-		// Broadcast change
+		// Broadcast beads_changed event
 		w.wsHub.Broadcast(types.WSMessage{
 			Type: "beads_changed",
 			Rig:  rig,
@@ -186,6 +198,18 @@ func (w *Watcher) flushPending() {
 				"file": filepath.Base(path),
 			},
 		})
+
+		// Also broadcast mail_received if this is a mail-related change
+		if event.isMail {
+			w.wsHub.Broadcast(types.WSMessage{
+				Type: "mail_received",
+				Rig:  rig,
+				Payload: map[string]string{
+					"file": filepath.Base(path),
+				},
+			})
+			slog.Debug("Broadcast mail received", "rig", rig, "file", path)
+		}
 
 		delete(w.pending, path)
 		slog.Debug("Broadcast beads change", "rig", rig, "file", path)

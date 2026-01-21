@@ -144,3 +144,14 @@ const (
 	RoleDeacon   = "deacon"
 	RoleMayor    = "mayor"
 )
+
+// Mail represents a mail message in the Gas Town mail system.
+type Mail struct {
+	ID        string    `json:"id"`
+	From      string    `json:"from"`
+	To        string    `json:"to"`
+	Subject   string    `json:"subject"`
+	Body      string    `json:"body"`
+	Timestamp time.Time `json:"timestamp"`
+	Read      bool      `json:"read"`
+}

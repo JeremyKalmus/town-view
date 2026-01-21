@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/gastown/townview/internal/beads"
+	"github.com/gastown/townview/internal/mail"
 	"github.com/gastown/townview/internal/rigs"
 	"github.com/gastown/townview/internal/types"
 	"github.com/gastown/townview/internal/ws"
@@ -17,14 +18,16 @@ import (
 type Handlers struct {
 	rigDiscovery *rigs.Discovery
 	beadsClient  *beads.Client
+	mailClient   *mail.Client
 	wsHub        *ws.Hub
 }
 
 // New creates a new Handlers instance.
-func New(rigDiscovery *rigs.Discovery, beadsClient *beads.Client, wsHub *ws.Hub) *Handlers {
+func New(rigDiscovery *rigs.Discovery, beadsClient *beads.Client, mailClient *mail.Client, wsHub *ws.Hub) *Handlers {
 	return &Handlers{
 		rigDiscovery: rigDiscovery,
 		beadsClient:  beadsClient,
+		mailClient:   mailClient,
 		wsHub:        wsHub,
 	}
 }
@@ -371,6 +374,81 @@ func (h *Handlers) GetRecentActivity(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, events)
+}
+
+// ListMail handles GET /api/mail
+func (h *Handlers) ListMail(w http.ResponseWriter, r *http.Request) {
+	// Parse query params
+	opts := mail.ListMailOptions{
+		Limit: 50, // Default limit
+	}
+
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 {
+			opts.Limit = parsed
+		}
+	}
+
+	if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
+		if parsed, err := strconv.Atoi(offsetStr); err == nil && parsed >= 0 {
+			opts.Offset = parsed
+		}
+	}
+
+	if r.URL.Query().Get("unread_only") == "true" {
+		opts.UnreadOnly = true
+	}
+
+	// Use town-level mail (no specific rig)
+	messages, err := h.mailClient.ListMail("", opts)
+	if err != nil {
+		slog.Error("Failed to list mail", "error", err)
+		http.Error(w, "Failed to list mail", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, messages)
+}
+
+// ListRigMail handles GET /api/rigs/{rigId}/mail
+func (h *Handlers) ListRigMail(w http.ResponseWriter, r *http.Request) {
+	rigID := r.PathValue("rigId")
+
+	rig, err := h.rigDiscovery.GetRig(rigID)
+	if err != nil || rig == nil {
+		http.Error(w, "Rig not found", http.StatusNotFound)
+		return
+	}
+
+	// Parse query params
+	opts := mail.ListMailOptions{
+		Limit: 50, // Default limit
+	}
+
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 {
+			opts.Limit = parsed
+		}
+	}
+
+	if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
+		if parsed, err := strconv.Atoi(offsetStr); err == nil && parsed >= 0 {
+			opts.Offset = parsed
+		}
+	}
+
+	if r.URL.Query().Get("unread_only") == "true" {
+		opts.UnreadOnly = true
+	}
+
+	messages, err := h.mailClient.ListMail(rig.Path, opts)
+	if err != nil {
+		slog.Error("Failed to list rig mail", "rigId", rigID, "error", err)
+		http.Error(w, "Failed to list mail", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, messages)
 }
 
 // writeJSON writes a JSON response.
