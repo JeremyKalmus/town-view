@@ -34,7 +34,8 @@ const TYPE_OPTIONS: Array<{ value: IssueType | 'all'; label: string }> = [
 const ISSUE_ROW_HEIGHT = 56
 
 export function RigDashboard({ rig, refreshKey = 0, updatedIssueIds = new Set() }: RigDashboardProps) {
-  const [issues, setIssues] = useState<Issue[]>([])
+  const [allIssues, setAllIssues] = useState<Issue[]>([]) // All issues for KPI stats
+  const [filteredIssues, setFilteredIssues] = useState<Issue[]>([]) // Filtered for display
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<IssueStatus | 'all'>('all')
@@ -55,47 +56,31 @@ export function RigDashboard({ rig, refreshKey = 0, updatedIssueIds = new Set() 
     }
   }, [])
 
-  // Track if this is the initial load or a rig/filter change (vs just a refresh)
+  // Track if this is the initial load or a rig change (vs just a refresh or filter change)
   const isInitialLoadRef = useRef(true)
   const prevRigIdRef = useRef(rig.id)
-  const prevFiltersRef = useRef({ statusFilter, typeFilter })
 
+  // Fetch ALL issues for KPI stats (unfiltered)
   useEffect(() => {
-    // Only show loading skeleton on initial load or when rig/filters change
-    // Not on refresh (refreshKey change) - this preserves scroll position
     const rigChanged = prevRigIdRef.current !== rig.id
-    const filtersChanged =
-      prevFiltersRef.current.statusFilter !== statusFilter ||
-      prevFiltersRef.current.typeFilter !== typeFilter
 
-    if (isInitialLoadRef.current || rigChanged || filtersChanged) {
+    if (isInitialLoadRef.current || rigChanged) {
       setLoading(true)
       isInitialLoadRef.current = false
     }
 
     prevRigIdRef.current = rig.id
-    prevFiltersRef.current = { statusFilter, typeFilter }
     setError(null)
 
-    const params = new URLSearchParams()
-    if (statusFilter !== 'all') {
-      params.set('status', statusFilter)
-    } else {
-      params.set('all', 'true')
-    }
-    if (typeFilter !== 'all') {
-      params.set('type', typeFilter)
-    }
-
-    const fetchIssues = async () => {
-      const url = `/api/rigs/${rig.id}/issues?${params}`
+    const fetchAllIssues = async () => {
+      const url = `/api/rigs/${rig.id}/issues?all=true`
       const result = await cachedFetch<Issue[]>(url, {
         cacheTTL: 2 * 60 * 1000, // 2 minutes for issues
         returnStaleOnError: true,
       })
 
       if (result.data) {
-        setIssues(result.data)
+        setAllIssues(result.data)
         setLoading(false)
         if (result.fromCache && result.error) {
           console.warn('[Issues] Using cached data:', result.error)
@@ -108,8 +93,22 @@ export function RigDashboard({ rig, refreshKey = 0, updatedIssueIds = new Set() 
       }
     }
 
-    fetchIssues()
-  }, [rig.id, statusFilter, typeFilter, refreshKey])
+    fetchAllIssues()
+  }, [rig.id, refreshKey])
+
+  // Apply filters client-side for display
+  useEffect(() => {
+    let filtered = allIssues
+
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(issue => issue.status === statusFilter)
+    }
+    if (typeFilter !== 'all') {
+      filtered = filtered.filter(issue => issue.issue_type === typeFilter)
+    }
+
+    setFilteredIssues(filtered)
+  }, [allIssues, statusFilter, typeFilter])
 
   // Fetch agents for rig
   useEffect(() => {
@@ -165,8 +164,8 @@ export function RigDashboard({ rig, refreshKey = 0, updatedIssueIds = new Set() 
     fetchDependencies()
   }, [rig.id, showArrows, refreshKey])
 
-  // Group issues by status for summary
-  const statusCounts = issues.reduce(
+  // Group ALL issues by status for KPI summary (not affected by filters)
+  const statusCounts = allIssues.reduce(
     (acc, issue) => {
       acc[issue.status] = (acc[issue.status] || 0) + 1
       return acc
@@ -214,7 +213,7 @@ export function RigDashboard({ rig, refreshKey = 0, updatedIssueIds = new Set() 
         <div className="grid grid-cols-4 gap-4 mb-6">
           <StatCard
             label="Total Issues"
-            value={issues.length}
+            value={allIssues.length}
             color="text-text-primary"
           />
           <StatCard
@@ -300,11 +299,13 @@ export function RigDashboard({ rig, refreshKey = 0, updatedIssueIds = new Set() 
           <SkeletonIssueList count={6} />
         ) : error ? (
           <div className="py-8 text-center text-status-blocked">{error}</div>
-        ) : issues.length === 0 ? (
-          <div className="py-8 text-center text-text-muted">No issues found</div>
+        ) : filteredIssues.length === 0 ? (
+          <div className="py-8 text-center text-text-muted">
+            {allIssues.length === 0 ? 'No issues found' : 'No issues match the current filters'}
+          </div>
         ) : (
           <VirtualList
-            items={issues}
+            items={filteredIssues}
             itemHeight={ISSUE_ROW_HEIGHT}
             className="h-[600px]"
             getKey={(issue) => issue.id}
