@@ -150,3 +150,23 @@ export interface IssueDependencies {
   blockers: Issue[];   // Issues that block this issue
   blocked_by: Issue[]; // Issues blocked by this issue
 }
+
+// Time metrics for audit display (in milliseconds)
+export interface TimeMetrics {
+  avg: number;
+  min: number;
+  max: number;
+}
+
+// Audit metrics for convoy/issue analysis
+export interface AuditMetrics {
+  timeToComplete: TimeMetrics;
+  reassignmentCount: number;
+  mergeConflictCount: number;
+  // Anomaly thresholds (values above these are considered anomalies)
+  anomalyThresholds?: {
+    timeToComplete?: number;  // milliseconds
+    reassignmentCount?: number;
+    mergeConflictCount?: number;
+  };
+}
