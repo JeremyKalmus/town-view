@@ -125,3 +125,13 @@ export interface Dependency {
   to_id: string;
   type: 'blocks' | 'parent-child';
 }
+
+// History entry for audit trail
+export interface HistoryEntry {
+  id: string;
+  timestamp: string;
+  actor: string;
+  field: string;
+  old_value: string | null;
+  new_value: string | null;
+}
