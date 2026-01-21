@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { Sidebar } from '@/components/layout/Sidebar'
-import { RigDashboard } from '@/components/features/RigDashboard'
 import { PlanningView } from '@/components/features/PlanningView'
+import { MonitoringView } from '@/components/features/MonitoringView'
 import { AuditView } from '@/components/features/AuditView'
 import { OfflineBanner } from '@/components/layout/OfflineBanner'
 import { Toast, ToastProvider, ToastViewport } from '@/components/ui/Toast'
@@ -24,7 +24,7 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
-  const [updatedIssueIds, setUpdatedIssueIds] = useState<Set<string>>(new Set())
+  const [_updatedIssueIds, setUpdatedIssueIds] = useState<Set<string>>(new Set())
   const [_isFromCache, setIsFromCache] = useState(false)
   const clearTimeoutRef = useRef<Map<string, number>>(new Map())
 
@@ -170,7 +170,7 @@ function App() {
             ) : viewMode === 'planning' ? (
               <PlanningView />
             ) : viewMode === 'monitoring' ? (
-              <RigDashboard rig={selectedRig} refreshKey={refreshKey} updatedIssueIds={updatedIssueIds} />
+              <MonitoringView rig={selectedRig} refreshKey={refreshKey} />
             ) : (
               <AuditView />
             )}
