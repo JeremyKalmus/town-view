@@ -24,7 +24,7 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
-  const [_updatedIssueIds, setUpdatedIssueIds] = useState<Set<string>>(new Set())
+  const [updatedIssueIds, setUpdatedIssueIds] = useState<Set<string>>(new Set())
   const [_isFromCache, setIsFromCache] = useState(false)
   const clearTimeoutRef = useRef<Map<string, number>>(new Map())
 
@@ -170,7 +170,7 @@ function App() {
             ) : viewMode === 'planning' ? (
               <PlanningView refreshKey={refreshKey} />
             ) : viewMode === 'monitoring' ? (
-              <MonitoringView rig={selectedRig} refreshKey={refreshKey} />
+              <MonitoringView rig={selectedRig} refreshKey={refreshKey} updatedIssueIds={updatedIssueIds} />
             ) : (
               <AuditView />
             )}
