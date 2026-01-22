@@ -179,7 +179,22 @@ export function MonitoringView({ rig, refreshKey = 0 }: MonitoringViewProps) {
             {stuckCount > 0 && <span className="text-status-blocked"> • {stuckCount} stuck</span>}
           </p>
         </div>
-        <div className="flex items-center gap-2 text-sm">
+        <div className="flex items-center gap-4 text-sm">
+          {/* Activity Legend */}
+          <div className="flex items-center gap-3 text-xs text-text-muted border-r border-border pr-4">
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-status-closed" />
+              <span>&lt;2m</span>
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-amber-500" />
+              <span>2-10m</span>
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-status-blocked" />
+              <span>&gt;10m</span>
+            </span>
+          </div>
           <span className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-status-closed animate-pulse" />
             <span className="text-text-muted">Live</span>
