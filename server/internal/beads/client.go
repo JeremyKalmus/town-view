@@ -306,9 +306,14 @@ func (c *Client) getAgentsFromBeads(rigPath string) ([]types.Agent, error) {
 	}
 
 	// Determine rig name from path for filtering
+	// - "." means HQ (town-level), agents have rig: hq
+	// - "townview" means townview rig, agents have rig: townview
+	// - "some/nested/path" means first component is the rig name
 	rigName := rigPath
 	if rigName == "." {
 		rigName = "hq"
+	} else if strings.Contains(rigName, "/") {
+		rigName = strings.Split(rigName, "/")[0]
 	}
 
 	// Convert issues to agents, filtering by rig
