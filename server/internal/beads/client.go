@@ -704,3 +704,46 @@ func sortIssuesByUpdatedAt(issues []types.Issue) {
 		}
 	}
 }
+
+// GetIssueConvoy returns convoy information for an issue by traversing its parent chain.
+// Returns nil if the issue is not tracked by a convoy.
+func (c *Client) GetIssueConvoy(rigPath, issueID string) (*types.ConvoyInfo, error) {
+	issue, err := c.GetIssue(rigPath, issueID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if the issue itself is a convoy
+	if issue.IssueType == types.TypeConvoy {
+		return &types.ConvoyInfo{
+			ID:    issue.ID,
+			Title: issue.Title,
+		}, nil
+	}
+
+	// Traverse parent chain to find convoy
+	visited := make(map[string]bool)
+	currentID := issue.Parent
+
+	for currentID != "" && !visited[currentID] {
+		visited[currentID] = true
+
+		parent, err := c.GetIssue(rigPath, currentID)
+		if err != nil {
+			// Parent not found, stop traversal
+			break
+		}
+
+		if parent.IssueType == types.TypeConvoy {
+			return &types.ConvoyInfo{
+				ID:    parent.ID,
+				Title: parent.Title,
+			}, nil
+		}
+
+		currentID = parent.Parent
+	}
+
+	// No convoy found in parent chain
+	return nil, nil
+}

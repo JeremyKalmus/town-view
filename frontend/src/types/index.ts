@@ -38,6 +38,12 @@ export type AgentState =
   | 'stuck'
   | 'paused';
 
+// Convoy context information
+export interface ConvoyInfo {
+  id: string;
+  title: string;
+}
+
 // Issue interface
 export interface Issue {
   id: string;
@@ -56,6 +62,7 @@ export interface Issue {
   labels?: string[];
   dependency_count: number;
   dependent_count: number;
+  convoy?: ConvoyInfo;
 }
 
 // Rig interface
