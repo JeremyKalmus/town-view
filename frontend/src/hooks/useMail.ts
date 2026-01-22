@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import type { Mail, WSMessage } from '@/types'
-import { useWebSocket } from './useWebSocket'
+import { useEventSource } from './useEventSource'
 import { extractErrorMessage } from './useFetch'
 
 /** Maximum number of messages to display */
@@ -68,8 +68,8 @@ export function useMail(): UseMailResult {
     }
   }, [])
 
-  // Connect to WebSocket for real-time updates
-  useWebSocket({
+  // Connect to SSE for real-time updates
+  useEventSource({
     onMessage: handleWebSocketMessage,
   })
 

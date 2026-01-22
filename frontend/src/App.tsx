@@ -12,7 +12,7 @@ import { useRigStore } from '@/stores/rig-store'
 import { useToastStore } from '@/stores/toast-store'
 import { useConnectivityStore } from '@/stores/connectivity-store'
 import { useUIStore } from '@/stores/ui-store'
-import { useWebSocket } from '@/hooks/useWebSocket'
+import { useEventSource } from '@/hooks/useEventSource'
 import { useOffline } from '@/hooks/useOffline'
 import { cachedFetch } from '@/services/cache'
 import type { Rig, WSMessage } from '@/types'
@@ -88,10 +88,10 @@ function App() {
     }
   }, [triggerDebouncedRefresh])
 
-  const { connected } = useWebSocket({
+  const { connected } = useEventSource({
     onMessage: handleWSMessage,
-    onConnect: () => console.log('[WS] Connected to Town View'),
-    onDisconnect: () => console.log('[WS] Disconnected'),
+    onConnect: () => console.log('[SSE] Connected to Town View'),
+    onDisconnect: () => console.log('[SSE] Disconnected'),
   })
 
   // Offline detection and connectivity management
