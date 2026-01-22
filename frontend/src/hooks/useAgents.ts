@@ -3,8 +3,9 @@
  * Used to display rig health indicators in the sidebar.
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useCallback } from 'react'
 import type { Agent, AgentRoleType, AgentState } from '@/types'
+import { useFetch } from './useFetch'
 
 export interface UseAgentsResult {
   /** List of agents for the rig */
@@ -36,40 +37,16 @@ export interface UseAgentsResult {
  * ```
  */
 export function useAgents(rigId: string | undefined): UseAgentsResult {
-  const [agents, setAgents] = useState<Agent[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const fetchAgents = useCallback(async () => {
-    if (!rigId) {
-      setAgents([])
-      return
+  const { data, loading, error, refetch } = useFetch<Agent[]>(
+    rigId ? `/api/rigs/${rigId}/agents` : null,
+    {
+      initialData: [],
+      errorPrefix: 'Failed to fetch agents',
+      clearOnError: true,
     }
+  )
 
-    setLoading(true)
-    setError(null)
-
-    try {
-      const response = await fetch(`/api/rigs/${rigId}/agents`)
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch agents: ${response.statusText}`)
-      }
-
-      const data = await response.json()
-      setAgents(data)
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to fetch agents'
-      setError(message)
-      setAgents([])
-    } finally {
-      setLoading(false)
-    }
-  }, [rigId])
-
-  useEffect(() => {
-    fetchAgents()
-  }, [fetchAgents])
+  const agents = data ?? []
 
   const getAgentByRole = useCallback(
     (role: AgentRoleType): Agent | undefined => {
@@ -90,7 +67,7 @@ export function useAgents(rigId: string | undefined): UseAgentsResult {
     agents,
     loading,
     error,
-    refetch: fetchAgents,
+    refetch,
     getAgentByRole,
     getRoleHealth,
   }

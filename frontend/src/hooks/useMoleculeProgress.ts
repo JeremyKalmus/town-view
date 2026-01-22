@@ -6,6 +6,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { MoleculeProgress } from '@/types'
 import { useMonitoringStore } from '@/stores/monitoring-store'
+import { extractErrorMessage } from './useFetch'
 
 export interface UseMoleculeProgressResult {
   /** Current progress data */
@@ -69,8 +70,7 @@ export function useMoleculeProgress(
       const data: MoleculeProgress = await response.json()
       setProgress(issueId, data)
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to fetch progress'
-      setError(message)
+      setError(extractErrorMessage(err, 'Failed to fetch progress'))
     } finally {
       setLoading(false)
     }

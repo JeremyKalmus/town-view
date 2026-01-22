@@ -6,6 +6,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { Mail, WSMessage } from '@/types'
 import { useWebSocket } from './useWebSocket'
+import { extractErrorMessage } from './useFetch'
 
 /** Maximum number of messages to display */
 const MAX_MESSAGES = 50
@@ -99,8 +100,7 @@ export function useMail(): UseMailResult {
       // If we got fewer than requested, no more to load
       setHasMore(data.length === MAX_MESSAGES)
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to fetch mail'
-      setError(message)
+      setError(extractErrorMessage(err, 'Failed to fetch mail'))
       if (reset) {
         setMessages([])
       }

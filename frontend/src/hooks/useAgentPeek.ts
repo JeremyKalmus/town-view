@@ -6,6 +6,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import type { PeekOutput } from '@/types'
 import { useMonitoringStore } from '@/stores/monitoring-store'
+import { extractErrorMessage } from './useFetch'
 
 export interface UseAgentPeekResult {
   /** Current peek output */
@@ -78,7 +79,7 @@ export function useAgentPeek(
       const data: PeekOutput = await response.json()
       setPeekOutput(data)
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to fetch peek output'
+      const message = extractErrorMessage(err, 'Failed to fetch peek output')
       setLocalError(message)
       setPeekError(message)
     } finally {
