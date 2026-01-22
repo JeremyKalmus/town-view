@@ -66,7 +66,31 @@ export function AgentPeekPanel({
     return baseWorkBeads
   }, [roleBeads, agent?.role_type])
 
-  const eventBeads = useMemo(() => filterToEventBeads(roleBeads), [roleBeads])
+  // Filter event beads to only those created BY this agent
+  const eventBeads = useMemo(() => {
+    if (!agent) return []
+
+    const events = filterToEventBeads(roleBeads)
+
+    // Filter to events created by this agent
+    // Match by various possible formats: full path, name, or partial path
+    const agentPatterns = [
+      agent.id.toLowerCase(),                    // "townview/witness"
+      agent.name.toLowerCase(),                  // "witness"
+      `${agent.role_type}/${agent.name}`.toLowerCase(), // "witness/witness"
+    ]
+
+    return events.filter(event => {
+      const createdBy = (event.created_by || '').toLowerCase()
+      if (!createdBy) return false
+
+      return agentPatterns.some(pattern =>
+        createdBy === pattern ||
+        createdBy.endsWith(`/${pattern}`) ||
+        createdBy.includes(pattern)
+      )
+    })
+  }, [roleBeads, agent])
 
   // Fetch role-specific beads (molecules for witness, MRs for refinery, etc.)
   const fetchRoleBeads = useCallback(async () => {
