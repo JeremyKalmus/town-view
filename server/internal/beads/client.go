@@ -583,6 +583,53 @@ func (c *Client) getAgentsFromBeads(rigPath string) ([]types.Agent, error) {
 		}
 	}
 
+	// Discover polecats from tmux sessions (they may not have filesystem dirs)
+	// Pattern: gt-{rig}-{name} where name is not a known role
+	knownRoles := map[string]bool{
+		"witness": true, "refinery": true, "mayor": true, "deacon": true,
+	}
+	prefix := fmt.Sprintf("gt-%s-", rigName)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "tmux", "list-sessions", "-F", "#{session_name}")
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+	if err := cmd.Run(); err == nil {
+		for _, line := range strings.Split(stdout.String(), "\n") {
+			line = strings.TrimSpace(line)
+			if !strings.HasPrefix(line, prefix) {
+				continue
+			}
+			// Extract the name part after "gt-{rig}-"
+			name := strings.TrimPrefix(line, prefix)
+			if name == "" {
+				continue
+			}
+			// Skip known singleton roles
+			if knownRoles[name] {
+				continue
+			}
+			// Skip crew- prefixed (handled separately)
+			if strings.HasPrefix(name, "crew-") {
+				continue
+			}
+			// Skip if already discovered
+			if _, exists := agentMap[name]; exists {
+				continue
+			}
+			// This is a polecat discovered from tmux
+			agentMap[name] = &types.Agent{
+				ID:        fmt.Sprintf("%s-%s-%s", getPrefix(rigName), rigName, name),
+				Name:      name,
+				RoleType:  types.RolePolecat,
+				Rig:       rigName,
+				State:     "working", // Running tmux session = working
+				UpdatedAt: time.Now(),
+			}
+			slog.Debug("Discovered polecat from tmux", "rig", rigName, "name", name)
+		}
+	}
+
 	// Convert map to slice
 	agents := make([]types.Agent, 0, len(agentMap))
 	for _, agent := range agentMap {
