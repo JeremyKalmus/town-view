@@ -1,63 +1,59 @@
 import type { Meta, StoryObj } from '@storybook/react'
 import { RigItem } from './Sidebar'
-import type { Rig, Agent } from '@/types'
+import type { Rig } from '@/types'
 
-// Mock rig data
-const mockRig: Rig = {
-  id: 'townview-123',
+// Mock rig with all agents healthy
+const mockRigHealthy: Rig = {
+  id: 'townview',
   name: 'townview',
-  prefix: 'to',
+  prefix: 'to-',
   path: '/projects/townview',
   beads_path: '/projects/townview/.beads',
   issue_count: 42,
   open_count: 12,
   agent_count: 3,
+  agent_health: {
+    witness: 'idle',
+    refinery: 'idle',
+    crew: 'working',
+  },
 }
 
-// Mock agents for the rig
-const mockAgents: Agent[] = [
-  {
-    id: 'to-witness',
-    name: 'overseer',
-    role_type: 'witness',
-    rig: 'townview-123',
-    state: 'working',
-    updated_at: '2026-01-20T14:30:00Z',
+// Mock rig with some stuck agents
+const mockRigSomeStuck: Rig = {
+  ...mockRigHealthy,
+  id: 'gastown',
+  name: 'gastown',
+  prefix: 'gt-',
+  agent_health: {
+    witness: 'stuck',
+    refinery: 'paused',
+    crew: 'idle',
   },
-  {
-    id: 'to-refinery',
-    name: 'processor',
-    role_type: 'refinery',
-    rig: 'townview-123',
-    state: 'idle',
-    updated_at: '2026-01-20T14:30:00Z',
-  },
-  {
-    id: 'to-crew',
-    name: 'team-alpha',
-    role_type: 'crew',
-    rig: 'townview-123',
-    state: 'idle',
-    updated_at: '2026-01-20T14:30:00Z',
-  },
-]
+}
 
-// Mock fetch for Storybook
-const setupMockFetch = (agents: Agent[]) => {
-  const originalFetch = window.fetch
-  window.fetch = async (input: RequestInfo | URL) => {
-    const url = typeof input === 'string' ? input : input.toString()
-    if (url.includes('/api/rigs/') && url.includes('/agents')) {
-      return new Response(JSON.stringify(agents), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      })
-    }
-    return originalFetch(input)
-  }
-  return () => {
-    window.fetch = originalFetch
-  }
+// Mock rig with partial agents (only witness exists)
+const mockRigPartial: Rig = {
+  ...mockRigHealthy,
+  id: 'beads',
+  name: 'beads',
+  prefix: 'bd-',
+  agent_count: 1,
+  agent_health: {
+    witness: 'working',
+    refinery: null,
+    crew: null,
+  },
+}
+
+// Mock rig with no agents
+const mockRigNoAgents: Rig = {
+  ...mockRigHealthy,
+  id: 'docs',
+  name: 'docs',
+  prefix: 'dc-',
+  agent_count: 0,
+  agent_health: undefined,
 }
 
 const meta: Meta<typeof RigItem> = {
@@ -81,163 +77,72 @@ type Story = StoryObj<typeof RigItem>
 
 export const Default: Story = {
   args: {
-    rig: mockRig,
+    rig: mockRigHealthy,
     selected: false,
-    variant: 'default',
   },
 }
 
 export const Selected: Story = {
   args: {
-    rig: mockRig,
+    rig: mockRigHealthy,
     selected: true,
-    variant: 'default',
   },
 }
 
-export const HealthVariant: Story = {
+export const AllWorking: Story = {
   args: {
-    rig: mockRig,
+    rig: {
+      ...mockRigHealthy,
+      agent_health: {
+        witness: 'working',
+        refinery: 'working',
+        crew: 'working',
+      },
+    },
     selected: false,
-    variant: 'health',
   },
-  decorators: [
-    (Story) => {
-      setupMockFetch(mockAgents)
-      return (
-        <div className="w-64 bg-bg-secondary p-2">
-          <Story />
-        </div>
-      )
-    },
-  ],
 }
 
-export const HealthVariantSelected: Story = {
+export const SomeStuck: Story = {
   args: {
-    rig: mockRig,
-    selected: true,
-    variant: 'health',
-  },
-  decorators: [
-    (Story) => {
-      setupMockFetch(mockAgents)
-      return (
-        <div className="w-64 bg-bg-secondary p-2">
-          <Story />
-        </div>
-      )
-    },
-  ],
-}
-
-export const HealthAllWorking: Story = {
-  args: {
-    rig: mockRig,
+    rig: mockRigSomeStuck,
     selected: false,
-    variant: 'health',
   },
-  decorators: [
-    (Story) => {
-      setupMockFetch(
-        mockAgents.map((a) => ({ ...a, state: 'working' as const }))
-      )
-      return (
-        <div className="w-64 bg-bg-secondary p-2">
-          <Story />
-        </div>
-      )
-    },
-  ],
 }
 
-export const HealthSomeStuck: Story = {
+export const PartialAgents: Story = {
   args: {
-    rig: mockRig,
+    rig: mockRigPartial,
     selected: false,
-    variant: 'health',
   },
-  decorators: [
-    (Story) => {
-      setupMockFetch([
-        { ...mockAgents[0], state: 'stuck' },
-        { ...mockAgents[1], state: 'paused' },
-        { ...mockAgents[2], state: 'idle' },
-      ])
-      return (
-        <div className="w-64 bg-bg-secondary p-2">
-          <Story />
-        </div>
-      )
-    },
-  ],
 }
 
-export const HealthMissingAgents: Story = {
+export const NoAgents: Story = {
   args: {
-    rig: mockRig,
+    rig: mockRigNoAgents,
     selected: false,
-    variant: 'health',
   },
-  decorators: [
-    (Story) => {
-      // Only witness exists, refinery and crew are missing (gray dots)
-      setupMockFetch([mockAgents[0]])
-      return (
-        <div className="w-64 bg-bg-secondary p-2">
-          <Story />
-        </div>
-      )
-    },
-  ],
-}
-
-export const HealthFallbackToCount: Story = {
-  args: {
-    rig: mockRig,
-    selected: false,
-    variant: 'health',
-  },
-  decorators: [
-    (Story) => {
-      // Mock fetch to return error, should fallback to count
-      window.fetch = async () => {
-        return new Response('Not found', { status: 404 })
-      }
-      // Note: cleanup not called in Storybook decorator, but acceptable for stories
-      return (
-        <div className="w-64 bg-bg-secondary p-2">
-          <Story />
-        </div>
-      )
-    },
-  ],
 }
 
 export const AllVariants: Story = {
-  render: () => {
-    setupMockFetch(mockAgents)
-    return (
-      <div className="w-64 bg-bg-secondary p-2 space-y-4">
-        <div>
-          <h4 className="text-xs text-text-muted mb-2">Default variant (count)</h4>
-          <RigItem
-            rig={mockRig}
-            selected={false}
-            variant="default"
-            onClick={() => {}}
-          />
-        </div>
-        <div>
-          <h4 className="text-xs text-text-muted mb-2">Health variant (dots)</h4>
-          <RigItem
-            rig={mockRig}
-            selected={false}
-            variant="health"
-            onClick={() => {}}
-          />
-        </div>
+  render: () => (
+    <div className="w-64 bg-bg-secondary p-2 space-y-4">
+      <div>
+        <h4 className="text-xs text-text-muted mb-2">Healthy agents</h4>
+        <RigItem rig={mockRigHealthy} selected={false} onClick={() => {}} />
       </div>
-    )
-  },
+      <div>
+        <h4 className="text-xs text-text-muted mb-2">Some stuck/paused</h4>
+        <RigItem rig={mockRigSomeStuck} selected={false} onClick={() => {}} />
+      </div>
+      <div>
+        <h4 className="text-xs text-text-muted mb-2">Partial agents (witness only)</h4>
+        <RigItem rig={mockRigPartial} selected={false} onClick={() => {}} />
+      </div>
+      <div>
+        <h4 className="text-xs text-text-muted mb-2">No agents</h4>
+        <RigItem rig={mockRigNoAgents} selected={false} onClick={() => {}} />
+      </div>
+    </div>
+  ),
 }

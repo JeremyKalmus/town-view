@@ -29,20 +29,38 @@ function App() {
   const [updatedIssueIds, setUpdatedIssueIds] = useState<Set<string>>(new Set())
   const [_isFromCache, setIsFromCache] = useState(false)
   const clearTimeoutRef = useRef<Map<string, number>>(new Map())
+  const refreshDebounceRef = useRef<number | null>(null)
+
+  // Debounced refresh to prevent flickering from rapid WebSocket messages
+  const triggerDebouncedRefresh = useCallback(() => {
+    if (refreshDebounceRef.current) {
+      clearTimeout(refreshDebounceRef.current)
+    }
+    refreshDebounceRef.current = window.setTimeout(() => {
+      setRefreshKey((k) => k + 1)
+      refreshDebounceRef.current = null
+    }, 500) // 500ms debounce
+  }, [])
 
   // WebSocket for real-time updates
   const handleWSMessage = useCallback((msg: WSMessage) => {
     console.log('[WS] Received message:', msg)
 
     if (msg.type === 'beads_changed' || msg.type === 'rig_update' || msg.type === 'issue_update' || msg.type === 'issue_changed') {
-      // Trigger refresh when beads change
-      setRefreshKey((k) => k + 1)
+      // Trigger debounced refresh when beads change
+      triggerDebouncedRefresh()
     } else if (msg.type === 'rig_discovered') {
       // Refresh rig list when new rig discovered
-      setRefreshKey((k) => k + 1)
+      triggerDebouncedRefresh()
     } else if (msg.type === 'agent_state_changed') {
       // Refresh when agent state changes
-      setRefreshKey((k) => k + 1)
+      triggerDebouncedRefresh()
+    } else if (msg.type === 'convoy_progress_changed') {
+      // Dispatch to registered convoy progress handlers (in MonitoringView)
+      const handlers = (window as unknown as { __convoyProgressHandlers?: Array<(msg: WSMessage) => void> }).__convoyProgressHandlers
+      if (handlers) {
+        handlers.forEach(handler => handler(msg))
+      }
     }
 
     // Track updated issue ID for flash animation
@@ -68,7 +86,7 @@ function App() {
 
       clearTimeoutRef.current.set(issueId, timeoutId)
     }
-  }, [])
+  }, [triggerDebouncedRefresh])
 
   const { connected } = useWebSocket({
     onMessage: handleWSMessage,

@@ -43,16 +43,25 @@ type DependencyAdd struct {
 	BlockerID string `json:"blocker_id"` // The issue that blocks
 }
 
+// AgentHealth represents health status for sidebar indicators.
+// nil means the role doesn't exist for this rig.
+type AgentHealth struct {
+	Witness  *string `json:"witness"`  // nil, "idle", "working", "stuck", "paused"
+	Refinery *string `json:"refinery"` // nil, "idle", "working", "stuck", "paused"
+	Crew     *string `json:"crew"`     // nil, "idle", "working", "stuck", "paused"
+}
+
 // Rig represents a Gas Town rig.
 type Rig struct {
-	ID         string `json:"id"`
-	Name       string `json:"name"`
-	Prefix     string `json:"prefix"`
-	Path       string `json:"path"`
-	BeadsPath  string `json:"beads_path"`
-	IssueCount int    `json:"issue_count"`
-	OpenCount  int    `json:"open_count"`
-	AgentCount int    `json:"agent_count"`
+	ID          string       `json:"id"`
+	Name        string       `json:"name"`
+	Prefix      string       `json:"prefix"`
+	Path        string       `json:"path"`
+	BeadsPath   string       `json:"beads_path"`
+	IssueCount  int          `json:"issue_count"`
+	OpenCount   int          `json:"open_count"`
+	AgentCount  int          `json:"agent_count"`
+	AgentHealth *AgentHealth `json:"agent_health,omitempty"`
 }
 
 // Agent represents a Gas Town agent.

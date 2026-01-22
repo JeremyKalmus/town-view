@@ -238,7 +238,7 @@ func (d *Discovery) readPrefixFromConfig(path string) string {
 	return ""
 }
 
-// enrichRig adds issue counts to a rig.
+// enrichRig adds issue counts and agent health to a rig.
 func (d *Discovery) enrichRig(rig types.Rig) types.Rig {
 	total, open, err := d.beadsClient.GetIssueCount(rig.Path)
 	if err != nil {
@@ -249,10 +249,22 @@ func (d *Discovery) enrichRig(rig types.Rig) types.Rig {
 	rig.IssueCount = total
 	rig.OpenCount = open
 
-	// Get agent count
-	agents, err := d.beadsClient.GetAgents(rig.Path)
+	// Get agent health (also counts agents)
+	health, err := d.beadsClient.GetAgentHealth(rig.Path)
 	if err == nil {
-		rig.AgentCount = len(agents)
+		rig.AgentHealth = health
+		// Count non-nil roles
+		count := 0
+		if health.Witness != nil {
+			count++
+		}
+		if health.Refinery != nil {
+			count++
+		}
+		if health.Crew != nil {
+			count++
+		}
+		rig.AgentCount = count
 	}
 
 	return rig

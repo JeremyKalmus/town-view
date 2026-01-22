@@ -1,8 +1,7 @@
 import { Cog, Fuel } from 'lucide-react'
-import type { Rig } from '@/types'
+import type { Rig, AgentState, AgentHealth } from '@/types'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui'
-import { useAgents, healthIndicatorRoles, roleLabels } from '@/hooks/useAgents'
 
 interface SidebarProps {
   rigs: Rig[]
@@ -84,58 +83,56 @@ export function Sidebar({ rigs, selectedRig, onSelectRig, loading, connected, ht
   )
 }
 
-export type RigItemVariant = 'default' | 'health'
-
 export interface RigItemProps {
   rig: Rig
   selected: boolean
   onClick: () => void
-  /** Variant: 'default' shows issue count, 'health' shows agent status dots */
-  variant?: RigItemVariant
+}
+
+/** Role labels for tooltips */
+const roleLabels = {
+  witness: 'Witness',
+  refinery: 'Refinery',
+  crew: 'Crew',
 }
 
 /**
- * Default indicator showing open issue count.
+ * Health indicator showing agent status dots.
+ * Uses agent_health from rig data (no extra API calls).
+ * Shows dots only for roles that exist for this rig.
  */
-function CountIndicator({ count }: { count: number }) {
-  return (
-    <div className="flex items-center gap-1 text-sm text-text-secondary">
-      <span>{count}</span>
-      <span className="w-2 h-2 rounded-full bg-status-open" />
-    </div>
-  )
-}
+function HealthIndicator({ health }: { health?: AgentHealth }) {
+  // If no health data, show nothing (not even gray dots)
+  if (!health) {
+    return null
+  }
 
-/**
- * Health indicator with fallback to count.
- * Shows 3 dots for Witness/Refinery/Crew status, falls back to count on error.
- */
-function HealthIndicatorWithFallback({ rigId, fallbackCount }: { rigId: string; fallbackCount: number }) {
-  const { getRoleHealth, loading, error } = useAgents(rigId)
+  // Only show dots for roles that exist (non-null state)
+  const roles = [
+    { key: 'witness' as const, state: health.witness },
+    { key: 'refinery' as const, state: health.refinery },
+    { key: 'crew' as const, state: health.crew },
+  ].filter(r => r.state !== null)
 
-  // Fallback to count indicator if loading or error
-  if (loading || error) {
-    return <CountIndicator count={fallbackCount} />
+  if (roles.length === 0) {
+    return null
   }
 
   return (
     <div className="flex items-center gap-1" title="Witness | Refinery | Crew">
-      {healthIndicatorRoles.map((role) => {
-        const health = getRoleHealth(role)
-        return (
-          <Badge
-            key={role}
-            variant="health-dot"
-            state={health}
-            title={`${roleLabels[role]}: ${health ?? 'not present'}`}
-          />
-        )
-      })}
+      {roles.map(({ key, state }) => (
+        <Badge
+          key={key}
+          variant="health-dot"
+          state={state as AgentState}
+          title={`${roleLabels[key]}: ${state}`}
+        />
+      ))}
     </div>
   )
 }
 
-export function RigItem({ rig, selected, onClick, variant = 'default' }: RigItemProps) {
+export function RigItem({ rig, selected, onClick }: RigItemProps) {
   return (
     <button
       onClick={onClick}
@@ -151,11 +148,7 @@ export function RigItem({ rig, selected, onClick, variant = 'default' }: RigItem
         <div className="font-medium truncate">{rig.name}</div>
         <div className="text-xs text-text-muted">{rig.prefix}</div>
       </div>
-      {variant === 'health' ? (
-        <HealthIndicatorWithFallback rigId={rig.id} fallbackCount={rig.open_count} />
-      ) : (
-        <CountIndicator count={rig.open_count} />
-      )}
+      <HealthIndicator health={rig.agent_health} />
     </button>
   )
 }

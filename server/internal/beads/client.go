@@ -118,20 +118,35 @@ func (c *Client) UpdateIssue(rigPath, issueID string, update types.IssueUpdate) 
 	return c.GetIssue(rigPath, issueID)
 }
 
-// GetAgents returns agents for a rig using gt status --json for live data.
-// Falls back to beads-based lookup if gt status fails.
+// GetAgents returns agents for a rig using beads-based lookup.
+// Note: gt status --json was too expensive (spawns many bd processes).
 func (c *Client) GetAgents(rigPath string) ([]types.Agent, error) {
-	// Extract rig name from path (e.g., "townview" from "townview" or "townview/crew/max")
-	rigName := strings.Split(rigPath, "/")[0]
+	// Use beads-based lookup directly - gt status is too expensive
+	return c.getAgentsFromBeads(rigPath)
+}
 
-	// Try gt status --json first (live data from tmux + hooks)
-	agents, err := c.getAgentsFromStatus(rigName)
+// GetAgentHealth returns health indicators for the 3 main roles (witness, refinery, crew).
+// Returns nil for roles that don't exist for this rig.
+func (c *Client) GetAgentHealth(rigPath string) (*types.AgentHealth, error) {
+	agents, err := c.getAgentsFromBeads(rigPath)
 	if err != nil {
-		slog.Warn("gt status failed, falling back to beads", "error", err)
-		return c.getAgentsFromBeads(rigPath)
+		return nil, err
 	}
 
-	return agents, nil
+	health := &types.AgentHealth{}
+	for _, agent := range agents {
+		state := agent.State
+		switch agent.RoleType {
+		case types.RoleWitness:
+			health.Witness = &state
+		case types.RoleRefinery:
+			health.Refinery = &state
+		case types.RoleCrew:
+			health.Crew = &state
+		}
+	}
+
+	return health, nil
 }
 
 // getAgentsFromStatus returns agents by parsing gt status --json output.
@@ -276,6 +291,7 @@ func (c *Client) runGTFromRoot(args ...string) ([]byte, error) {
 
 // getAgentsFromBeads returns agents using the legacy beads-based lookup.
 // Used as fallback when gt status is unavailable.
+// rigName is used to filter agents to only those belonging to this rig.
 func (c *Client) getAgentsFromBeads(rigPath string) ([]types.Agent, error) {
 	args := []string{"list", "--json", "--type", "agent", "--all", "-n", "0"}
 
@@ -289,12 +305,21 @@ func (c *Client) getAgentsFromBeads(rigPath string) ([]types.Agent, error) {
 		return nil, fmt.Errorf("failed to parse agent issues: %w", err)
 	}
 
-	// Convert issues to agents
+	// Determine rig name from path for filtering
+	rigName := rigPath
+	if rigName == "." {
+		rigName = "hq"
+	}
+
+	// Convert issues to agents, filtering by rig
 	agents := make([]types.Agent, 0, len(issues))
 	for _, issue := range issues {
 		agent := issueToAgent(issue)
 		if agent != nil {
-			agents = append(agents, *agent)
+			// Filter: only include agents belonging to this rig
+			if agent.Rig == rigName {
+				agents = append(agents, *agent)
+			}
 		}
 	}
 

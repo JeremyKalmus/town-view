@@ -62,6 +62,14 @@ export interface Issue {
   convoy?: ConvoyInfo;
 }
 
+// Agent health for sidebar indicators
+// null means the role doesn't exist for this rig
+export interface AgentHealth {
+  witness: AgentState | null;
+  refinery: AgentState | null;
+  crew: AgentState | null;
+}
+
 // Rig interface
 export interface Rig {
   id: string;
@@ -72,6 +80,7 @@ export interface Rig {
   issue_count: number;
   open_count: number;
   agent_count: number;
+  agent_health?: AgentHealth;
 }
 
 // Agent interface

@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState, useCallback } from 'react'
-import type { Rig, Agent, Issue, MoleculeProgress, ActivityEvent, WSMessage, ConvoyProgressEvent } from '@/types'
+import type { Rig, Agent, Issue, ActivityEvent, WSMessage, ConvoyProgressEvent } from '@/types'
 import { AgentCard } from './AgentCard'
 import { cachedFetch } from '@/services/cache'
 import { cn, getAgentRoleIcon, formatRelativeTime } from '@/lib/utils'
 import { SkeletonAgentGrid, SkeletonWorkList, ErrorState } from '@/components/ui/Skeleton'
-import { useWebSocket } from '@/hooks/useWebSocket'
 import { useMonitoringStore } from '@/stores/monitoring-store'
 import {
   WorkItemRow,
@@ -62,70 +61,54 @@ export function MonitoringView({ rig, refreshKey = 0, updatedIssueIds = new Set(
   // Monitoring store for progress and activity
   const {
     progressCache,
-    setProgress,
     activityEvents,
     setActivityEvents,
-    addActivityEvent,
   } = useMonitoringStore()
 
-  // Handle WebSocket messages for monitoring events
-  const handleWebSocketMessage = useCallback((msg: WSMessage) => {
-    // Only process messages for this rig
+  // Handle convoy progress updates from WebSocket
+  // Note: General WebSocket updates (issue_changed, etc.) are handled by App.tsx via refreshKey.
+  // This callback only handles convoy_progress_changed for instant UI updates without refetching.
+  const handleConvoyProgress = useCallback((msg: WSMessage) => {
     if (msg.rig && msg.rig !== rig.id) return
+    if (msg.type !== 'convoy_progress_changed') return
 
-    switch (msg.type) {
-      case 'issue_changed':
-      case 'issue_update':
-        // Issue was updated, refresh will pick it up
-        break
-
-      case 'convoy_progress_changed':
-        // Convoy progress changed - update convoy info in local issues state
-        if (msg.payload) {
-          const progressEvent = msg.payload as unknown as ConvoyProgressEvent
-          setIssues(prevIssues => prevIssues.map(issue => {
-            if (issue.convoy?.id === progressEvent.convoy_id) {
-              // Update the convoy progress for this issue
-              return {
-                ...issue,
-                convoy: {
-                  ...issue.convoy,
-                  progress: {
-                    completed: progressEvent.closed,
-                    total: progressEvent.total,
-                    percentage: progressEvent.total > 0
-                      ? Math.round((progressEvent.closed / progressEvent.total) * 100)
-                      : 0,
-                  },
-                },
-              }
-            }
-            return issue
-          }))
-        }
-        break
-
-      default:
-        // Handle custom monitoring events via payload type
-        if (msg.payload) {
-          const payloadType = (msg.payload as { type?: string }).type
-
-          if (payloadType === 'activity_event') {
-            const event = msg.payload as unknown as ActivityEvent
-            addActivityEvent(event)
-          } else if (payloadType === 'molecule_progress') {
-            const progress = msg.payload as unknown as MoleculeProgress
-            setProgress(progress.issue_id, progress)
+    if (msg.payload) {
+      const progressEvent = msg.payload as unknown as ConvoyProgressEvent
+      setIssues(prevIssues => prevIssues.map(issue => {
+        if (issue.convoy?.id === progressEvent.convoy_id) {
+          return {
+            ...issue,
+            convoy: {
+              ...issue.convoy,
+              progress: {
+                completed: progressEvent.closed,
+                total: progressEvent.total,
+                percentage: progressEvent.total > 0
+                  ? Math.round((progressEvent.closed / progressEvent.total) * 100)
+                  : 0,
+              },
+            },
           }
         }
-        break
+        return issue
+      }))
     }
-  }, [rig.id, addActivityEvent, setProgress])
+  }, [rig.id])
 
-  // Connect to WebSocket
-  useWebSocket({
-    onMessage: handleWebSocketMessage,
-  })
+  // Subscribe to convoy progress updates via App.tsx's shared WebSocket
+  // The useEffect registers a listener that App.tsx can call
+  useEffect(() => {
+    // Store the handler on window for App.tsx to call
+    // This is a lightweight approach - no extra WebSocket connection
+    const handlers = (window as unknown as { __convoyProgressHandlers?: Array<(msg: WSMessage) => void> }).__convoyProgressHandlers || []
+    handlers.push(handleConvoyProgress)
+    ;(window as unknown as { __convoyProgressHandlers: Array<(msg: WSMessage) => void> }).__convoyProgressHandlers = handlers
+
+    return () => {
+      const idx = handlers.indexOf(handleConvoyProgress)
+      if (idx >= 0) handlers.splice(idx, 1)
+    }
+  }, [handleConvoyProgress])
 
   // Fetch agents for rig
   useEffect(() => {
