@@ -93,7 +93,7 @@ export interface IssueUpdate {
 
 // WebSocket message
 export interface WSMessage {
-  type: 'issue_changed' | 'issue_created' | 'issue_update' | 'beads_changed' | 'rig_discovered' | 'rig_update' | 'agent_state_changed' | 'mail_received';
+  type: 'issue_changed' | 'issue_created' | 'issue_update' | 'beads_changed' | 'rig_discovered' | 'rig_update' | 'agent_state_changed' | 'mail_received' | 'convoy_progress_changed';
   rig?: string;
   payload?: Record<string, unknown>;
 }
@@ -183,6 +183,16 @@ export interface MoleculeProgress {
   total_steps: number;
   step_name: string;
   status: string;
+}
+
+// Convoy progress tracking
+export interface ConvoyProgress {
+  convoy_id: string;
+  total: number;       // Total tracked issues
+  open: number;        // Issues with status 'open'
+  in_progress: number; // Issues with status 'in_progress'
+  blocked: number;     // Issues with status 'blocked'
+  closed: number;      // Issues with status 'closed'
 }
 
 // Agent terminal output peek

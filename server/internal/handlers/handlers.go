@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/gastown/townview/internal/beads"
+	"github.com/gastown/townview/internal/convoy"
 	"github.com/gastown/townview/internal/mail"
 	"github.com/gastown/townview/internal/rigs"
 	"github.com/gastown/townview/internal/types"
@@ -16,19 +17,21 @@ import (
 
 // Handlers holds the HTTP handlers and their dependencies.
 type Handlers struct {
-	rigDiscovery *rigs.Discovery
-	beadsClient  *beads.Client
-	mailClient   *mail.Client
-	wsHub        *ws.Hub
+	rigDiscovery    *rigs.Discovery
+	beadsClient     *beads.Client
+	mailClient      *mail.Client
+	wsHub           *ws.Hub
+	convoyNotifier  *convoy.Notifier
 }
 
 // New creates a new Handlers instance.
 func New(rigDiscovery *rigs.Discovery, beadsClient *beads.Client, mailClient *mail.Client, wsHub *ws.Hub) *Handlers {
 	return &Handlers{
-		rigDiscovery: rigDiscovery,
-		beadsClient:  beadsClient,
-		mailClient:   mailClient,
-		wsHub:        wsHub,
+		rigDiscovery:   rigDiscovery,
+		beadsClient:    beadsClient,
+		mailClient:     mailClient,
+		wsHub:          wsHub,
+		convoyNotifier: convoy.NewNotifier(beadsClient, wsHub),
 	}
 }
 
@@ -152,6 +155,9 @@ func (h *Handlers) UpdateIssue(w http.ResponseWriter, r *http.Request) {
 		Rig:     rigID,
 		Payload: issue,
 	})
+
+	// Notify convoy progress change (debounced)
+	h.convoyNotifier.NotifyIssueChanged(rigID, rig.Path, issueID)
 
 	writeJSON(w, issue)
 }
