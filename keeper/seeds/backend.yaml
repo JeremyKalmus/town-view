@@ -48,12 +48,12 @@ api_routes:
     auth: none
     description: "List agents for a rig"
 
-  # WebSocket
+  # Server-Sent Events (SSE)
   - method: GET
-    path: /ws
-    handler: handlers.WebSocketHandler
+    path: /api/events
+    handler: handlers.EventsHandler
     auth: none
-    description: "Real-time updates subscription"
+    description: "Real-time updates via Server-Sent Events (SSE)"
 
 services:
   - name: RigDiscovery
@@ -75,10 +75,15 @@ services:
     responsibility: "Watch .beads directories for changes"
     dependencies: [fsnotify]
 
-  - name: WebSocketHub
-    location: internal/ws/hub.go
-    responsibility: "Manage WebSocket connections and broadcast changes"
+  - name: EventBroadcaster
+    location: internal/events/broadcaster.go
+    responsibility: "Thread-safe SSE client management and event broadcasting"
     dependencies: []
+    methods:
+      - Register: "Add SSE client channel"
+      - Unregister: "Remove SSE client channel"
+      - Broadcast: "Send event to all connected clients"
+      - Run: "Main event loop for client management"
 
   - name: IssueService
     location: internal/issues/service.go
@@ -117,19 +122,24 @@ logging:
     - duration_ms
 
 events:
-  # WebSocket broadcast events
+  # SSE broadcast events (via EventBroadcaster)
+  # Format: data: {"type":"<event>", ...payload}\n\n
   - name: issue_changed
-    payload: "{ rig: string, issue: Issue }"
+    payload: "{ type: 'issue_changed', rig: string, issue: Issue }"
     when: "After bd update succeeds"
 
   - name: issue_created
-    payload: "{ rig: string, issue: Issue }"
+    payload: "{ type: 'issue_created', rig: string, issue: Issue }"
     when: "New issue detected via file watcher"
 
   - name: rig_discovered
-    payload: "{ rig: Rig }"
+    payload: "{ type: 'rig_discovered', rig: Rig }"
     when: "New rig detected"
 
   - name: agent_state_changed
-    payload: "{ rig: string, agent: Agent }"
+    payload: "{ type: 'agent_state_changed', rig: string, agent: Agent }"
     when: "Agent bead state changes"
+
+  - name: convoy_progress
+    payload: "{ type: 'convoy_progress', rig: string, convoy: string, progress: ConvoyProgress }"
+    when: "Convoy task completion updates"

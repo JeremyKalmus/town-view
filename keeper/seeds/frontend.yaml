@@ -112,10 +112,14 @@ hooks:
     purpose: "Fetch issues for a rig with filters"
     return_type: "{ issues: Issue[], isLoading: boolean, error: Error | null }"
 
-  - name: useWebSocket
-    location: src/hooks/use-websocket.ts
-    purpose: "Real-time updates subscription"
-    return_type: "{ connected: boolean, lastMessage: Message | null }"
+  - name: useEventSource
+    location: src/hooks/useEventSource.ts
+    purpose: "Real-time updates via Server-Sent Events (SSE)"
+    return_type: "{ connected: boolean, lastEvent: string | null }"
+    notes: |
+      Uses native EventSource API for SSE connections.
+      Replaces useWebSocket hook as per ADR-005.
+      Auto-reconnects on connection loss.
 
   - name: useIssueUpdate
     location: src/hooks/use-issue-update.ts
