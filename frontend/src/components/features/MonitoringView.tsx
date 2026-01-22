@@ -4,7 +4,7 @@ import { cachedFetch } from '@/services/cache'
 import { cn } from '@/lib/class-utils'
 import { formatRelativeTime } from '@/lib/status-utils'
 import { SkeletonAgentGrid, ErrorState } from '@/components/ui/Skeleton'
-import { AgentPeekPanel } from './monitoring'
+import { AgentPeekPanel, ActiveConvoysPanel } from './monitoring'
 
 interface MonitoringViewProps {
   rig: Rig
@@ -191,6 +191,9 @@ export function MonitoringView({ rig, refreshKey = 0 }: MonitoringViewProps) {
           )}
         </div>
       </div>
+
+      {/* Active Convoys Panel - positioned above agent sections */}
+      <ActiveConvoysPanel rigId={rig.id} className="mb-6" />
 
       {/* Error state */}
       {agentsError && !loading && (
