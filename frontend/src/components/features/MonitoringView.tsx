@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useCallback } from 'react'
-import type { Rig, Agent, Issue, MoleculeProgress, ActivityEvent, WSMessage } from '@/types'
+import type { Rig, Agent, Issue, MoleculeProgress, ActivityEvent, WSMessage, ConvoyProgressEvent } from '@/types'
 import { AgentCard } from './AgentCard'
 import { cachedFetch } from '@/services/cache'
 import { cn, getAgentRoleIcon, formatRelativeTime } from '@/lib/utils'
@@ -10,6 +10,7 @@ import {
   WorkItemRow,
   ActivityFeed,
   AgentPeekPanel,
+  ConvoyGroupHeader,
 } from './monitoring'
 
 interface MonitoringViewProps {
@@ -78,6 +79,32 @@ export function MonitoringView({ rig, refreshKey = 0, updatedIssueIds = new Set(
         // Issue was updated, refresh will pick it up
         break
 
+      case 'convoy_progress_changed':
+        // Convoy progress changed - update convoy info in local issues state
+        if (msg.payload) {
+          const progressEvent = msg.payload as unknown as ConvoyProgressEvent
+          setIssues(prevIssues => prevIssues.map(issue => {
+            if (issue.convoy?.id === progressEvent.convoy_id) {
+              // Update the convoy progress for this issue
+              return {
+                ...issue,
+                convoy: {
+                  ...issue.convoy,
+                  progress: {
+                    completed: progressEvent.closed,
+                    total: progressEvent.total,
+                    percentage: progressEvent.total > 0
+                      ? Math.round((progressEvent.closed / progressEvent.total) * 100)
+                      : 0,
+                  },
+                },
+              }
+            }
+            return issue
+          }))
+        }
+        break
+
       default:
         // Handle custom monitoring events via payload type
         if (msg.payload) {
@@ -129,13 +156,13 @@ export function MonitoringView({ rig, refreshKey = 0, updatedIssueIds = new Set(
     fetchAgents()
   }, [rig.id, refreshKey, retryCount])
 
-  // Fetch issues for in-flight work section
+  // Fetch issues for in-flight work section (with convoy enrichment)
   useEffect(() => {
     setIssuesLoading(true)
     setIssuesError(null)
 
     const fetchIssues = async () => {
-      const url = `/api/rigs/${rig.id}/issues?all=true`
+      const url = `/api/rigs/${rig.id}/issues?all=true&include=convoy`
       const result = await cachedFetch<Issue[]>(url, {
         cacheTTL: 2 * 60 * 1000,
         returnStaleOnError: true,
@@ -186,6 +213,32 @@ export function MonitoringView({ rig, refreshKey = 0, updatedIssueIds = new Set(
       .filter(issue => issue.status === 'in_progress')
       .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
   }, [issues])
+
+  // Group in-flight work by convoy
+  const groupedByConvoy = useMemo(() => {
+    const groups = new Map<string | null, Issue[]>()
+
+    inFlightWork.forEach(issue => {
+      const convoyId = issue.convoy?.id ?? null
+      if (!groups.has(convoyId)) {
+        groups.set(convoyId, [])
+      }
+      groups.get(convoyId)!.push(issue)
+    })
+
+    // Sort groups: convoys with most recent activity first, ungrouped (null) last
+    const sortedEntries = Array.from(groups.entries()).sort((a, b) => {
+      // Null (ungrouped) always goes last
+      if (a[0] === null) return 1
+      if (b[0] === null) return -1
+      // Sort by most recent updated_at in the group
+      const aLatest = Math.max(...a[1].map(i => new Date(i.updated_at).getTime()))
+      const bLatest = Math.max(...b[1].map(i => new Date(i.updated_at).getTime()))
+      return bLatest - aLatest
+    })
+
+    return new Map(sortedEntries)
+  }, [inFlightWork])
 
   // Get recently completed work (closed in last 24 hours)
   const recentlyCompleted = useMemo(() => {
@@ -302,7 +355,7 @@ export function MonitoringView({ rig, refreshKey = 0, updatedIssueIds = new Set(
         </div>
       )}
 
-      {/* In-flight work section - using WorkItemRow */}
+      {/* In-flight work section - grouped by convoy */}
       {!agentsError && (
         <div className="mb-8">
           <div className="flex items-center gap-2 mb-4">
@@ -311,37 +364,87 @@ export function MonitoringView({ rig, refreshKey = 0, updatedIssueIds = new Set(
               IN-FLIGHT WORK ({inFlightWork.length})
             </h2>
           </div>
-          <div className="card">
-            {issuesLoading ? (
+          {issuesLoading ? (
+            <div className="card">
               <SkeletonWorkList count={3} />
-            ) : issuesError ? (
+            </div>
+          ) : issuesError ? (
+            <div className="card">
               <div className="py-8 text-center text-status-blocked text-sm">
                 {issuesError}
               </div>
-            ) : inFlightWork.length === 0 ? (
+            </div>
+          ) : inFlightWork.length === 0 ? (
+            <div className="card">
               <div className="py-8 text-center text-text-muted">
                 No work currently in progress
               </div>
-            ) : (
-              <div className="divide-y divide-border">
-                {inFlightWork.map((issue) => {
-                  const agent = issue.assignee ? agentsByName.get(issue.assignee) : undefined
-                  const progress = progressCache.get(issue.id)
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {Array.from(groupedByConvoy.entries()).map(([convoyId, issues]) => {
+                if (convoyId !== null) {
+                  // Convoy group - use ConvoyGroupHeader
+                  const convoy = issues[0].convoy!
                   return (
-                    <WorkItemRow
-                      key={issue.id}
-                      issue={issue}
-                      agent={agent}
-                      durationMs={getIssueDuration(issue)}
-                      progress={progress}
-                      isUpdated={updatedIssueIds.has(issue.id)}
-                      onClick={agent?.state === 'working' ? () => handleWorkItemClick(issue) : undefined}
-                    />
+                    <ConvoyGroupHeader
+                      key={convoyId}
+                      convoyId={convoyId}
+                      title={convoy.title}
+                      progress={convoy.progress}
+                      itemCount={issues.length}
+                    >
+                      <div className="divide-y divide-border">
+                        {issues.map((issue) => {
+                          const agent = issue.assignee ? agentsByName.get(issue.assignee) : undefined
+                          const progress = progressCache.get(issue.id)
+                          return (
+                            <WorkItemRow
+                              key={issue.id}
+                              issue={issue}
+                              agent={agent}
+                              durationMs={getIssueDuration(issue)}
+                              progress={progress}
+                              isUpdated={updatedIssueIds.has(issue.id)}
+                              onClick={agent?.state === 'working' ? () => handleWorkItemClick(issue) : undefined}
+                            />
+                          )
+                        })}
+                      </div>
+                    </ConvoyGroupHeader>
                   )
-                })}
-              </div>
-            )}
-          </div>
+                } else {
+                  // Ungrouped work section
+                  return (
+                    <div key="ungrouped" className="rounded-lg border border-border bg-bg-secondary">
+                      <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
+                        <span className="text-text-muted text-sm">──</span>
+                        <span className="text-text-muted text-sm font-medium">Ungrouped Work</span>
+                        <span className="text-text-muted text-xs">({issues.length})</span>
+                      </div>
+                      <div className="divide-y divide-border">
+                        {issues.map((issue) => {
+                          const agent = issue.assignee ? agentsByName.get(issue.assignee) : undefined
+                          const progress = progressCache.get(issue.id)
+                          return (
+                            <WorkItemRow
+                              key={issue.id}
+                              issue={issue}
+                              agent={agent}
+                              durationMs={getIssueDuration(issue)}
+                              progress={progress}
+                              isUpdated={updatedIssueIds.has(issue.id)}
+                              onClick={agent?.state === 'working' ? () => handleWorkItemClick(issue) : undefined}
+                            />
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                }
+              })}
+            </div>
+          )}
         </div>
       )}
 
