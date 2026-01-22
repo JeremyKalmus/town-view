@@ -1,7 +1,7 @@
 import { cn } from '@/lib/utils'
 import type { AgentState } from '@/types'
 
-export type BadgeVariant = 'status' | 'health-dot'
+export type BadgeVariant = 'status' | 'health-dot' | 'progress'
 
 interface BadgeBaseProps {
   /** Badge variant */
@@ -26,7 +26,15 @@ interface HealthDotBadgeProps extends BadgeBaseProps {
   title?: string
 }
 
-export type BadgeProps = StatusBadgeProps | HealthDotBadgeProps
+interface ProgressBadgeProps extends BadgeBaseProps {
+  variant: 'progress'
+  /** Number of completed items */
+  completed: number
+  /** Total number of items */
+  total: number
+}
+
+export type BadgeProps = StatusBadgeProps | HealthDotBadgeProps | ProgressBadgeProps
 
 const statusColorClasses = {
   default: 'bg-bg-tertiary text-text-secondary border-border',
@@ -57,6 +65,7 @@ const healthDotColorClasses: Record<AgentState | 'none', string> = {
  *
  * - status: Text badge with colored background
  * - health-dot: Small circular indicator showing agent health state
+ * - progress: Shows completion status as X/Y with color based on percentage
  */
 export function Badge(props: BadgeProps) {
   if (props.variant === 'health-dot') {
@@ -73,6 +82,31 @@ export function Badge(props: BadgeProps) {
         title={title}
         aria-label={title}
       />
+    )
+  }
+
+  if (props.variant === 'progress') {
+    const { completed, total, className } = props
+    const percentage = total > 0 ? completed / total : 0
+
+    // Color based on completion: 100% = green, 1-99% = yellow, 0% = gray
+    const colorClass =
+      percentage === 1
+        ? 'bg-status-closed/10 text-status-closed'
+        : percentage > 0
+          ? 'bg-status-in-progress/10 text-status-in-progress'
+          : 'bg-bg-tertiary text-text-muted'
+
+    return (
+      <span
+        className={cn(
+          'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium',
+          colorClass,
+          className
+        )}
+      >
+        {completed}/{total}
+      </span>
     )
   }
 

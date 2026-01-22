@@ -154,3 +154,52 @@ export const HealthIndicatorExample: Story = {
     </div>
   ),
 }
+
+export const ProgressComplete: Story = {
+  args: {
+    variant: 'progress',
+    completed: 5,
+    total: 5,
+  },
+}
+
+export const ProgressPartial: Story = {
+  args: {
+    variant: 'progress',
+    completed: 3,
+    total: 5,
+  },
+}
+
+export const ProgressEmpty: Story = {
+  args: {
+    variant: 'progress',
+    completed: 0,
+    total: 5,
+  },
+}
+
+export const AllProgressStates: Story = {
+  render: () => (
+    <div className="space-y-4">
+      <h3 className="text-lg font-medium">Progress Badge States</h3>
+      <p className="text-sm text-text-secondary">
+        Shows convoy completion progress with color-coded status
+      </p>
+      <div className="flex items-center gap-6">
+        <div className="flex items-center gap-2">
+          <Badge variant="progress" completed={5} total={5} />
+          <span className="text-sm text-text-secondary">Complete (green)</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Badge variant="progress" completed={3} total={5} />
+          <span className="text-sm text-text-secondary">Partial (yellow)</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Badge variant="progress" completed={0} total={5} />
+          <span className="text-sm text-text-secondary">Empty (gray)</span>
+        </div>
+      </div>
+    </div>
+  ),
+}
