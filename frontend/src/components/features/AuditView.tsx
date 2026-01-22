@@ -177,9 +177,9 @@ export function AuditView({ updatedIssueIds = new Set() }: AuditViewProps) {
     return completedWork.filter((issue) => issue.assignee === selectedAgentFilter)
   }, [completedWork, selectedAgentFilter])
 
-  // Calculate metrics from completed work
+  // Calculate metrics from filtered completed work (includes all filters: date range, convoy, agent)
   const metrics: AuditMetrics = useMemo(() => {
-    if (completedWork.length === 0) {
+    if (filteredCompletedWork.length === 0) {
       return {
         timeToComplete: { avg: 0, min: 0, max: 0 },
         completionCount: 0,
@@ -188,7 +188,7 @@ export function AuditView({ updatedIssueIds = new Set() }: AuditViewProps) {
     }
 
     // Calculate time to complete for each issue
-    const completionTimes = completedWork
+    const completionTimes = filteredCompletedWork
       .filter((issue) => issue.closed_at && issue.created_at)
       .map((issue) => {
         const created = new Date(issue.created_at).getTime()
@@ -205,20 +205,20 @@ export function AuditView({ updatedIssueIds = new Set() }: AuditViewProps) {
 
     // Calculate type breakdown
     const typeBreakdown = {
-      bugs: completedWork.filter((issue) => issue.issue_type === 'bug').length,
-      tasks: completedWork.filter((issue) => issue.issue_type === 'task').length,
-      features: completedWork.filter((issue) => issue.issue_type === 'feature').length,
+      bugs: filteredCompletedWork.filter((issue) => issue.issue_type === 'bug').length,
+      tasks: filteredCompletedWork.filter((issue) => issue.issue_type === 'task').length,
+      features: filteredCompletedWork.filter((issue) => issue.issue_type === 'feature').length,
     }
 
     return {
       timeToComplete: { avg, min, max },
-      completionCount: completedWork.length,
+      completionCount: filteredCompletedWork.length,
       typeBreakdown,
       anomalyThresholds: {
         timeToComplete: 7 * 24 * 60 * 60 * 1000, // 7 days
       },
     }
-  }, [completedWork])
+  }, [filteredCompletedWork])
 
   if (!selectedRig) {
     return (
