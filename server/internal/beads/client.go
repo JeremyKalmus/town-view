@@ -3,6 +3,7 @@ package beads
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -14,6 +15,10 @@ import (
 
 	"github.com/gastown/townview/internal/types"
 )
+
+// gtCommandTimeout is the maximum time to wait for gt commands to complete.
+// This prevents hanging when gt status or other commands don't return.
+const gtCommandTimeout = 10 * time.Second
 
 // Client wraps the bd CLI for issue operations.
 type Client struct {
@@ -266,13 +271,17 @@ func mapGTRole(gtRole string) string {
 }
 
 // runGTFromRoot executes a gt command from the town root directory.
+// Uses a timeout to prevent hanging on slow or unresponsive commands.
 func (c *Client) runGTFromRoot(args ...string) ([]byte, error) {
 	gtPath := os.Getenv("GT_PATH")
 	if gtPath == "" {
 		gtPath = "gt"
 	}
 
-	cmd := exec.Command(gtPath, args...)
+	ctx, cancel := context.WithTimeout(context.Background(), gtCommandTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, gtPath, args...)
 	cmd.Dir = c.townRoot
 
 	var stdout, stderr bytes.Buffer
@@ -282,6 +291,10 @@ func (c *Client) runGTFromRoot(args ...string) ([]byte, error) {
 	slog.Debug("Running gt command from root", "args", args, "dir", c.townRoot)
 
 	if err := cmd.Run(); err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			slog.Error("gt command timed out", "args", args, "timeout", gtCommandTimeout)
+			return nil, fmt.Errorf("command timed out after %v", gtCommandTimeout)
+		}
 		slog.Error("gt command failed", "args", args, "stderr", stderr.String(), "error", err)
 		return nil, fmt.Errorf("%s: %s", err, stderr.String())
 	}
@@ -609,13 +622,17 @@ func (c *Client) GetDependencies(rigPath string) ([]types.Dependency, error) {
 }
 
 // runGT executes a gt command in the given rig path.
+// Uses a timeout to prevent hanging on slow or unresponsive commands.
 func (c *Client) runGT(rigPath string, args ...string) ([]byte, error) {
 	gtPath := os.Getenv("GT_PATH")
 	if gtPath == "" {
 		gtPath = "gt"
 	}
 
-	cmd := exec.Command(gtPath, args...)
+	ctx, cancel := context.WithTimeout(context.Background(), gtCommandTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, gtPath, args...)
 	cmd.Dir = filepath.Join(c.townRoot, rigPath)
 
 	var stdout, stderr bytes.Buffer
@@ -625,6 +642,10 @@ func (c *Client) runGT(rigPath string, args ...string) ([]byte, error) {
 	slog.Debug("Running gt command", "args", args, "dir", cmd.Dir)
 
 	if err := cmd.Run(); err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			slog.Error("gt command timed out", "args", args, "timeout", gtCommandTimeout)
+			return nil, fmt.Errorf("command timed out after %v", gtCommandTimeout)
+		}
 		slog.Error("gt command failed", "args", args, "stderr", stderr.String(), "error", err)
 		return nil, fmt.Errorf("%s: %s", err, stderr.String())
 	}
