@@ -50,21 +50,47 @@ export function AgentPeekPanel({
   // Get role config for display
   const roleConfig = agent ? getAgentViewConfig(agent.role_type) : null
 
+  // Helper to check if a field matches the agent
+  const matchesAgent = (field: string | undefined, agentPatterns: string[]): boolean => {
+    if (!field) return false
+    const fieldLower = field.toLowerCase()
+    return agentPatterns.some(pattern =>
+      fieldLower === pattern ||
+      fieldLower.endsWith(`/${pattern}`) ||
+      fieldLower.includes(pattern)
+    )
+  }
+
   // Separate work beads from event beads (ADR-004)
   // Apply role-specific filtering for refinery (merge tasks) and witness (patrol beads)
+  // For other roles, filter to work created by or assigned to this agent
   const workBeads = useMemo(() => {
-    const baseWorkBeads = filterToWorkBeads(roleBeads)
+    if (!agent) return []
 
-    // Apply role-specific filters
-    if (agent?.role_type === 'refinery') {
+    // Apply role-specific filters (these show rig-wide data, not agent-specific)
+    if (agent.role_type === 'refinery') {
       return filterRefineryBeads(roleBeads)
     }
-    if (agent?.role_type === 'witness') {
+    if (agent.role_type === 'witness') {
       return filterWitnessBeads(roleBeads)
     }
 
-    return baseWorkBeads
-  }, [roleBeads, agent?.role_type])
+    // For crew/polecat: filter to work created by or assigned to this agent
+    const baseWorkBeads = filterToWorkBeads(roleBeads)
+
+    const agentPatterns = [
+      agent.id.toLowerCase(),
+      agent.name.toLowerCase(),
+      `${agent.role_type}/${agent.name}`.toLowerCase(),
+      `crew/${agent.name}`.toLowerCase(),
+      `polecats/${agent.name}`.toLowerCase(),
+    ]
+
+    return baseWorkBeads.filter(bead =>
+      matchesAgent(bead.created_by, agentPatterns) ||
+      matchesAgent(bead.assignee, agentPatterns)
+    )
+  }, [roleBeads, agent])
 
   // Filter event beads to only those created BY this agent
   const eventBeads = useMemo(() => {
