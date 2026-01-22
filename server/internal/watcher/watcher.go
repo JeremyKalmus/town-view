@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/gastown/townview/internal/events"
 	"github.com/gastown/townview/internal/types"
-	"github.com/gastown/townview/internal/ws"
 )
 
 // pendingEvent tracks a pending file change event.
@@ -22,17 +22,17 @@ type pendingEvent struct {
 
 // Watcher monitors .beads directories for changes.
 type Watcher struct {
-	townRoot   string
-	wsHub      *ws.Hub
-	watcher    *fsnotify.Watcher
-	debounce   time.Duration
-	pending    map[string]*pendingEvent
-	mu         sync.Mutex
-	stopCh     chan struct{}
+	townRoot         string
+	eventBroadcaster *events.Broadcaster
+	watcher          *fsnotify.Watcher
+	debounce         time.Duration
+	pending          map[string]*pendingEvent
+	mu               sync.Mutex
+	stopCh           chan struct{}
 }
 
 // New creates a new file watcher.
-func New(townRoot string, wsHub *ws.Hub) *Watcher {
+func New(townRoot string, eventBroadcaster *events.Broadcaster) *Watcher {
 	debounce := 100 * time.Millisecond
 	if d := os.Getenv("WATCH_DEBOUNCE_MS"); d != "" {
 		if ms, err := time.ParseDuration(d + "ms"); err == nil {
@@ -41,11 +41,11 @@ func New(townRoot string, wsHub *ws.Hub) *Watcher {
 	}
 
 	return &Watcher{
-		townRoot: townRoot,
-		wsHub:    wsHub,
-		debounce: debounce,
-		pending:  make(map[string]*pendingEvent),
-		stopCh:   make(chan struct{}),
+		townRoot:         townRoot,
+		eventBroadcaster: eventBroadcaster,
+		debounce:         debounce,
+		pending:          make(map[string]*pendingEvent),
+		stopCh:           make(chan struct{}),
 	}
 }
 
@@ -191,7 +191,7 @@ func (w *Watcher) flushPending() {
 		rig := w.rigFromPath(path)
 
 		// Broadcast beads_changed event
-		w.wsHub.Broadcast(types.WSMessage{
+		w.eventBroadcaster.Broadcast(types.WSMessage{
 			Type: "beads_changed",
 			Rig:  rig,
 			Payload: map[string]string{
@@ -201,7 +201,7 @@ func (w *Watcher) flushPending() {
 
 		// Also broadcast mail_received if this is a mail-related change
 		if event.isMail {
-			w.wsHub.Broadcast(types.WSMessage{
+			w.eventBroadcaster.Broadcast(types.WSMessage{
 				Type: "mail_received",
 				Rig:  rig,
 				Payload: map[string]string{
