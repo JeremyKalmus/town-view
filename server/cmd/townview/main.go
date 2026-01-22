@@ -10,11 +10,11 @@ import (
 	"path/filepath"
 
 	"github.com/gastown/townview/internal/beads"
+	"github.com/gastown/townview/internal/events"
 	"github.com/gastown/townview/internal/handlers"
 	"github.com/gastown/townview/internal/mail"
 	"github.com/gastown/townview/internal/rigs"
 	"github.com/gastown/townview/internal/watcher"
-	"github.com/gastown/townview/internal/ws"
 )
 
 func main() {
@@ -58,11 +58,11 @@ func main() {
 	beadsClient := beads.NewClient(root)
 	mailClient := mail.NewClient(root)
 	rigDiscovery := rigs.NewDiscovery(root, beadsClient)
-	wsHub := ws.NewHub()
-	fileWatcher := watcher.New(root, wsHub)
+	eventBroadcaster := events.NewBroadcaster()
+	fileWatcher := watcher.New(root, eventBroadcaster)
 
-	// Start WebSocket hub
-	go wsHub.Run()
+	// Start event broadcaster
+	go eventBroadcaster.Run()
 
 	// Start file watcher
 	if err := fileWatcher.Start(); err != nil {
@@ -72,7 +72,8 @@ func main() {
 	defer fileWatcher.Stop()
 
 	// Set up HTTP handlers
-	h := handlers.New(rigDiscovery, beadsClient, mailClient, wsHub)
+	h := handlers.New(rigDiscovery, beadsClient, mailClient, eventBroadcaster)
+	eventsHandler := handlers.NewEventsHandler(eventBroadcaster)
 
 	// Routes
 	mux := http.NewServeMux()
@@ -96,8 +97,8 @@ func main() {
 	// Mail (town-level)
 	mux.HandleFunc("GET /api/mail", h.ListMail)
 
-	// WebSocket
-	mux.HandleFunc("GET /ws", h.WebSocket)
+	// Server-Sent Events
+	mux.Handle("GET /api/events", eventsHandler)
 
 	// Static files (frontend build)
 	mux.Handle("/", http.FileServer(http.Dir("./static")))

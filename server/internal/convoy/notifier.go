@@ -8,14 +8,14 @@ import (
 	"time"
 
 	"github.com/gastown/townview/internal/beads"
+	"github.com/gastown/townview/internal/events"
 	"github.com/gastown/townview/internal/types"
-	"github.com/gastown/townview/internal/ws"
 )
 
 // Notifier handles debounced convoy progress change notifications.
 type Notifier struct {
-	beadsClient *beads.Client
-	wsHub       *ws.Hub
+	beadsClient      *beads.Client
+	eventBroadcaster *events.Broadcaster
 
 	mu             sync.Mutex
 	pendingConvoys map[string]*pendingUpdate // key: rigID:convoyID
@@ -29,12 +29,12 @@ type pendingUpdate struct {
 }
 
 // NewNotifier creates a new convoy progress notifier.
-func NewNotifier(beadsClient *beads.Client, wsHub *ws.Hub) *Notifier {
+func NewNotifier(beadsClient *beads.Client, eventBroadcaster *events.Broadcaster) *Notifier {
 	return &Notifier{
-		beadsClient:    beadsClient,
-		wsHub:          wsHub,
-		pendingConvoys: make(map[string]*pendingUpdate),
-		timers:         make(map[string]*time.Timer),
+		beadsClient:      beadsClient,
+		eventBroadcaster: eventBroadcaster,
+		pendingConvoys:   make(map[string]*pendingUpdate),
+		timers:           make(map[string]*time.Timer),
 	}
 }
 
@@ -93,7 +93,7 @@ func (n *Notifier) flushUpdate(key string) {
 	}
 
 	// Broadcast event
-	n.wsHub.Broadcast(types.WSMessage{
+	n.eventBroadcaster.Broadcast(types.WSMessage{
 		Type: "convoy_progress_changed",
 		Rig:  pending.rigID,
 		Payload: map[string]interface{}{

@@ -28,26 +28,25 @@ func TestBroadcasterRegisterUnregister(t *testing.T) {
 	b := NewBroadcaster()
 	go b.Run()
 
-	client := make(Client, 10)
-	b.Register(client)
+	ch := b.Register()
 
 	// Give time for registration
 	time.Sleep(10 * time.Millisecond)
 
 	b.mu.RLock()
-	if !b.clients[client] {
-		t.Error("client not registered")
+	if len(b.clients) != 1 {
+		t.Errorf("expected 1 client, got %d", len(b.clients))
 	}
 	b.mu.RUnlock()
 
-	b.Unregister(client)
+	b.Unregister(ch)
 
 	// Give time for unregistration
 	time.Sleep(10 * time.Millisecond)
 
 	b.mu.RLock()
-	if b.clients[client] {
-		t.Error("client still registered after unregister")
+	if len(b.clients) != 0 {
+		t.Errorf("expected 0 clients after unregister, got %d", len(b.clients))
 	}
 	b.mu.RUnlock()
 }
@@ -56,10 +55,8 @@ func TestBroadcasterBroadcast(t *testing.T) {
 	b := NewBroadcaster()
 	go b.Run()
 
-	client1 := make(Client, 10)
-	client2 := make(Client, 10)
-	b.Register(client1)
-	b.Register(client2)
+	ch1 := b.Register()
+	ch2 := b.Register()
 
 	// Give time for registration
 	time.Sleep(10 * time.Millisecond)
@@ -69,18 +66,18 @@ func TestBroadcasterBroadcast(t *testing.T) {
 
 	// Check both clients receive the message
 	select {
-	case msg := <-client1:
-		if len(msg) == 0 {
-			t.Error("client1 received empty message")
+	case msg := <-ch1:
+		if msg == nil {
+			t.Error("client1 received nil message")
 		}
 	case <-time.After(100 * time.Millisecond):
 		t.Error("client1 did not receive message")
 	}
 
 	select {
-	case msg := <-client2:
-		if len(msg) == 0 {
-			t.Error("client2 received empty message")
+	case msg := <-ch2:
+		if msg == nil {
+			t.Error("client2 received nil message")
 		}
 	case <-time.After(100 * time.Millisecond):
 		t.Error("client2 did not receive message")
@@ -91,19 +88,18 @@ func TestBroadcasterClientDisconnect(t *testing.T) {
 	b := NewBroadcaster()
 	go b.Run()
 
-	client := make(Client, 10)
-	b.Register(client)
+	ch := b.Register()
 
 	// Give time for registration
 	time.Sleep(10 * time.Millisecond)
 
-	b.Unregister(client)
+	b.Unregister(ch)
 
 	// Give time for unregistration
 	time.Sleep(10 * time.Millisecond)
 
 	// Verify channel is closed
-	_, ok := <-client
+	_, ok := <-ch
 	if ok {
 		t.Error("client channel should be closed after unregister")
 	}

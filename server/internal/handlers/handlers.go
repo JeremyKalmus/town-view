@@ -9,29 +9,29 @@ import (
 
 	"github.com/gastown/townview/internal/beads"
 	"github.com/gastown/townview/internal/convoy"
+	"github.com/gastown/townview/internal/events"
 	"github.com/gastown/townview/internal/mail"
 	"github.com/gastown/townview/internal/rigs"
 	"github.com/gastown/townview/internal/types"
-	"github.com/gastown/townview/internal/ws"
 )
 
 // Handlers holds the HTTP handlers and their dependencies.
 type Handlers struct {
-	rigDiscovery    *rigs.Discovery
-	beadsClient     *beads.Client
-	mailClient      *mail.Client
-	wsHub           *ws.Hub
-	convoyNotifier  *convoy.Notifier
+	rigDiscovery     *rigs.Discovery
+	beadsClient      *beads.Client
+	mailClient       *mail.Client
+	eventBroadcaster *events.Broadcaster
+	convoyNotifier   *convoy.Notifier
 }
 
 // New creates a new Handlers instance.
-func New(rigDiscovery *rigs.Discovery, beadsClient *beads.Client, mailClient *mail.Client, wsHub *ws.Hub) *Handlers {
+func New(rigDiscovery *rigs.Discovery, beadsClient *beads.Client, mailClient *mail.Client, eventBroadcaster *events.Broadcaster) *Handlers {
 	return &Handlers{
-		rigDiscovery:   rigDiscovery,
-		beadsClient:    beadsClient,
-		mailClient:     mailClient,
-		wsHub:          wsHub,
-		convoyNotifier: convoy.NewNotifier(beadsClient, wsHub),
+		rigDiscovery:     rigDiscovery,
+		beadsClient:      beadsClient,
+		mailClient:       mailClient,
+		eventBroadcaster: eventBroadcaster,
+		convoyNotifier:   convoy.NewNotifier(beadsClient, eventBroadcaster),
 	}
 }
 
@@ -161,7 +161,7 @@ func (h *Handlers) UpdateIssue(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Broadcast change
-	h.wsHub.Broadcast(types.WSMessage{
+	h.eventBroadcaster.Broadcast(types.WSMessage{
 		Type:    "issue_changed",
 		Rig:     rigID,
 		Payload: issue,
@@ -243,7 +243,7 @@ func (h *Handlers) AddIssueDependency(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Broadcast change
-	h.wsHub.Broadcast(types.WSMessage{
+	h.eventBroadcaster.Broadcast(types.WSMessage{
 		Type: "issue_changed",
 		Rig:  rigID,
 		Payload: map[string]string{
@@ -276,7 +276,7 @@ func (h *Handlers) RemoveIssueDependency(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Broadcast change
-	h.wsHub.Broadcast(types.WSMessage{
+	h.eventBroadcaster.Broadcast(types.WSMessage{
 		Type: "issue_changed",
 		Rig:  rigID,
 		Payload: map[string]string{
@@ -308,11 +308,6 @@ func (h *Handlers) ListDependencies(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, deps)
-}
-
-// WebSocket handles GET /ws
-func (h *Handlers) WebSocket(w http.ResponseWriter, r *http.Request) {
-	h.wsHub.ServeWS(w, r)
 }
 
 // GetMoleculeProgress handles GET /api/rigs/{rigId}/issues/{issueId}/progress

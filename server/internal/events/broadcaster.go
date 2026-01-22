@@ -2,30 +2,29 @@
 package events
 
 import (
-	"encoding/json"
 	"log/slog"
 	"sync"
 )
 
-// Client represents an SSE client channel.
-type Client chan []byte
+// client represents an SSE client channel.
+type client chan interface{}
 
 // Broadcaster manages SSE client connections and broadcasts events.
 type Broadcaster struct {
-	clients    map[Client]bool
+	clients    map[client]bool
 	broadcast  chan interface{}
-	register   chan Client
-	unregister chan Client
+	register   chan client
+	unregister chan client
 	mu         sync.RWMutex
 }
 
 // NewBroadcaster creates a new SSE event broadcaster.
 func NewBroadcaster() *Broadcaster {
 	return &Broadcaster{
-		clients:    make(map[Client]bool),
+		clients:    make(map[client]bool),
 		broadcast:  make(chan interface{}, 256),
-		register:   make(chan Client),
-		unregister: make(chan Client),
+		register:   make(chan client),
+		unregister: make(chan client),
 	}
 }
 
@@ -33,32 +32,26 @@ func NewBroadcaster() *Broadcaster {
 func (b *Broadcaster) Run() {
 	for {
 		select {
-		case client := <-b.register:
+		case c := <-b.register:
 			b.mu.Lock()
-			b.clients[client] = true
+			b.clients[c] = true
 			b.mu.Unlock()
 			slog.Debug("SSE client connected", "total", len(b.clients))
 
-		case client := <-b.unregister:
+		case c := <-b.unregister:
 			b.mu.Lock()
-			if _, ok := b.clients[client]; ok {
-				delete(b.clients, client)
-				close(client)
+			if _, ok := b.clients[c]; ok {
+				delete(b.clients, c)
+				close(c)
 			}
 			b.mu.Unlock()
 			slog.Debug("SSE client disconnected", "total", len(b.clients))
 
 		case message := <-b.broadcast:
-			data, err := json.Marshal(message)
-			if err != nil {
-				slog.Error("Failed to marshal broadcast message", "error", err)
-				continue
-			}
-
 			b.mu.RLock()
-			for client := range b.clients {
+			for c := range b.clients {
 				select {
-				case client <- data:
+				case c <- message:
 				default:
 					// Client buffer full, will be cleaned up
 				}
@@ -68,14 +61,25 @@ func (b *Broadcaster) Run() {
 	}
 }
 
-// Register adds a client to the broadcaster.
-func (b *Broadcaster) Register(client Client) {
-	b.register <- client
+// Register creates a new client channel, registers it, and returns it for receiving events.
+func (b *Broadcaster) Register() <-chan interface{} {
+	c := make(client, 256)
+	b.register <- c
+	return c
 }
 
 // Unregister removes a client from the broadcaster.
-func (b *Broadcaster) Unregister(client Client) {
-	b.unregister <- client
+func (b *Broadcaster) Unregister(ch <-chan interface{}) {
+	// Find the bidirectional channel that matches this receive-only channel
+	b.mu.Lock()
+	for c := range b.clients {
+		if (<-chan interface{})(c) == ch {
+			b.mu.Unlock()
+			b.unregister <- c
+			return
+		}
+	}
+	b.mu.Unlock()
 }
 
 // Broadcast sends a message to all connected clients.
