@@ -1,7 +1,8 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { cn } from '@/lib/class-utils'
 import { useActiveConvoys } from '@/hooks/useActiveConvoys'
 import { ConvoyGroupHeader } from './ConvoyGroupHeader'
+import { ConvoyChildList } from './ConvoyChildList'
 
 export interface ActiveConvoysPanelProps {
   rigId: string
@@ -22,8 +23,23 @@ export function ActiveConvoysPanel({
   const [isExpanded, setIsExpanded] = useState(defaultExpanded)
   const [contentHeight, setContentHeight] = useState<number | undefined>(undefined)
   const contentRef = useRef<HTMLDivElement>(null)
+  // Track which convoys are expanded (for lazy loading children)
+  const [expandedConvoys, setExpandedConvoys] = useState<Set<string>>(new Set())
 
   const { convoys, loading, error } = useActiveConvoys(rigId)
+
+  // Handle individual convoy expansion toggle
+  const handleConvoyToggle = useCallback((convoyId: string, expanded: boolean) => {
+    setExpandedConvoys(prev => {
+      const next = new Set(prev)
+      if (expanded) {
+        next.add(convoyId)
+      } else {
+        next.delete(convoyId)
+      }
+      return next
+    })
+  }, [])
 
   // Measure content height for smooth animation
   useEffect(() => {
@@ -154,11 +170,13 @@ export function ActiveConvoysPanel({
               title={convoy.convoy.title}
               progress={convoy.convoy.progress}
               itemCount={convoy.convoy.progress.total}
+              onToggle={(expanded) => handleConvoyToggle(convoy.convoy.id, expanded)}
             >
-              {/* Placeholder for child tasks - will be implemented in to-yxth.4 */}
-              <div className="p-3 text-xs text-text-muted">
-                {convoy.convoy.progress.total} tasks in this convoy
-              </div>
+              <ConvoyChildList
+                rigId={rigId}
+                convoyId={convoy.convoy.id}
+                expanded={expandedConvoys.has(convoy.convoy.id)}
+              />
             </ConvoyGroupHeader>
           ))}
         </div>
