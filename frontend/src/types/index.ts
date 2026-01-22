@@ -101,6 +101,9 @@ export interface WSMessage {
 // Re-export mail types
 export type { Mail } from './mail'
 
+// Re-export convoy types
+export type { ConvoyInfo, ConvoyProgress } from './convoy'
+
 // Filter options
 export interface IssueFilters {
   status?: IssueStatus | 'all';
