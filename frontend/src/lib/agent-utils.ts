@@ -1,75 +1,55 @@
+import { createClassMapper } from './class-utils'
+
 /**
  * Returns the icon for an agent state.
  */
-export function getAgentStateIcon(state: string): string {
-  switch (state) {
-    case 'idle':
-      return '○'
-    case 'working':
-      return '◉'
-    case 'stuck':
-      return '⚠'
-    case 'paused':
-      return '❚❚'
-    default:
-      return '○'
-  }
-}
+export const getAgentStateIcon = createClassMapper<string>(
+  {
+    idle: '○',
+    working: '◉',
+    stuck: '⚠',
+    paused: '❚❚',
+  },
+  '○'
+)
 
 /**
  * Returns the CSS class for an agent state.
  */
-export function getAgentStateClass(state: string): string {
-  switch (state) {
-    case 'idle':
-      return 'text-text-muted'
-    case 'working':
-      return 'text-status-in-progress'
-    case 'stuck':
-      return 'text-status-blocked'
-    case 'paused':
-      return 'text-status-deferred'
-    default:
-      return 'text-text-muted'
-  }
-}
+export const getAgentStateClass = createClassMapper<string>(
+  {
+    idle: 'text-text-muted',
+    working: 'text-status-in-progress',
+    stuck: 'text-status-blocked',
+    paused: 'text-status-deferred',
+  },
+  'text-text-muted'
+)
 
 /**
  * Returns the background class for an agent state indicator.
  */
-export function getAgentStateBgClass(state: string): string {
-  switch (state) {
-    case 'idle':
-      return 'bg-text-muted/20'
-    case 'working':
-      return 'bg-status-in-progress/20'
-    case 'stuck':
-      return 'bg-status-blocked/20'
-    case 'paused':
-      return 'bg-status-deferred/20'
-    default:
-      return 'bg-text-muted/20'
-  }
-}
+export const getAgentStateBgClass = createClassMapper<string>(
+  {
+    idle: 'bg-text-muted/20',
+    working: 'bg-status-in-progress/20',
+    stuck: 'bg-status-blocked/20',
+    paused: 'bg-status-deferred/20',
+  },
+  'bg-text-muted/20'
+)
 
 /**
  * Returns the icon for an agent role type.
  */
-export function getAgentRoleIcon(roleType: string): string {
-  switch (roleType) {
-    case 'witness':
-      return '👁'
-    case 'refinery':
-      return '⚙'
-    case 'crew':
-      return '👥'
-    case 'polecat':
-      return '🏎'
-    case 'deacon':
-      return '📋'
-    case 'mayor':
-      return '🏛'
-    default:
-      return '⚡'
-  }
-}
+export const getAgentRoleIcon = createClassMapper<string>(
+  {
+    witness: '👁',
+    refinery: '⚙',
+    crew: '👥',
+    polecat: '🏎',
+    deacon: '📋',
+    mayor: '🏛',
+  },
+  '⚡'
+)

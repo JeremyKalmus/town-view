@@ -1,3 +1,5 @@
+import { createClassMapper } from './class-utils'
+
 /**
  * Formats a date string for display.
  */
@@ -32,84 +34,58 @@ export function formatRelativeTime(dateString: string): string {
 /**
  * Returns the status icon for an issue status.
  */
-export function getStatusIcon(status: string): string {
-  switch (status) {
-    case 'open':
-      return '○'
-    case 'in_progress':
-      return '◐'
-    case 'blocked':
-      return '●'
-    case 'closed':
-      return '✓'
-    case 'deferred':
-      return '❄'
-    default:
-      return '○'
-  }
-}
+export const getStatusIcon = createClassMapper<string>(
+  {
+    open: '○',
+    in_progress: '◐',
+    blocked: '●',
+    closed: '✓',
+    deferred: '❄',
+  },
+  '○'
+)
 
 /**
  * Returns the CSS class for status badge styling.
  * Includes background, text color, and border color.
  */
-export function getStatusBadgeClass(status: string): string {
-  switch (status) {
-    case 'open':
-      return 'bg-status-open/20 text-status-open border-status-open/30'
-    case 'in_progress':
-      return 'bg-status-in-progress/20 text-status-in-progress border-status-in-progress/30'
-    case 'blocked':
-      return 'bg-status-blocked/20 text-status-blocked border-status-blocked/30'
-    case 'closed':
-      return 'bg-status-closed/20 text-status-closed border-status-closed/30'
-    case 'deferred':
-      return 'bg-status-deferred/20 text-status-deferred border-status-deferred/30'
-    case 'tombstone':
-      return 'bg-bg-tertiary text-text-muted border-border'
-    default:
-      return 'bg-status-open/20 text-status-open border-status-open/30'
-  }
-}
+export const getStatusBadgeClass = createClassMapper<string>(
+  {
+    open: 'bg-status-open/20 text-status-open border-status-open/30',
+    in_progress: 'bg-status-in-progress/20 text-status-in-progress border-status-in-progress/30',
+    blocked: 'bg-status-blocked/20 text-status-blocked border-status-blocked/30',
+    closed: 'bg-status-closed/20 text-status-closed border-status-closed/30',
+    deferred: 'bg-status-deferred/20 text-status-deferred border-status-deferred/30',
+    tombstone: 'bg-bg-tertiary text-text-muted border-border',
+  },
+  'bg-status-open/20 text-status-open border-status-open/30'
+)
 
 /**
  * Returns the CSS class for status text color only.
  */
-export function getStatusColorClass(status: string): string {
-  switch (status) {
-    case 'open':
-      return 'text-status-open'
-    case 'in_progress':
-      return 'text-status-in-progress'
-    case 'blocked':
-      return 'text-status-blocked'
-    case 'closed':
-      return 'text-status-closed'
-    case 'deferred':
-      return 'text-status-deferred'
-    case 'tombstone':
-      return 'text-text-muted'
-    default:
-      return 'text-status-open'
-  }
-}
+export const getStatusColorClass = createClassMapper<string>(
+  {
+    open: 'text-status-open',
+    in_progress: 'text-status-in-progress',
+    blocked: 'text-status-blocked',
+    closed: 'text-status-closed',
+    deferred: 'text-status-deferred',
+    tombstone: 'text-text-muted',
+  },
+  'text-status-open'
+)
 
 /**
  * Returns the CSS class for tree status icon.
  */
-export function getTreeStatusIconClass(status: string): string {
-  switch (status) {
-    case 'open':
-      return 'tree-status-icon-open'
-    case 'in_progress':
-      return 'tree-status-icon-in-progress'
-    case 'blocked':
-      return 'tree-status-icon-blocked'
-    case 'closed':
-      return 'tree-status-icon-closed'
-    case 'deferred':
-      return 'tree-status-icon-deferred'
-    default:
-      return 'tree-status-icon-open'
-  }
-}
+export const getTreeStatusIconClass = createClassMapper<string>(
+  {
+    open: 'tree-status-icon-open',
+    in_progress: 'tree-status-icon-in-progress',
+    blocked: 'tree-status-icon-blocked',
+    closed: 'tree-status-icon-closed',
+    deferred: 'tree-status-icon-deferred',
+  },
+  'tree-status-icon-open'
+)

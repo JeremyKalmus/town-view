@@ -6,6 +6,7 @@
 import { useMemo } from 'react'
 import type { WorkItemHealth, WorkItemHealthStatus } from '@/types'
 import { HEALTH_THRESHOLDS } from '@/stores/monitoring-store'
+import { createClassMapper } from '@/lib/class-utils'
 
 export interface UseWorkItemHealthResult {
   /** Health status and duration info */
@@ -89,29 +90,23 @@ export function useWorkItemHealth(startedAt: string | undefined): UseWorkItemHea
 /**
  * Get CSS class name for health status color.
  */
-export function getHealthColorClass(status: WorkItemHealthStatus): string {
-  switch (status) {
-    case 'stuck':
-      return 'text-red-500'
-    case 'concerning':
-      return 'text-yellow-500'
-    case 'healthy':
-    default:
-      return 'text-green-500'
-  }
-}
+export const getHealthColorClass = createClassMapper<WorkItemHealthStatus>(
+  {
+    stuck: 'text-red-500',
+    concerning: 'text-yellow-500',
+    healthy: 'text-green-500',
+  },
+  'text-green-500'
+)
 
 /**
  * Get background CSS class name for health status.
  */
-export function getHealthBgClass(status: WorkItemHealthStatus): string {
-  switch (status) {
-    case 'stuck':
-      return 'bg-red-500/10'
-    case 'concerning':
-      return 'bg-yellow-500/10'
-    case 'healthy':
-    default:
-      return 'bg-green-500/10'
-  }
-}
+export const getHealthBgClass = createClassMapper<WorkItemHealthStatus>(
+  {
+    stuck: 'bg-red-500/10',
+    concerning: 'bg-yellow-500/10',
+    healthy: 'bg-green-500/10',
+  },
+  'bg-green-500/10'
+)
