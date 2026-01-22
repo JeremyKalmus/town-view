@@ -1,5 +1,5 @@
 import type { ActivityEvent } from '@/types'
-import { cn, formatRelativeTime } from '@/lib/utils'
+import { cn, createClassMapper, formatRelativeTime } from '@/lib/utils'
 
 const MAX_EVENTS = 100
 
@@ -13,38 +13,28 @@ interface ActivityFeedProps {
  * Returns the icon for an event type.
  * status_changed=↻, assigned=→, blocked=⊗, completed=✓
  */
-function getEventIcon(eventType: string): string {
-  switch (eventType) {
-    case 'status_changed':
-      return '↻'
-    case 'assigned':
-      return '→'
-    case 'blocked':
-      return '⊗'
-    case 'completed':
-      return '✓'
-    default:
-      return '•'
-  }
-}
+const getEventIcon = createClassMapper<string>(
+  {
+    status_changed: '↻',
+    assigned: '→',
+    blocked: '⊗',
+    completed: '✓',
+  },
+  '•'
+)
 
 /**
  * Returns the CSS class for an event type icon.
  */
-function getEventIconClass(eventType: string): string {
-  switch (eventType) {
-    case 'status_changed':
-      return 'text-status-in-progress'
-    case 'assigned':
-      return 'text-accent-primary'
-    case 'blocked':
-      return 'text-status-blocked'
-    case 'completed':
-      return 'text-status-closed'
-    default:
-      return 'text-text-muted'
-  }
-}
+const getEventIconClass = createClassMapper<string>(
+  {
+    status_changed: 'text-status-in-progress',
+    assigned: 'text-accent-primary',
+    blocked: 'text-status-blocked',
+    completed: 'text-status-closed',
+  },
+  'text-text-muted'
+)
 
 /**
  * ActivityFeed displays a scrollable list of recent activity events.

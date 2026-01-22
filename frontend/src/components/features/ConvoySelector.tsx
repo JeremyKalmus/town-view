@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState, useEffect } from 'react'
 import type { Issue } from '@/types'
-import { cn, formatDate } from '@/lib/utils'
+import { cn, createClassMapper, formatDate } from '@/lib/utils'
 
 export type ConvoySortBy = 'date' | 'name'
 
@@ -32,11 +32,13 @@ function getConvoyStatus(status: Issue['status']): 'active' | 'completed' {
 /**
  * Returns CSS class for convoy status indicator.
  */
-function getConvoyStatusClass(status: 'active' | 'completed'): string {
-  return status === 'completed'
-    ? 'text-status-closed'
-    : 'text-status-in-progress'
-}
+const getConvoyStatusClass = createClassMapper<'active' | 'completed'>(
+  {
+    active: 'text-status-in-progress',
+    completed: 'text-status-closed',
+  },
+  'text-status-in-progress'
+)
 
 /**
  * Convoy selector dropdown for audit view.

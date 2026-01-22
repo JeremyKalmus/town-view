@@ -10,6 +10,26 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
+ * Creates a type-safe mapper function that returns a value based on a key lookup.
+ * Replaces switch-based get*Class functions with a more concise pattern.
+ *
+ * @example
+ * const getStatusClass = createClassMapper<IssueStatus>({
+ *   open: 'text-status-open',
+ *   closed: 'text-status-closed'
+ * }, 'text-status-open')
+ *
+ * getStatusClass('open') // 'text-status-open'
+ * getStatusClass('unknown') // 'text-status-open' (default)
+ */
+export function createClassMapper<T extends string | number>(
+  mapping: Partial<Record<T, string>>,
+  defaultValue: string
+): (key: T) => string {
+  return (key: T): string => mapping[key] ?? defaultValue
+}
+
+/**
  * Formats a date string for display.
  */
 export function formatDate(dateString: string): string {
@@ -43,42 +63,30 @@ export function formatRelativeTime(dateString: string): string {
 /**
  * Returns the status icon for an issue status.
  */
-export function getStatusIcon(status: string): string {
-  switch (status) {
-    case 'open':
-      return '○'
-    case 'in_progress':
-      return '◐'
-    case 'blocked':
-      return '●'
-    case 'closed':
-      return '✓'
-    case 'deferred':
-      return '❄'
-    default:
-      return '○'
-  }
-}
+export const getStatusIcon = createClassMapper<string>(
+  {
+    open: '○',
+    in_progress: '◐',
+    blocked: '●',
+    closed: '✓',
+    deferred: '❄',
+  },
+  '○'
+)
 
 /**
  * Returns the CSS class for a priority level.
  */
-export function getPriorityClass(priority: number): string {
-  switch (priority) {
-    case 0:
-      return 'priority-p0'
-    case 1:
-      return 'priority-p1'
-    case 2:
-      return 'priority-p2'
-    case 3:
-      return 'priority-p3'
-    case 4:
-      return 'priority-p4'
-    default:
-      return 'priority-p2'
-  }
-}
+export const getPriorityClass = createClassMapper<number>(
+  {
+    0: 'priority-p0',
+    1: 'priority-p1',
+    2: 'priority-p2',
+    3: 'priority-p3',
+    4: 'priority-p4',
+  },
+  'priority-p2'
+)
 
 /**
  * Returns the display label for a priority level.
@@ -90,223 +98,157 @@ export function getPriorityLabel(priority: number): string {
 /**
  * Returns the icon for an agent state.
  */
-export function getAgentStateIcon(state: string): string {
-  switch (state) {
-    case 'idle':
-      return '○'
-    case 'working':
-      return '◉'
-    case 'stuck':
-      return '⚠'
-    case 'paused':
-      return '❚❚'
-    default:
-      return '○'
-  }
-}
+export const getAgentStateIcon = createClassMapper<string>(
+  {
+    idle: '○',
+    working: '◉',
+    stuck: '⚠',
+    paused: '❚❚',
+  },
+  '○'
+)
 
 /**
  * Returns the CSS class for an agent state.
  */
-export function getAgentStateClass(state: string): string {
-  switch (state) {
-    case 'idle':
-      return 'text-text-muted'
-    case 'working':
-      return 'text-status-in-progress'
-    case 'stuck':
-      return 'text-status-blocked'
-    case 'paused':
-      return 'text-status-deferred'
-    default:
-      return 'text-text-muted'
-  }
-}
+export const getAgentStateClass = createClassMapper<string>(
+  {
+    idle: 'text-text-muted',
+    working: 'text-status-in-progress',
+    stuck: 'text-status-blocked',
+    paused: 'text-status-deferred',
+  },
+  'text-text-muted'
+)
 
 /**
  * Returns the background class for an agent state indicator.
  */
-export function getAgentStateBgClass(state: string): string {
-  switch (state) {
-    case 'idle':
-      return 'bg-text-muted/20'
-    case 'working':
-      return 'bg-status-in-progress/20'
-    case 'stuck':
-      return 'bg-status-blocked/20'
-    case 'paused':
-      return 'bg-status-deferred/20'
-    default:
-      return 'bg-text-muted/20'
-  }
-}
+export const getAgentStateBgClass = createClassMapper<string>(
+  {
+    idle: 'bg-text-muted/20',
+    working: 'bg-status-in-progress/20',
+    stuck: 'bg-status-blocked/20',
+    paused: 'bg-status-deferred/20',
+  },
+  'bg-text-muted/20'
+)
 
 /**
  * Returns the icon for an agent role type.
  */
-export function getAgentRoleIcon(roleType: string): string {
-  switch (roleType) {
-    case 'witness':
-      return '👁'
-    case 'refinery':
-      return '⚙'
-    case 'crew':
-      return '👥'
-    case 'polecat':
-      return '🏎'
-    case 'deacon':
-      return '📋'
-    case 'mayor':
-      return '🏛'
-    default:
-      return '⚡'
-  }
-}
+export const getAgentRoleIcon = createClassMapper<string>(
+  {
+    witness: '👁',
+    refinery: '⚙',
+    crew: '👥',
+    polecat: '🏎',
+    deacon: '📋',
+    mayor: '🏛',
+  },
+  '⚡'
+)
 
 /**
  * Returns the CSS class for a priority badge.
  */
-export function getPriorityBadgeClass(priority: number): string {
-  switch (priority) {
-    case 0:
-      return 'badge-priority-p0'
-    case 1:
-      return 'badge-priority-p1'
-    case 2:
-      return 'badge-priority-p2'
-    case 3:
-      return 'badge-priority-p3'
-    case 4:
-      return 'badge-priority-p4'
-    default:
-      return 'badge-priority-p2'
-  }
-}
+export const getPriorityBadgeClass = createClassMapper<number>(
+  {
+    0: 'badge-priority-p0',
+    1: 'badge-priority-p1',
+    2: 'badge-priority-p2',
+    3: 'badge-priority-p3',
+    4: 'badge-priority-p4',
+  },
+  'badge-priority-p2'
+)
 
 /**
  * Returns the CSS class for status badge styling.
  * Includes background, text color, and border color.
  */
-export function getStatusBadgeClass(status: string): string {
-  switch (status) {
-    case 'open':
-      return 'bg-status-open/20 text-status-open border-status-open/30'
-    case 'in_progress':
-      return 'bg-status-in-progress/20 text-status-in-progress border-status-in-progress/30'
-    case 'blocked':
-      return 'bg-status-blocked/20 text-status-blocked border-status-blocked/30'
-    case 'closed':
-      return 'bg-status-closed/20 text-status-closed border-status-closed/30'
-    case 'deferred':
-      return 'bg-status-deferred/20 text-status-deferred border-status-deferred/30'
-    case 'tombstone':
-      return 'bg-bg-tertiary text-text-muted border-border'
-    default:
-      return 'bg-status-open/20 text-status-open border-status-open/30'
-  }
-}
+export const getStatusBadgeClass = createClassMapper<string>(
+  {
+    open: 'bg-status-open/20 text-status-open border-status-open/30',
+    in_progress: 'bg-status-in-progress/20 text-status-in-progress border-status-in-progress/30',
+    blocked: 'bg-status-blocked/20 text-status-blocked border-status-blocked/30',
+    closed: 'bg-status-closed/20 text-status-closed border-status-closed/30',
+    deferred: 'bg-status-deferred/20 text-status-deferred border-status-deferred/30',
+    tombstone: 'bg-bg-tertiary text-text-muted border-border',
+  },
+  'bg-status-open/20 text-status-open border-status-open/30'
+)
 
 /**
  * Returns the CSS class for status text color only.
  */
-export function getStatusColorClass(status: string): string {
-  switch (status) {
-    case 'open':
-      return 'text-status-open'
-    case 'in_progress':
-      return 'text-status-in-progress'
-    case 'blocked':
-      return 'text-status-blocked'
-    case 'closed':
-      return 'text-status-closed'
-    case 'deferred':
-      return 'text-status-deferred'
-    case 'tombstone':
-      return 'text-text-muted'
-    default:
-      return 'text-status-open'
-  }
-}
+export const getStatusColorClass = createClassMapper<string>(
+  {
+    open: 'text-status-open',
+    in_progress: 'text-status-in-progress',
+    blocked: 'text-status-blocked',
+    closed: 'text-status-closed',
+    deferred: 'text-status-deferred',
+    tombstone: 'text-text-muted',
+  },
+  'text-status-open'
+)
 
 /**
  * Returns the CSS class for priority-based border coloring on tree nodes.
  */
-export function getPriorityBorderClass(priority: number): string {
-  switch (priority) {
-    case 0:
-      return 'border-l-priority-p0'
-    case 1:
-      return 'border-l-priority-p1'
-    case 2:
-      return 'border-l-priority-p2'
-    case 3:
-      return 'border-l-priority-p3'
-    case 4:
-      return 'border-l-priority-p4'
-    default:
-      return 'border-l-priority-p2'
-  }
-}
+export const getPriorityBorderClass = createClassMapper<number>(
+  {
+    0: 'border-l-priority-p0',
+    1: 'border-l-priority-p1',
+    2: 'border-l-priority-p2',
+    3: 'border-l-priority-p3',
+    4: 'border-l-priority-p4',
+  },
+  'border-l-priority-p2'
+)
 
 /**
  * Returns the CSS class for priority text color.
  */
-export function getPriorityColorClass(priority: number): string {
-  switch (priority) {
-    case 0:
-      return 'text-priority-p0'
-    case 1:
-      return 'text-priority-p1'
-    case 2:
-      return 'text-priority-p2'
-    case 3:
-      return 'text-priority-p3'
-    case 4:
-      return 'text-priority-p4'
-    default:
-      return 'text-priority-p2'
-  }
-}
+export const getPriorityColorClass = createClassMapper<number>(
+  {
+    0: 'text-priority-p0',
+    1: 'text-priority-p1',
+    2: 'text-priority-p2',
+    3: 'text-priority-p3',
+    4: 'text-priority-p4',
+  },
+  'text-priority-p2'
+)
 
 /**
  * Returns the CSS class for tree status icon.
  */
-export function getTreeStatusIconClass(status: string): string {
-  switch (status) {
-    case 'open':
-      return 'tree-status-icon-open'
-    case 'in_progress':
-      return 'tree-status-icon-in-progress'
-    case 'blocked':
-      return 'tree-status-icon-blocked'
-    case 'closed':
-      return 'tree-status-icon-closed'
-    case 'deferred':
-      return 'tree-status-icon-deferred'
-    default:
-      return 'tree-status-icon-open'
-  }
-}
+export const getTreeStatusIconClass = createClassMapper<string>(
+  {
+    open: 'tree-status-icon-open',
+    in_progress: 'tree-status-icon-in-progress',
+    blocked: 'tree-status-icon-blocked',
+    closed: 'tree-status-icon-closed',
+    deferred: 'tree-status-icon-deferred',
+  },
+  'tree-status-icon-open'
+)
 
 /**
  * Returns the CSS class for tree node priority styling.
  */
-export function getTreeNodePriorityClass(priority: number): string {
-  switch (priority) {
-    case 0:
-      return 'tree-node-priority-p0'
-    case 1:
-      return 'tree-node-priority-p1'
-    case 2:
-      return 'tree-node-priority-p2'
-    case 3:
-      return 'tree-node-priority-p3'
-    case 4:
-      return 'tree-node-priority-p4'
-    default:
-      return 'tree-node-priority-p2'
-  }
-}
+export const getTreeNodePriorityClass = createClassMapper<number>(
+  {
+    0: 'tree-node-priority-p0',
+    1: 'tree-node-priority-p1',
+    2: 'tree-node-priority-p2',
+    3: 'tree-node-priority-p3',
+    4: 'tree-node-priority-p4',
+  },
+  'tree-node-priority-p2'
+)
 
 /**
  * Returns the CSS class for tree indentation by depth level.
