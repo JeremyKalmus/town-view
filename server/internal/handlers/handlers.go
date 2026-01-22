@@ -104,7 +104,7 @@ func (h *Handlers) ListIssues(w http.ResponseWriter, r *http.Request) {
 	// Check for include=convoy query param
 	if r.URL.Query().Get("include") == "convoy" {
 		for i := range issues {
-			convoy, err := h.beadsClient.GetIssueConvoy(rig.Path, issues[i].ID)
+			convoy, err := h.beadsClient.GetIssueConvoy(issues[i].ID)
 			if err == nil {
 				issues[i].Convoy = convoy
 			}

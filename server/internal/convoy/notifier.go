@@ -106,7 +106,7 @@ func (n *Notifier) flushUpdate(key string) {
 		"rigId", pending.rigID,
 		"convoyId", pending.convoyID,
 		"total", progress.Total,
-		"closed", progress.Closed)
+		"completed", progress.Completed)
 }
 
 // calculateProgress computes the progress of a convoy by counting descendant issue statuses.
@@ -117,9 +117,7 @@ func (n *Notifier) calculateProgress(rigPath, convoyID string) (*types.ConvoyPro
 		return nil, err
 	}
 
-	progress := &types.ConvoyProgress{
-		ConvoyID: convoyID,
-	}
+	progress := &types.ConvoyProgress{}
 
 	prefix := convoyID + "."
 
@@ -132,15 +130,14 @@ func (n *Notifier) calculateProgress(rigPath, convoyID string) (*types.ConvoyPro
 		progress.Total++
 
 		switch issue.Status {
-		case types.StatusOpen:
-			progress.Open++
-		case types.StatusInProgress:
-			progress.InProgress++
-		case types.StatusBlocked:
-			progress.Blocked++
 		case types.StatusClosed, types.StatusTombstone:
-			progress.Closed++
+			progress.Completed++
 		}
+	}
+
+	// Calculate percentage
+	if progress.Total > 0 {
+		progress.Percentage = float64(progress.Completed) / float64(progress.Total) * 100
 	}
 
 	return progress, nil

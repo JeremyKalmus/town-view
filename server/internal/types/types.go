@@ -3,12 +3,6 @@ package types
 
 import "time"
 
-// ConvoyInfo represents convoy context for an issue.
-type ConvoyInfo struct {
-	ID    string `json:"id"`
-	Title string `json:"title"`
-}
-
 // Issue represents a bead issue.
 type Issue struct {
 	ID              string      `json:"id"`
@@ -96,16 +90,6 @@ type MoleculeProgress struct {
 	TotalSteps  int    `json:"total_steps"`
 	StepName    string `json:"step_name"`
 	Status      string `json:"status"`
-}
-
-// ConvoyProgress represents the progress of a convoy's tracked issues.
-type ConvoyProgress struct {
-	ConvoyID   string `json:"convoy_id"`
-	Total      int    `json:"total"`       // Total tracked issues
-	Open       int    `json:"open"`        // Issues with status 'open'
-	InProgress int    `json:"in_progress"` // Issues with status 'in_progress'
-	Blocked    int    `json:"blocked"`     // Issues with status 'blocked'
-	Closed     int    `json:"closed"`      // Issues with status 'closed'
 }
 
 // PeekOutput represents output from peeking at an agent's session.
