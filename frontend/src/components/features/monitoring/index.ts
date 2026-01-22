@@ -6,3 +6,4 @@ export { ProgressIndicator, ProgressIndicatorSkeleton } from './ProgressIndicato
 export { BlockingContext, type BlockingContextProps } from './BlockingContext'
 export { ActivityFeed } from './ActivityFeed'
 export { InfrastructureHealth } from './InfrastructureHealth'
+export { ConvoyGroupHeader, type ConvoyGroupHeaderProps } from './ConvoyGroupHeader'
