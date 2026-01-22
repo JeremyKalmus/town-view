@@ -704,3 +704,111 @@ func sortIssuesByUpdatedAt(issues []types.Issue) {
 		}
 	}
 }
+
+// runBDFromRoot executes a bd command from the town root directory.
+// Used for cross-beads queries like convoy lookups.
+func (c *Client) runBDFromRoot(args ...string) ([]byte, error) {
+	beadsPath := filepath.Join(c.townRoot, ".beads")
+
+	cmd := exec.Command(c.bdPath, args...)
+	cmd.Dir = c.townRoot
+	cmd.Env = append(os.Environ(), fmt.Sprintf("BD_DB=%s/beads.db", beadsPath))
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	slog.Debug("Running bd command from root", "args", args, "dir", c.townRoot)
+
+	if err := cmd.Run(); err != nil {
+		slog.Error("bd command failed", "args", args, "stderr", stderr.String(), "error", err)
+		return nil, fmt.Errorf("%s: %s", err, stderr.String())
+	}
+
+	return stdout.Bytes(), nil
+}
+
+// GetIssueConvoy returns the convoy tracking this issue, or nil if none.
+func (c *Client) GetIssueConvoy(issueID string) (*types.ConvoyInfo, error) {
+	// Query town-level beads for convoy tracking this issue
+	// bd dep list <issueID> --direction=up --type=tracks --json
+	args := []string{"dep", "list", issueID, "--direction=up", "--type=tracks", "--json"}
+
+	output, err := c.runBDFromRoot(args...)
+	if err != nil {
+		slog.Debug("No convoy tracking found", "issue_id", issueID, "error", err)
+		return nil, nil // Not tracked by any convoy
+	}
+
+	if len(output) == 0 {
+		return nil, nil // No tracking relationships
+	}
+
+	var trackers []types.Issue
+	if err := json.Unmarshal(output, &trackers); err != nil {
+		slog.Debug("Failed to parse trackers", "error", err)
+		return nil, nil
+	}
+
+	// Filter for convoy type
+	for _, tracker := range trackers {
+		if tracker.IssueType == types.TypeConvoy {
+			// Found a convoy, get its progress
+			progress, err := c.GetConvoyProgress(tracker.ID)
+			if err != nil {
+				slog.Warn("Failed to get convoy progress", "convoy_id", tracker.ID, "error", err)
+				progress = &types.ConvoyProgress{}
+			}
+
+			return &types.ConvoyInfo{
+				ID:       tracker.ID,
+				Title:    tracker.Title,
+				Progress: *progress,
+			}, nil
+		}
+	}
+
+	return nil, nil // No convoy found
+}
+
+// GetConvoyProgress returns completion stats for a convoy.
+func (c *Client) GetConvoyProgress(convoyID string) (*types.ConvoyProgress, error) {
+	// Get all issues tracked by this convoy
+	// bd dep list <convoyID> --direction=down --type=tracks --json
+	args := []string{"dep", "list", convoyID, "--direction=down", "--type=tracks", "--json"}
+
+	output, err := c.runBDFromRoot(args...)
+	if err != nil {
+		return &types.ConvoyProgress{}, nil // No tracked issues
+	}
+
+	if len(output) == 0 {
+		return &types.ConvoyProgress{}, nil
+	}
+
+	var trackedIssues []types.Issue
+	if err := json.Unmarshal(output, &trackedIssues); err != nil {
+		return nil, fmt.Errorf("failed to parse tracked issues: %w", err)
+	}
+
+	// Count completed vs total
+	total := len(trackedIssues)
+	completed := 0
+	for _, issue := range trackedIssues {
+		if issue.Status == types.StatusClosed || issue.Status == types.StatusTombstone {
+			completed++
+		}
+	}
+
+	// Calculate percentage
+	var percentage float64
+	if total > 0 {
+		percentage = float64(completed) / float64(total) * 100
+	}
+
+	return &types.ConvoyProgress{
+		Completed:  completed,
+		Total:      total,
+		Percentage: percentage,
+	}, nil
+}
