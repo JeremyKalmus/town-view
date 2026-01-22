@@ -90,10 +90,11 @@ export function AgentPeekPanel({
       })
 
       if (result.data) {
-        // Sort by updated_at descending and take recent ones
+        // Sort by updated_at descending - take more items to ensure we capture
+        // work beads that might be older than recent events
         const sorted = result.data
           .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
-          .slice(0, 20)
+          .slice(0, 100) // Increased limit to capture patrol/merge beads
         setRoleBeads(sorted)
       }
     } catch (err) {

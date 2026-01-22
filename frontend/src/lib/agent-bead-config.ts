@@ -266,31 +266,49 @@ export function getMergeQueue(issues: Issue[]): Issue[] {
 
 /**
  * Filter beads specifically for refinery display.
- * Shows merge queue tasks (task beads with "Merge:" prefix).
+ * Shows merge queue tasks (task beads with "Merge:" prefix) and merge requests.
  */
 export function filterRefineryBeads(issues: Issue[]): Issue[] {
-  return issues.filter(issue =>
+  return issues.filter(issue => {
     // Task beads with "Merge:" prefix
-    (issue.issue_type === 'task' && issue.title.startsWith('Merge:')) ||
+    if (issue.issue_type === 'task' && issue.title.startsWith('Merge:')) {
+      return true
+    }
     // Also include any merge-request types
-    issue.issue_type === 'merge-request'
-  )
+    if (issue.issue_type === 'merge-request') {
+      return true
+    }
+    // Check for gt:merge-request label (refinery creates these)
+    const labels = issue.labels || []
+    if (labels.includes('gt:merge-request')) {
+      return true
+    }
+    return false
+  })
 }
 
 /**
  * Filter beads specifically for witness display.
- * Shows patrol molecules and health-check related beads.
+ * Shows patrol molecules, digests, and health-check related beads.
  */
 export function filterWitnessBeads(issues: Issue[]): Issue[] {
   return issues.filter(issue => {
-    // Witness patrol molecules
-    if (issue.title.includes('mol-witness-patrol') ||
-        issue.title.includes('patrol') ||
-        issue.title.includes('health-check')) {
+    const title = issue.title.toLowerCase()
+
+    // Witness patrol molecules and digests
+    if (title.includes('mol-witness-patrol') ||
+        title.includes('witness-patrol') ||
+        title.includes('patrol') ||
+        title.includes('health-check') ||
+        title.startsWith('digest:')) {
       return true
     }
     // Molecule type beads
     if (issue.issue_type === 'molecule') {
+      return true
+    }
+    // Epic type with witness assignee (patrol wisps are epics)
+    if (issue.issue_type === 'epic' && issue.assignee?.includes('witness')) {
       return true
     }
     // Agent type beads (monitoring results)
