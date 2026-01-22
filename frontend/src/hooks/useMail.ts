@@ -1,11 +1,11 @@
 /**
  * Hook for fetching and managing mail messages.
- * Supports real-time updates via WebSocket.
+ * Supports real-time updates via SSE.
  */
 
 import { useState, useEffect, useCallback } from 'react'
 import type { Mail, WSMessage } from '@/types'
-import { useWebSocket } from './useWebSocket'
+import { useEventSource } from './useEventSource'
 import { extractErrorMessage } from './useFetch'
 
 /** Maximum number of messages to display */
@@ -33,7 +33,7 @@ export interface UseMailResult {
 }
 
 /**
- * Fetch and manage mail messages with real-time WebSocket updates.
+ * Fetch and manage mail messages with real-time SSE updates.
  *
  * @example
  * ```tsx
@@ -56,8 +56,8 @@ export function useMail(): UseMailResult {
   const [offset, setOffset] = useState(0)
   const [hasMore, setHasMore] = useState(true)
 
-  // Handle incoming WebSocket messages
-  const handleWebSocketMessage = useCallback((msg: WSMessage) => {
+  // Handle incoming SSE messages
+  const handleSSEMessage = useCallback((msg: WSMessage) => {
     if (msg.type === 'mail_received' && msg.payload) {
       const newMail = msg.payload as unknown as Mail
       setMessages((prev) => {
@@ -68,9 +68,9 @@ export function useMail(): UseMailResult {
     }
   }, [])
 
-  // Connect to WebSocket for real-time updates
-  useWebSocket({
-    onMessage: handleWebSocketMessage,
+  // Connect to SSE for real-time updates
+  useEventSource({
+    onMessage: handleSSEMessage,
   })
 
   // Fetch messages from API

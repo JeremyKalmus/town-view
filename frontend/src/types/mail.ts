@@ -11,7 +11,7 @@ export interface Mail {
 }
 
 /**
- * WebSocket message for mail events.
+ * SSE message for mail events.
  */
 export interface MailReceivedEvent {
   type: 'mail_received'

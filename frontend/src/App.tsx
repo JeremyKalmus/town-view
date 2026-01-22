@@ -12,7 +12,7 @@ import { useRigStore } from '@/stores/rig-store'
 import { useToastStore } from '@/stores/toast-store'
 import { useConnectivityStore } from '@/stores/connectivity-store'
 import { useUIStore } from '@/stores/ui-store'
-import { useWebSocket } from '@/hooks/useWebSocket'
+import { useEventSource } from '@/hooks/useEventSource'
 import { useOffline } from '@/hooks/useOffline'
 import { cachedFetch } from '@/services/cache'
 import type { Rig, WSMessage } from '@/types'
@@ -31,7 +31,7 @@ function App() {
   const clearTimeoutRef = useRef<Map<string, number>>(new Map())
   const refreshDebounceRef = useRef<number | null>(null)
 
-  // Debounced refresh to prevent flickering from rapid WebSocket messages
+  // Debounced refresh to prevent flickering from rapid SSE messages
   const triggerDebouncedRefresh = useCallback(() => {
     if (refreshDebounceRef.current) {
       clearTimeout(refreshDebounceRef.current)
@@ -42,9 +42,9 @@ function App() {
     }, 500) // 500ms debounce
   }, [])
 
-  // WebSocket for real-time updates
-  const handleWSMessage = useCallback((msg: WSMessage) => {
-    console.log('[WS] Received message:', msg)
+  // SSE for real-time updates
+  const handleSSEMessage = useCallback((msg: WSMessage) => {
+    console.log('[SSE] Received message:', msg)
 
     if (msg.type === 'beads_changed' || msg.type === 'rig_update' || msg.type === 'issue_update' || msg.type === 'issue_changed') {
       // Trigger debounced refresh when beads change
@@ -88,10 +88,10 @@ function App() {
     }
   }, [triggerDebouncedRefresh])
 
-  const { connected } = useWebSocket({
-    onMessage: handleWSMessage,
-    onConnect: () => console.log('[WS] Connected to Town View'),
-    onDisconnect: () => console.log('[WS] Disconnected'),
+  const { connected } = useEventSource({
+    onMessage: handleSSEMessage,
+    onConnect: () => console.log('[SSE] Connected to Town View'),
+    onDisconnect: () => console.log('[SSE] Disconnected'),
   })
 
   // Offline detection and connectivity management
