@@ -3,25 +3,32 @@ package types
 
 import "time"
 
+// ConvoyInfo represents convoy context for an issue.
+type ConvoyInfo struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+}
+
 // Issue represents a bead issue.
 type Issue struct {
-	ID              string     `json:"id"`
-	Title           string     `json:"title"`
-	Description     string     `json:"description"`
-	Status          string     `json:"status"`
-	Priority        int        `json:"priority"`
-	IssueType       string     `json:"issue_type"`
-	Owner           string     `json:"owner,omitempty"`
-	Assignee        string     `json:"assignee,omitempty"`
-	CreatedAt       time.Time  `json:"created_at"`
-	CreatedBy       string     `json:"created_by,omitempty"`
-	UpdatedAt       time.Time  `json:"updated_at"`
-	ClosedAt        *time.Time `json:"closed_at,omitempty"`
-	CloseReason     string     `json:"close_reason,omitempty"`
-	Labels          []string   `json:"labels,omitempty"`
-	DependencyCount int        `json:"dependency_count"`
-	DependentCount  int        `json:"dependent_count"`
-	Parent          string     `json:"parent,omitempty"`
+	ID              string      `json:"id"`
+	Title           string      `json:"title"`
+	Description     string      `json:"description"`
+	Status          string      `json:"status"`
+	Priority        int         `json:"priority"`
+	IssueType       string      `json:"issue_type"`
+	Owner           string      `json:"owner,omitempty"`
+	Assignee        string      `json:"assignee,omitempty"`
+	CreatedAt       time.Time   `json:"created_at"`
+	CreatedBy       string      `json:"created_by,omitempty"`
+	UpdatedAt       time.Time   `json:"updated_at"`
+	ClosedAt        *time.Time  `json:"closed_at,omitempty"`
+	CloseReason     string      `json:"close_reason,omitempty"`
+	Labels          []string    `json:"labels,omitempty"`
+	DependencyCount int         `json:"dependency_count"`
+	DependentCount  int         `json:"dependent_count"`
+	Parent          string      `json:"parent,omitempty"`
+	Convoy          *ConvoyInfo `json:"convoy,omitempty"`
 }
 
 // Dependency represents a dependency relationship between issues.

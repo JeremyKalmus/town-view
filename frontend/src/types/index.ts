@@ -1,3 +1,6 @@
+// Import convoy types for use in Issue interface
+import type { ConvoyInfo } from './convoy'
+
 // Issue status enum
 export type IssueStatus =
   | 'open'
@@ -56,6 +59,7 @@ export interface Issue {
   labels?: string[];
   dependency_count: number;
   dependent_count: number;
+  convoy?: ConvoyInfo;
 }
 
 // Rig interface
