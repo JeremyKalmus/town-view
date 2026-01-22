@@ -1,7 +1,8 @@
 .PHONY: all server frontend storybook install build clean dev help
 
 # Town root - override with: make dev TOWN_ROOT=/path/to/gt
-TOWN_ROOT ?= $(shell cd ../.. && pwd)
+# From crew/jeremy/ we need to go up 3 levels: jeremy → crew → townview → gt
+TOWN_ROOT ?= $(shell cd ../../.. && pwd)
 
 # Default target
 all: install

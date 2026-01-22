@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gastown/townview/internal/beads"
 	"github.com/gastown/townview/internal/convoy"
@@ -99,6 +100,21 @@ func (h *Handlers) ListIssues(w http.ResponseWriter, r *http.Request) {
 		slog.Error("Failed to list issues", "rigId", rigID, "error", err)
 		http.Error(w, "Failed to list issues", http.StatusInternalServerError)
 		return
+	}
+
+	// Filter by multiple types if specified (comma-separated)
+	if typeFilter := r.URL.Query().Get("types"); typeFilter != "" {
+		typeSet := make(map[string]bool)
+		for _, t := range strings.Split(typeFilter, ",") {
+			typeSet[strings.TrimSpace(t)] = true
+		}
+		var filtered []types.Issue
+		for _, issue := range issues {
+			if typeSet[issue.IssueType] {
+				filtered = append(filtered, issue)
+			}
+		}
+		issues = filtered
 	}
 
 	// Check for include=convoy query param
@@ -386,6 +402,72 @@ func (h *Handlers) GetRecentActivity(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, events)
+}
+
+// GetAgentMail handles GET /api/rigs/{rigId}/agents/{agentId}/mail
+func (h *Handlers) GetAgentMail(w http.ResponseWriter, r *http.Request) {
+	rigID := r.PathValue("rigId")
+	agentID := r.PathValue("agentId")
+
+	rig, err := h.rigDiscovery.GetRig(rigID)
+	if err != nil || rig == nil {
+		http.Error(w, "Rig not found", http.StatusNotFound)
+		return
+	}
+
+	// Build agent address from agentID
+	// agentID could be "witness", "refinery", "crew/jeremy", or just a polecat name
+	var agentAddress string
+	if agentID == "witness" || agentID == "refinery" {
+		agentAddress = rigID + "/" + agentID
+	} else if len(agentID) > 5 && agentID[:5] == "crew/" {
+		agentAddress = rigID + "/" + agentID
+	} else {
+		// Assume it's a polecat or crew member name - try crew first
+		agentAddress = rigID + "/crew/" + agentID
+	}
+
+	// Parse limit (default 10)
+	limit := 10
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+
+	opts := mail.ListMailOptions{
+		Limit:   limit,
+		Address: agentAddress,
+	}
+
+	messages, err := h.mailClient.ListMail(rig.Path, opts)
+	if err != nil {
+		// Try without the crew/ prefix if that failed
+		opts.Address = rigID + "/polecats/" + agentID
+		messages, err = h.mailClient.ListMail(rig.Path, opts)
+		if err != nil {
+			slog.Debug("Failed to get agent mail", "agent", agentID, "error", err)
+			// Return empty array instead of error
+			writeJSON(w, []interface{}{})
+			return
+		}
+	}
+
+	writeJSON(w, messages)
+}
+
+// GetMailMessage handles GET /api/mail/{mailId}
+func (h *Handlers) GetMailMessage(w http.ResponseWriter, r *http.Request) {
+	mailID := r.PathValue("mailId")
+
+	message, err := h.mailClient.GetMail("", mailID)
+	if err != nil {
+		slog.Error("Failed to get mail message", "mailId", mailID, "error", err)
+		http.Error(w, "Failed to get mail message", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, message)
 }
 
 // ListMail handles GET /api/mail

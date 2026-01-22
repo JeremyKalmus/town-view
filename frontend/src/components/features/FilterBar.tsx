@@ -21,6 +21,9 @@ export const DEFAULT_FILTERS: TreeFilters = {
 // System types that are hidden by default (not user-facing work items)
 export const HIDDEN_TYPES: IssueType[] = ['event', 'molecule', 'merge-request', 'agent', 'convoy', 'gate', 'rig'] as IssueType[]
 
+// Planning view only shows these work item types
+export const PLANNING_TYPES: IssueType[] = ['epic', 'task', 'bug'] as IssueType[]
+
 interface FilterBarProps {
   filters: TreeFilters
   onFiltersChange: (filters: TreeFilters) => void
@@ -40,10 +43,8 @@ const STATUS_OPTIONS: Array<{ value: IssueStatus | 'all'; label: string }> = [
 const TYPE_OPTIONS: Array<{ value: IssueType | 'all'; label: string }> = [
   { value: 'all', label: 'All Types' },
   { value: 'epic', label: 'Epic' },
-  { value: 'feature', label: 'Feature' },
   { value: 'task', label: 'Task' },
   { value: 'bug', label: 'Bug' },
-  { value: 'chore', label: 'Chore' },
 ]
 
 const PRIORITY_LABELS: Record<number, string> = {
@@ -233,9 +234,9 @@ export function matchesFilters(
     return false
   }
 
-  // Type filter - when 'all', exclude hidden system types
+  // Type filter - when 'all', only show planning types (epic, task, bug)
   if (filters.type === 'all') {
-    if (HIDDEN_TYPES.includes(issue.issue_type)) {
+    if (!PLANNING_TYPES.includes(issue.issue_type)) {
       return false
     }
   } else if (issue.issue_type !== filters.type) {

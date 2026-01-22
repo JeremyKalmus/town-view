@@ -46,7 +46,7 @@ export function IssueRow({ issue, onClick, isUpdated = false, nodeRef }: IssueRo
 
       {/* Title */}
       <div className="flex-1 min-w-0">
-        <span className="truncate block">{issue.title}</span>
+        <span className="truncate block text-text-primary">{issue.title}</span>
         {issue.labels && issue.labels.length > 0 && (
           <div className="flex gap-1 mt-0.5">
             {issue.labels.slice(0, 3).map((label) => (

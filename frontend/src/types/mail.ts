@@ -4,10 +4,15 @@
 export interface Mail {
   id: string
   from: string
+  to?: string
   subject: string
-  preview: string
+  body?: string
+  preview?: string
   timestamp: string
   read: boolean
+  priority?: string
+  type?: string
+  thread_id?: string
 }
 
 /**

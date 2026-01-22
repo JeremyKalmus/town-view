@@ -66,13 +66,14 @@ type Rig struct {
 
 // Agent represents a Gas Town agent.
 type Agent struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	RoleType  string    `json:"role_type"`
-	Rig       string    `json:"rig"`
-	State     string    `json:"state"`
-	HookBead  string    `json:"hook_bead,omitempty"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID             string     `json:"id"`
+	Name           string     `json:"name"`
+	RoleType       string     `json:"role_type"`
+	Rig            string     `json:"rig"`
+	State          string     `json:"state"`
+	HookBead       string     `json:"hook_bead,omitempty"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+	LastActivityAt *time.Time `json:"last_activity_at,omitempty"`
 }
 
 // IssueUpdate represents a partial update to an issue.

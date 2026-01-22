@@ -49,7 +49,7 @@ function ComparisonField({
         <span className="text-xs text-text-muted uppercase tracking-wide">{label}</span>
         <div
           className={cn(
-            'px-3 py-2 rounded-md',
+            'px-3 py-2 rounded-md text-text-primary',
             'bg-bg-primary/50 border',
             hasDiff ? 'border-status-blocked/50 bg-status-blocked/5' : 'border-border/50',
             mono && 'font-mono text-sm'
@@ -64,7 +64,7 @@ function ComparisonField({
         <span className="text-xs text-text-muted uppercase tracking-wide">{label}</span>
         <div
           className={cn(
-            'px-3 py-2 rounded-md',
+            'px-3 py-2 rounded-md text-text-primary',
             'bg-bg-primary/50 border',
             hasDiff ? 'border-status-closed/50 bg-status-closed/5' : 'border-border/50',
             mono && 'font-mono text-sm'
@@ -229,7 +229,7 @@ export function AssignmentComparison({ original, final, className }: AssignmentC
           <span className="text-xs text-text-muted uppercase tracking-wide">Description</span>
           <div
             className={cn(
-              'px-3 py-2 rounded-md min-h-[80px]',
+              'px-3 py-2 rounded-md min-h-[80px] text-text-primary',
               'bg-bg-primary/50 border whitespace-pre-wrap',
               isDifferent(original.description, final.description)
                 ? 'border-status-blocked/50 bg-status-blocked/5'
@@ -243,7 +243,7 @@ export function AssignmentComparison({ original, final, className }: AssignmentC
           <span className="text-xs text-text-muted uppercase tracking-wide">Description</span>
           <div
             className={cn(
-              'px-3 py-2 rounded-md min-h-[80px]',
+              'px-3 py-2 rounded-md min-h-[80px] text-text-primary',
               'bg-bg-primary/50 border whitespace-pre-wrap',
               isDifferent(original.description, final.description)
                 ? 'border-status-closed/50 bg-status-closed/5'

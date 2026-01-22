@@ -1,18 +1,9 @@
-import { useEffect, useMemo, useState, useCallback } from 'react'
-import type { Rig, Agent, Issue, ActivityEvent, WSMessage, ConvoyProgressEvent } from '@/types'
-import { AgentCard } from './AgentCard'
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
+import type { Rig, Agent, Issue } from '@/types'
 import { cachedFetch } from '@/services/cache'
-import { getAgentRoleIcon } from '@/lib/agent-utils'
-import { cn } from '@/lib/class-utils'
-import { formatRelativeTime } from '@/lib/status-utils'
-import { SkeletonAgentGrid, SkeletonWorkList, ErrorState } from '@/components/ui/Skeleton'
-import { useMonitoringStore } from '@/stores/monitoring-store'
-import {
-  WorkItemRow,
-  ActivityFeed,
-  AgentPeekPanel,
-  ConvoyGroupHeader,
-} from './monitoring'
+import { cn, formatRelativeTime } from '@/lib/utils'
+import { SkeletonAgentGrid, ErrorState } from '@/components/ui/Skeleton'
+import { AgentPeekPanel } from './monitoring'
 
 interface MonitoringViewProps {
   rig: Rig
@@ -23,6 +14,17 @@ interface MonitoringViewProps {
 
 // Threshold for stuck detection (15 minutes in milliseconds)
 const STUCK_THRESHOLD_MS = 15 * 60 * 1000
+
+// Role display order
+const ROLE_ORDER = ['witness', 'refinery', 'crew', 'polecat'] as const
+
+// Role labels and icons
+const ROLE_CONFIG: Record<string, { label: string; icon: string; description: string }> = {
+  witness: { label: 'WITNESS', icon: '👁', description: 'Monitors polecat health' },
+  refinery: { label: 'REFINERY', icon: '🔧', description: 'Processes merge queue' },
+  crew: { label: 'CREW', icon: '👤', description: 'Human-managed workers' },
+  polecat: { label: 'POLECATS', icon: '🐱', description: 'Transient workers' },
+}
 
 /**
  * Check if an agent is stuck (working on same bead for >15min)
@@ -39,19 +41,17 @@ function isAgentStuck(agent: Agent): boolean {
 }
 
 /**
- * MonitoringView - Displays agent status grid with stuck detection
- * Part of the three-view architecture: Planning | Monitoring | Audit
+ * MonitoringView - Agent-centric view showing what each agent is doing
+ * Organized by role type: witness → refinery → crew → polecats
  */
-export function MonitoringView({ rig, refreshKey = 0, updatedIssueIds = new Set() }: MonitoringViewProps) {
+export function MonitoringView({ rig, refreshKey = 0 }: MonitoringViewProps) {
   const [agents, setAgents] = useState<Agent[]>([])
   const [issues, setIssues] = useState<Issue[]>([])
   const [loading, setLoading] = useState(true)
-  const [issuesLoading, setIssuesLoading] = useState(true)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
   // Error states
   const [agentsError, setAgentsError] = useState<string | null>(null)
-  const [issuesError, setIssuesError] = useState<string | null>(null)
 
   // Retry counter for manual retry
   const [retryCount, setRetryCount] = useState(0)
@@ -60,57 +60,13 @@ export function MonitoringView({ rig, refreshKey = 0, updatedIssueIds = new Set(
   const [peekPanelOpen, setPeekPanelOpen] = useState(false)
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null)
 
-  // Monitoring store for progress and activity
-  const {
-    progressCache,
-    activityEvents,
-    setActivityEvents,
-  } = useMonitoringStore()
+  // Track if this is the initial load (skip cache on first load to get fresh data)
+  const isInitialLoadRef = useRef(true)
 
-  // Handle convoy progress updates from SSE
-  // Note: General SSE updates (issue_changed, etc.) are handled by App.tsx via refreshKey.
-  // This callback only handles convoy_progress_changed for instant UI updates without refetching.
-  const handleConvoyProgress = useCallback((msg: WSMessage) => {
-    if (msg.rig && msg.rig !== rig.id) return
-    if (msg.type !== 'convoy_progress_changed') return
-
-    if (msg.payload) {
-      const progressEvent = msg.payload as unknown as ConvoyProgressEvent
-      setIssues(prevIssues => prevIssues.map(issue => {
-        if (issue.convoy?.id === progressEvent.convoy_id) {
-          return {
-            ...issue,
-            convoy: {
-              ...issue.convoy,
-              progress: {
-                completed: progressEvent.closed,
-                total: progressEvent.total,
-                percentage: progressEvent.total > 0
-                  ? Math.round((progressEvent.closed / progressEvent.total) * 100)
-                  : 0,
-              },
-            },
-          }
-        }
-        return issue
-      }))
-    }
-  }, [rig.id])
-
-  // Subscribe to convoy progress updates via App.tsx's shared SSE connection
-  // The useEffect registers a listener that App.tsx can call
+  // Reset initial load flag when rig changes
   useEffect(() => {
-    // Store the handler on window for App.tsx to call
-    // This is a lightweight approach - no extra SSE connection
-    const handlers = (window as unknown as { __convoyProgressHandlers?: Array<(msg: WSMessage) => void> }).__convoyProgressHandlers || []
-    handlers.push(handleConvoyProgress)
-    ;(window as unknown as { __convoyProgressHandlers: Array<(msg: WSMessage) => void> }).__convoyProgressHandlers = handlers
-
-    return () => {
-      const idx = handlers.indexOf(handleConvoyProgress)
-      if (idx >= 0) handlers.splice(idx, 1)
-    }
-  }, [handleConvoyProgress])
+    isInitialLoadRef.current = true
+  }, [rig.id])
 
   // Fetch agents for rig
   useEffect(() => {
@@ -119,9 +75,11 @@ export function MonitoringView({ rig, refreshKey = 0, updatedIssueIds = new Set(
 
     const fetchAgents = async () => {
       const url = `/api/rigs/${rig.id}/agents`
+      const skipCache = isInitialLoadRef.current
       const result = await cachedFetch<Agent[]>(url, {
         cacheTTL: 2 * 60 * 1000, // 2 minutes
         returnStaleOnError: true,
+        skipCache, // Skip cache on initial load
       })
 
       if (result.data) {
@@ -136,131 +94,69 @@ export function MonitoringView({ rig, refreshKey = 0, updatedIssueIds = new Set(
         setAgents([])
       }
       setLoading(false)
+      // Mark initial load as complete
+      isInitialLoadRef.current = false
     }
 
     fetchAgents()
   }, [rig.id, refreshKey, retryCount])
 
-  // Fetch issues for in-flight work section (with convoy enrichment)
+  // Fetch issues (without convoy enrichment - that was causing crashes)
   useEffect(() => {
-    setIssuesLoading(true)
-    setIssuesError(null)
-
     const fetchIssues = async () => {
-      const url = `/api/rigs/${rig.id}/issues?all=true&include=convoy`
+      // Only fetch in_progress issues - no need for all issues
+      const url = `/api/rigs/${rig.id}/issues?status=in_progress`
+      const skipCache = isInitialLoadRef.current
       const result = await cachedFetch<Issue[]>(url, {
         cacheTTL: 2 * 60 * 1000,
         returnStaleOnError: true,
+        skipCache, // Skip cache on initial load
       })
 
       if (result.data) {
         setIssues(result.data)
-      } else {
-        setIssuesError(result.error || 'Failed to load issues')
-        setIssues([])
       }
-      setIssuesLoading(false)
     }
 
     fetchIssues()
   }, [rig.id, refreshKey, retryCount])
-
-  // Fetch initial activity events
-  useEffect(() => {
-    const fetchActivity = async () => {
-      try {
-        const response = await fetch(`/api/rigs/${rig.id}/activity?limit=50`)
-        if (response.ok) {
-          const events: ActivityEvent[] = await response.json()
-          setActivityEvents(events)
-        }
-      } catch (err) {
-        console.error('Failed to fetch activity:', err)
-      }
-    }
-
-    fetchActivity()
-  }, [rig.id, setActivityEvents])
 
   // Handle retry
   const handleRetry = useCallback(() => {
     setRetryCount((c) => c + 1)
   }, [])
 
-  // Separate agents by status for display
-  const workingAgents = agents.filter(a => a.state === 'working' || a.hook_bead)
-  const stuckAgents = agents.filter(a => isAgentStuck(a))
-  const idleAgents = agents.filter(a => !a.hook_bead && a.state !== 'working')
-
-  // Get in-flight work (in_progress issues with assignees)
-  const inFlightWork = useMemo(() => {
-    return issues
-      .filter(issue => issue.status === 'in_progress')
-      .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
-  }, [issues])
-
-  // Group in-flight work by convoy
-  const groupedByConvoy = useMemo(() => {
-    const groups = new Map<string | null, Issue[]>()
-
-    inFlightWork.forEach(issue => {
-      const convoyId = issue.convoy?.id ?? null
-      if (!groups.has(convoyId)) {
-        groups.set(convoyId, [])
-      }
-      groups.get(convoyId)!.push(issue)
-    })
-
-    // Sort groups: convoys with most recent activity first, ungrouped (null) last
-    const sortedEntries = Array.from(groups.entries()).sort((a, b) => {
-      // Null (ungrouped) always goes last
-      if (a[0] === null) return 1
-      if (b[0] === null) return -1
-      // Sort by most recent updated_at in the group
-      const aLatest = Math.max(...a[1].map(i => new Date(i.updated_at).getTime()))
-      const bLatest = Math.max(...b[1].map(i => new Date(i.updated_at).getTime()))
-      return bLatest - aLatest
-    })
-
-    return new Map(sortedEntries)
-  }, [inFlightWork])
-
-  // Get recently completed work (closed in last 24 hours)
-  const recentlyCompleted = useMemo(() => {
-    const twentyFourHoursAgo = Date.now() - 24 * 60 * 60 * 1000
-    return issues
-      .filter(issue => {
-        if (issue.status !== 'closed') return false
-        const closedAt = issue.closed_at ? new Date(issue.closed_at).getTime() : 0
-        return closedAt > twentyFourHoursAgo
-      })
-      .sort((a, b) => {
-        const aTime = a.closed_at ? new Date(a.closed_at).getTime() : 0
-        const bTime = b.closed_at ? new Date(b.closed_at).getTime() : 0
-        return bTime - aTime // Most recently closed first
-      })
-  }, [issues])
-
-  // Create a map of agent names to agent objects for lookup
-  const agentsByName = useMemo(() => {
-    const map = new Map<string, Agent>()
-    agents.forEach(agent => {
-      map.set(agent.name, agent)
-      // Also map by full path (e.g., "townview/polecats/rictus")
-      map.set(agent.id, agent)
-    })
+  // Create issue lookup for hooked beads
+  const issueMap = useMemo(() => {
+    const map = new Map<string, Issue>()
+    issues.forEach(issue => map.set(issue.id, issue))
     return map
+  }, [issues])
+
+  // Group agents by role type
+  const agentsByRole = useMemo(() => {
+    const groups = new Map<string, Agent[]>()
+
+    // Initialize empty groups for each role
+    ROLE_ORDER.forEach(role => groups.set(role, []))
+
+    // Group agents
+    agents.forEach(agent => {
+      const role = agent.role_type || 'polecat'
+      const group = groups.get(role) || []
+      group.push(agent)
+      groups.set(role, group)
+    })
+
+    return groups
   }, [agents])
 
-  // Calculate duration since issue started (for health badge)
-  const getIssueDuration = useCallback((issue: Issue): number => {
-    const updatedAt = new Date(issue.updated_at).getTime()
-    return Date.now() - updatedAt
-  }, [])
+  // Count working agents
+  const workingCount = agents.filter(a => a.state === 'working' || a.hook_bead).length
+  const stuckCount = agents.filter(a => isAgentStuck(a)).length
 
   // Handle agent card click - open peek panel
   const handleAgentClick = useCallback((agent: Agent) => {
-    if (!agent.hook_bead) return
     setSelectedAgent(agent)
     setPeekPanelOpen(true)
   }, [])
@@ -271,30 +167,15 @@ export function MonitoringView({ rig, refreshKey = 0, updatedIssueIds = new Set(
     setSelectedAgent(null)
   }, [])
 
-  // Handle work item click - also opens peek panel for assigned agent
-  const handleWorkItemClick = useCallback((issue: Issue) => {
-    if (!issue.assignee) return
-    const agent = agentsByName.get(issue.assignee)
-    if (agent && agent.state === 'working') {
-      setSelectedAgent(agent)
-      setPeekPanelOpen(true)
-    }
-  }, [agentsByName])
-
-  // Handle activity event click - navigate to issue
-  const handleActivityClick = useCallback((event: ActivityEvent) => {
-    // Could navigate to issue or open panel here
-    console.log('Activity clicked:', event.issue_id)
-  }, [])
-
   return (
     <div className="p-6">
-      {/* Real-time status header */}
+      {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="font-display text-2xl font-bold tracking-wide">MONITORING</h1>
           <p className="text-text-muted text-sm mt-1">
-            Real-time agent status and work tracking
+            Agent status by role • {workingCount} working
+            {stuckCount > 0 && <span className="text-status-blocked"> • {stuckCount} stuck</span>}
           </p>
         </div>
         <div className="flex items-center gap-2 text-sm">
@@ -310,7 +191,7 @@ export function MonitoringView({ rig, refreshKey = 0, updatedIssueIds = new Set(
         </div>
       </div>
 
-      {/* Error state - show if agents failed to load */}
+      {/* Error state */}
       {agentsError && !loading && (
         <ErrorState
           title="Failed to load agents"
@@ -319,229 +200,54 @@ export function MonitoringView({ rig, refreshKey = 0, updatedIssueIds = new Set(
         />
       )}
 
-      {/* Stuck agents section - shown first if any exist */}
-      {!agentsError && stuckAgents.length > 0 && (
-        <div className="mb-8">
-          <div className="flex items-center gap-2 mb-4">
-            <span className="text-status-blocked text-lg">⚠</span>
-            <h2 className="section-header text-status-blocked">
-              STUCK AGENTS ({stuckAgents.length})
-            </h2>
+      {/* Loading state */}
+      {loading && <SkeletonAgentGrid count={4} />}
+
+      {/* Agent sections by role */}
+      {!loading && !agentsError && (
+        <div className="space-y-4">
+          {/* Top row: Witness, Refinery, Crew - side by side sections */}
+          <div className="flex flex-wrap gap-6">
+            {(['witness', 'refinery', 'crew'] as const).map(role => {
+              const roleAgents = agentsByRole.get(role) || []
+              if (roleAgents.length === 0) return null
+
+              const roleConfig = ROLE_CONFIG[role]
+              const workingInRole = roleAgents.filter(a => a.state === 'working' || a.hook_bead).length
+
+              return (
+                <CompactRoleSection
+                  key={role}
+                  label={roleConfig.label}
+                  icon={roleConfig.icon}
+                  agents={roleAgents}
+                  issueMap={issueMap}
+                  workingCount={workingInRole}
+                  onAgentClick={handleAgentClick}
+                />
+              )
+            })}
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {stuckAgents.map((agent) => (
-              <AgentCard
-                key={agent.id}
-                agent={{ ...agent, state: 'stuck' }}
-                onClick={agent.hook_bead ? () => handleAgentClick(agent) : undefined}
+
+          {/* Polecats row - full width grid */}
+          {(() => {
+            const polecatAgents = agentsByRole.get('polecat') || []
+            if (polecatAgents.length === 0) return null
+
+            const roleConfig = ROLE_CONFIG.polecat
+            const workingInRole = polecatAgents.filter(a => a.state === 'working' || a.hook_bead).length
+
+            return (
+              <RoleSection
+                label={roleConfig.label}
+                icon={roleConfig.icon}
+                agents={polecatAgents}
+                issueMap={issueMap}
+                workingCount={workingInRole}
+                onAgentClick={handleAgentClick}
               />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* In-flight work section - grouped by convoy */}
-      {!agentsError && (
-        <div className="mb-8">
-          <div className="flex items-center gap-2 mb-4">
-            <span className="text-status-in-progress text-lg">◐</span>
-            <h2 className="section-header">
-              IN-FLIGHT WORK ({inFlightWork.length})
-            </h2>
-          </div>
-          {issuesLoading ? (
-            <div className="card">
-              <SkeletonWorkList count={3} />
-            </div>
-          ) : issuesError ? (
-            <div className="card">
-              <div className="py-8 text-center text-status-blocked text-sm">
-                {issuesError}
-              </div>
-            </div>
-          ) : inFlightWork.length === 0 ? (
-            <div className="card">
-              <div className="py-8 text-center text-text-muted">
-                No work currently in progress
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {Array.from(groupedByConvoy.entries()).map(([convoyId, issues]) => {
-                if (convoyId !== null) {
-                  // Convoy group - use ConvoyGroupHeader
-                  const convoy = issues[0].convoy!
-                  return (
-                    <ConvoyGroupHeader
-                      key={convoyId}
-                      convoyId={convoyId}
-                      title={convoy.title}
-                      progress={convoy.progress}
-                      itemCount={issues.length}
-                    >
-                      <div className="divide-y divide-border">
-                        {issues.map((issue) => {
-                          const agent = issue.assignee ? agentsByName.get(issue.assignee) : undefined
-                          const progress = progressCache.get(issue.id)
-                          return (
-                            <WorkItemRow
-                              key={issue.id}
-                              issue={issue}
-                              agent={agent}
-                              durationMs={getIssueDuration(issue)}
-                              progress={progress}
-                              isUpdated={updatedIssueIds.has(issue.id)}
-                              onClick={agent?.state === 'working' ? () => handleWorkItemClick(issue) : undefined}
-                            />
-                          )
-                        })}
-                      </div>
-                    </ConvoyGroupHeader>
-                  )
-                } else {
-                  // Ungrouped work section
-                  return (
-                    <div key="ungrouped" className="rounded-lg border border-border bg-bg-secondary">
-                      <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
-                        <span className="text-text-muted text-sm">──</span>
-                        <span className="text-text-muted text-sm font-medium">Ungrouped Work</span>
-                        <span className="text-text-muted text-xs">({issues.length})</span>
-                      </div>
-                      <div className="divide-y divide-border">
-                        {issues.map((issue) => {
-                          const agent = issue.assignee ? agentsByName.get(issue.assignee) : undefined
-                          const progress = progressCache.get(issue.id)
-                          return (
-                            <WorkItemRow
-                              key={issue.id}
-                              issue={issue}
-                              agent={agent}
-                              durationMs={getIssueDuration(issue)}
-                              progress={progress}
-                              isUpdated={updatedIssueIds.has(issue.id)}
-                              onClick={agent?.state === 'working' ? () => handleWorkItemClick(issue) : undefined}
-                            />
-                          )
-                        })}
-                      </div>
-                    </div>
-                  )
-                }
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Activity Feed section */}
-      {!agentsError && (
-        <div className="mb-8">
-          <div className="flex items-center gap-2 mb-4">
-            <span className="text-accent-primary text-lg">↻</span>
-            <h2 className="section-header">
-              RECENT ACTIVITY ({activityEvents.length})
-            </h2>
-          </div>
-          <div className="card max-h-[300px] overflow-hidden">
-            <ActivityFeed
-              events={activityEvents}
-              onEventClick={handleActivityClick}
-              className="max-h-[280px] p-2"
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Recently completed section */}
-      {!agentsError && (
-        <div className="mb-8">
-          <div className="flex items-center gap-2 mb-4">
-            <span className="text-status-closed text-lg">✓</span>
-            <h2 className="section-header">
-              RECENTLY COMPLETED ({recentlyCompleted.length})
-            </h2>
-            <span className="text-xs text-text-muted">(last 24h)</span>
-          </div>
-          <div className="card">
-            {issuesLoading ? (
-              <SkeletonWorkList count={3} />
-            ) : issuesError ? (
-              <div className="py-8 text-center text-status-blocked text-sm">
-                {issuesError}
-              </div>
-            ) : recentlyCompleted.length === 0 ? (
-              <div className="py-8 text-center text-text-muted">
-                No work completed in the last 24 hours
-              </div>
-            ) : (
-              <div className="divide-y divide-border">
-                {recentlyCompleted.map((issue) => (
-                  <RecentlyCompletedRow
-                    key={issue.id}
-                    issue={issue}
-                    agent={issue.assignee ? agentsByName.get(issue.assignee) : undefined}
-                    isUpdated={updatedIssueIds.has(issue.id)}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Working agents section */}
-      {!agentsError && (
-        <div className="mb-8">
-          <h2 className="section-header mb-4">
-            WORKING AGENTS ({workingAgents.length})
-          </h2>
-          {loading ? (
-            <SkeletonAgentGrid count={4} />
-          ) : workingAgents.length === 0 ? (
-            <div className="card">
-              <div className="py-8 text-center text-text-muted">
-                No agents currently working
-              </div>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {workingAgents.map((agent) => (
-                <AgentCard
-                  key={agent.id}
-                  agent={agent}
-                  onClick={agent.hook_bead ? () => handleAgentClick(agent) : undefined}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Idle agents section */}
-      {!agentsError && (
-        <div>
-          <h2 className="section-header mb-4">
-            IDLE AGENTS ({idleAgents.length})
-          </h2>
-          {loading ? (
-            <SkeletonAgentGrid count={2} />
-          ) : idleAgents.length === 0 ? (
-            <div className="card">
-              <div className="py-8 text-center text-text-muted">
-                No idle agents
-              </div>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {idleAgents.map((agent) => (
-                <AgentCard
-                  key={agent.id}
-                  agent={agent}
-                  onClick={agent.hook_bead ? () => handleAgentClick(agent) : undefined}
-                />
-              ))}
-            </div>
-          )}
+            )
+          })()}
         </div>
       )}
 
@@ -550,66 +256,162 @@ export function MonitoringView({ rig, refreshKey = 0, updatedIssueIds = new Set(
         isOpen={peekPanelOpen}
         onClose={handlePeekPanelClose}
         rigId={rig.id}
-        agentId={selectedAgent?.id || ''}
-        agentName={selectedAgent?.name}
+        agent={selectedAgent}
       />
     </div>
   )
 }
 
-interface RecentlyCompletedRowProps {
-  issue: Issue
-  agent?: Agent
-  isUpdated?: boolean
+interface RoleSectionProps {
+  label: string
+  icon: string
+  agents: Agent[]
+  issueMap: Map<string, Issue>
+  workingCount: number
+  onAgentClick: (agent: Agent) => void
 }
 
 /**
- * Row component for recently completed section showing closed issue with completion time.
+ * Compact section for singleton roles (witness, refinery, crew) - header above, cards below
  */
-function RecentlyCompletedRow({ issue, agent, isUpdated = false }: RecentlyCompletedRowProps) {
-  // Extract short agent name from full path
-  const agentDisplayName = issue.assignee
-    ? issue.assignee.split('/').pop() || issue.assignee
-    : null
+function CompactRoleSection({
+  label,
+  icon,
+  agents,
+  issueMap,
+  workingCount,
+  onAgentClick,
+}: RoleSectionProps) {
+  // Sort: stuck first, then working, then idle
+  const sortedAgents = [...agents].sort((a, b) => {
+    const stateOrder = { stuck: 0, working: 1, idle: 2, paused: 3 }
+    const aState = isAgentStuck(a) ? 'stuck' : (a.hook_bead ? 'working' : a.state || 'idle')
+    const bState = isAgentStuck(b) ? 'stuck' : (b.hook_bead ? 'working' : b.state || 'idle')
+    return (stateOrder[aState as keyof typeof stateOrder] ?? 2) - (stateOrder[bState as keyof typeof stateOrder] ?? 2)
+  })
 
   return (
-    <div className={cn(
-      "flex items-center gap-3 py-3 px-4 hover:bg-bg-tertiary/50 transition-colors",
-      isUpdated && "animate-flash-update"
-    )}>
-      {/* Status icon */}
-      <span className="text-status-closed text-lg flex-shrink-0">✓</span>
-
-      {/* Issue ID */}
-      <span className="mono text-xs text-text-muted w-24 flex-shrink-0 truncate">
-        {issue.id}
-      </span>
-
-      {/* Title */}
-      <div className="flex-1 min-w-0">
-        <span className="truncate block text-text-primary">{issue.title}</span>
+    <div>
+      {/* Role header */}
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-base">{icon}</span>
+        <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wide">{label}</h2>
+        <span className="text-xs text-text-muted">
+          {workingCount}/{agents.length}
+        </span>
       </div>
 
-      {/* Completed by agent indicator */}
-      {agentDisplayName ? (
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <span className="text-sm" title={agent?.role_type}>
-            {agent ? getAgentRoleIcon(agent.role_type) : '👤'}
-          </span>
-          <span className="text-sm text-text-secondary">
-            {agentDisplayName}
-          </span>
-        </div>
-      ) : (
-        <span className="text-xs text-text-muted italic flex-shrink-0">
-          Unassigned
-        </span>
-      )}
+      {/* Agent cards */}
+      <div className="flex flex-wrap gap-2">
+        {sortedAgents.map(agent => (
+          <CompactAgentCard
+            key={agent.id}
+            agent={agent}
+            hookedIssue={agent.hook_bead ? issueMap.get(agent.hook_bead) : undefined}
+            onClick={() => onAgentClick(agent)}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
 
-      {/* Time since completion */}
-      <span className="text-xs text-text-muted flex-shrink-0 w-16 text-right">
-        {issue.closed_at ? formatRelativeTime(issue.closed_at) : '—'}
-      </span>
+/**
+ * Section component for a role type showing all agents of that role in a compact grid
+ */
+function RoleSection({
+  label,
+  icon,
+  agents,
+  issueMap,
+  workingCount,
+  onAgentClick,
+}: RoleSectionProps) {
+  // Sort: stuck first, then working, then idle
+  const sortedAgents = [...agents].sort((a, b) => {
+    const stateOrder = { stuck: 0, working: 1, idle: 2, paused: 3 }
+    const aState = isAgentStuck(a) ? 'stuck' : (a.hook_bead ? 'working' : a.state || 'idle')
+    const bState = isAgentStuck(b) ? 'stuck' : (b.hook_bead ? 'working' : b.state || 'idle')
+    return (stateOrder[aState as keyof typeof stateOrder] ?? 2) - (stateOrder[bState as keyof typeof stateOrder] ?? 2)
+  })
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-base">{icon}</span>
+        <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wide">{label}</h2>
+        <span className="text-xs text-text-muted">
+          {workingCount}/{agents.length}
+        </span>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {sortedAgents.map(agent => (
+          <CompactAgentCard
+            key={agent.id}
+            agent={agent}
+            hookedIssue={agent.hook_bead ? issueMap.get(agent.hook_bead) : undefined}
+            onClick={() => onAgentClick(agent)}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+interface CompactAgentCardProps {
+  agent: Agent
+  hookedIssue?: Issue
+  onClick: () => void
+}
+
+/**
+ * Compact card showing agent status at a glance
+ */
+function CompactAgentCard({ agent, hookedIssue, onClick }: CompactAgentCardProps) {
+  const isStuck = isAgentStuck(agent)
+  const effectiveState = isStuck ? 'stuck' : (agent.hook_bead ? 'working' : agent.state || 'idle')
+
+  const stateConfig: Record<string, { bg: string; border: string; dot: string }> = {
+    stuck: { bg: 'bg-status-blocked/10', border: 'border-status-blocked/30', dot: 'bg-status-blocked' },
+    working: { bg: 'bg-status-in-progress/10', border: 'border-status-in-progress/30', dot: 'bg-status-in-progress' },
+    idle: { bg: 'bg-bg-secondary', border: 'border-border', dot: 'bg-text-muted' },
+    paused: { bg: 'bg-status-deferred/10', border: 'border-status-deferred/30', dot: 'bg-status-deferred' },
+  }
+
+  const config = stateConfig[effectiveState] || stateConfig.idle
+
+  return (
+    <div
+      className={cn(
+        'w-[160px] px-3 py-2 rounded-md border cursor-pointer transition-all',
+        config.bg,
+        config.border,
+        'hover:brightness-110 hover:shadow-sm'
+      )}
+      onClick={onClick}
+    >
+      {/* Top row: status dot + name */}
+      <div className="flex items-center gap-2">
+        <span className={cn('w-2 h-2 rounded-full flex-shrink-0', config.dot)} />
+        <span className="text-sm font-medium text-text-primary truncate">{agent.name}</span>
+      </div>
+
+      {/* Bottom row: work info or status + time */}
+      <div className="flex items-center justify-between mt-1">
+        {hookedIssue ? (
+          <span className="text-[10px] text-text-secondary truncate max-w-[80%]" title={hookedIssue.title}>
+            {hookedIssue.issue_type}: {hookedIssue.title}
+          </span>
+        ) : agent.hook_bead ? (
+          <span className="text-[10px] text-status-in-progress mono truncate">{agent.hook_bead}</span>
+        ) : (
+          <span className="text-[10px] text-text-muted capitalize">{effectiveState}</span>
+        )}
+        <span className="text-[10px] text-text-muted flex-shrink-0 ml-1">
+          {formatRelativeTime(agent.last_activity_at || agent.updated_at)}
+        </span>
+      </div>
     </div>
   )
 }

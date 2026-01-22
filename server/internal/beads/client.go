@@ -16,10 +16,6 @@ import (
 	"github.com/gastown/townview/internal/types"
 )
 
-// gtCommandTimeout is the maximum time to wait for gt commands to complete.
-// This prevents hanging when gt status or other commands don't return.
-const gtCommandTimeout = 10 * time.Second
-
 // Client wraps the bd CLI for issue operations.
 type Client struct {
 	townRoot string
@@ -123,17 +119,193 @@ func (c *Client) UpdateIssue(rigPath, issueID string, update types.IssueUpdate) 
 	return c.GetIssue(rigPath, issueID)
 }
 
-// GetAgents returns agents for a rig using beads-based lookup.
-// Note: gt status --json was too expensive (spawns many bd processes).
+// GetAgents returns agents for a rig using beads + tmux session detection.
 func (c *Client) GetAgents(rigPath string) ([]types.Agent, error) {
-	// Use beads-based lookup directly - gt status is too expensive
-	return c.getAgentsFromBeads(rigPath)
+	// Get agents from beads/filesystem
+	agents, err := c.getAgentsFromBeads(rigPath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Enrich with last activity timestamps and hooked work from issues
+	c.enrichAgentsFromIssues(rigPath, agents)
+
+	// Enrich with running state from tmux sessions (fast, rig-scoped)
+	c.enrichAgentsWithTmuxState(rigPath, agents)
+
+	return agents, nil
+}
+
+// enrichAgentsFromIssues populates agent data from issues:
+// - LastActivityAt: most recent activity timestamp
+// - HookBead: currently assigned in_progress work
+// - State: "working" if has in_progress work, otherwise from beads
+func (c *Client) enrichAgentsFromIssues(rigPath string, agents []types.Agent) {
+	// Skip if no agents
+	if len(agents) == 0 {
+		return
+	}
+
+	// Get all issues
+	issues, err := c.ListIssues(rigPath, map[string]string{"all": "true"})
+	if err != nil {
+		slog.Debug("Failed to get issues for agent enrichment", "error", err)
+		return
+	}
+
+	// Build maps for agent data
+	lastActivity := make(map[string]time.Time)
+	activeWork := make(map[string]string) // agent name -> in_progress issue ID
+
+	for _, issue := range issues {
+		if issue.Assignee == "" {
+			continue
+		}
+
+		// Extract agent name from assignee (e.g., "townview/crew/jeremy" -> "jeremy")
+		parts := strings.Split(issue.Assignee, "/")
+		agentName := parts[len(parts)-1]
+
+		// Track the most recent activity for this agent
+		if existing, ok := lastActivity[agentName]; !ok || issue.UpdatedAt.After(existing) {
+			lastActivity[agentName] = issue.UpdatedAt
+		}
+
+		// Track in_progress work as "hooked" work
+		if issue.Status == "in_progress" {
+			// Prefer the most recently updated in_progress issue
+			if existingID, ok := activeWork[agentName]; ok {
+				// Check if this issue is more recent
+				for _, existingIssue := range issues {
+					if existingIssue.ID == existingID && issue.UpdatedAt.After(existingIssue.UpdatedAt) {
+						activeWork[agentName] = issue.ID
+					}
+				}
+			} else {
+				activeWork[agentName] = issue.ID
+			}
+		}
+	}
+
+	// Update agents with enriched data
+	for i := range agents {
+		name := agents[i].Name
+
+		// Set last activity time
+		if ts, ok := lastActivity[name]; ok {
+			agents[i].LastActivityAt = &ts
+		}
+
+		// Set hooked bead (in_progress work)
+		if beadID, ok := activeWork[name]; ok {
+			agents[i].HookBead = beadID
+			agents[i].State = "working"
+		}
+	}
+}
+
+// enrichAgentsWithTmuxState detects running agents by checking for active tmux sessions.
+// This is a fast, rig-scoped alternative to calling gt status --json.
+// Session naming pattern: gt-{rig}-{role} or gt-{rig}-crew-{name}
+func (c *Client) enrichAgentsWithTmuxState(rigPath string, agents []types.Agent) {
+	// Skip if no agents
+	if len(agents) == 0 {
+		return
+	}
+
+	// Get rig name from path
+	rigName := rigPath
+	if rigName == "." {
+		rigName = "hq"
+	}
+
+	// Run tmux list-sessions with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "tmux", "list-sessions", "-F", "#{session_name}")
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		// tmux might not be running or no sessions exist - that's fine
+		slog.Debug("tmux list-sessions failed (may be no sessions)", "error", err)
+		return
+	}
+
+	// Parse session names into a set for fast lookup
+	sessionSet := make(map[string]bool)
+	for _, line := range strings.Split(stdout.String(), "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			sessionSet[line] = true
+		}
+	}
+
+	// Check each agent for a matching tmux session
+	for i := range agents {
+		agent := &agents[i]
+
+		// Build possible session names for this agent
+		// Patterns: gt-{rig}-{role}, gt-{rig}-crew-{name}, gt-{rig}-{name}
+		var possibleSessions []string
+
+		switch agent.RoleType {
+		case types.RoleWitness:
+			possibleSessions = []string{
+				fmt.Sprintf("gt-%s-witness", rigName),
+			}
+		case types.RoleRefinery:
+			possibleSessions = []string{
+				fmt.Sprintf("gt-%s-refinery", rigName),
+			}
+		case types.RoleCrew:
+			possibleSessions = []string{
+				fmt.Sprintf("gt-%s-crew-%s", rigName, agent.Name),
+				fmt.Sprintf("gt-%s-%s", rigName, agent.Name),
+			}
+		case types.RolePolecat:
+			possibleSessions = []string{
+				fmt.Sprintf("gt-%s-%s", rigName, agent.Name),
+				fmt.Sprintf("gt-%s-polecat-%s", rigName, agent.Name),
+			}
+		case types.RoleMayor:
+			possibleSessions = []string{
+				"gt-mayor",
+				fmt.Sprintf("gt-%s-mayor", rigName),
+			}
+		case types.RoleDeacon:
+			possibleSessions = []string{
+				"gt-deacon",
+				fmt.Sprintf("gt-%s-deacon", rigName),
+			}
+		default:
+			// Generic pattern
+			possibleSessions = []string{
+				fmt.Sprintf("gt-%s-%s", rigName, agent.Name),
+			}
+		}
+
+		// Check if any of the possible session names exist
+		for _, sessionName := range possibleSessions {
+			if sessionSet[sessionName] {
+				// Agent has an active tmux session - mark as working if not already
+				if agent.State == "idle" {
+					agent.State = "working"
+				}
+				break
+			}
+		}
+	}
 }
 
 // GetAgentHealth returns health indicators for the 3 main roles (witness, refinery, crew).
 // Returns nil for roles that don't exist for this rig.
+// Uses GetAgents which includes tmux session detection for accurate running state.
 func (c *Client) GetAgentHealth(rigPath string) (*types.AgentHealth, error) {
-	agents, err := c.getAgentsFromBeads(rigPath)
+	// Use GetAgents to include tmux session detection
+	agents, err := c.GetAgents(rigPath)
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +319,10 @@ func (c *Client) GetAgentHealth(rigPath string) (*types.AgentHealth, error) {
 		case types.RoleRefinery:
 			health.Refinery = &state
 		case types.RoleCrew:
-			health.Crew = &state
+			// For crew, use the "best" state (working > idle)
+			if health.Crew == nil || state == "working" {
+				health.Crew = &state
+			}
 		}
 	}
 
@@ -270,15 +445,15 @@ func mapGTRole(gtRole string) string {
 	}
 }
 
-// runGTFromRoot executes a gt command from the town root directory.
-// Uses a timeout to prevent hanging on slow or unresponsive commands.
+// runGTFromRoot executes a gt command from the town root directory with a timeout.
 func (c *Client) runGTFromRoot(args ...string) ([]byte, error) {
 	gtPath := os.Getenv("GT_PATH")
 	if gtPath == "" {
 		gtPath = "gt"
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), gtCommandTimeout)
+	// Create context with 5 second timeout to prevent hangs
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, gtPath, args...)
@@ -292,8 +467,8 @@ func (c *Client) runGTFromRoot(args ...string) ([]byte, error) {
 
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
-			slog.Error("gt command timed out", "args", args, "timeout", gtCommandTimeout)
-			return nil, fmt.Errorf("command timed out after %v", gtCommandTimeout)
+			slog.Warn("gt command timed out", "args", args)
+			return nil, fmt.Errorf("command timed out after 5s")
 		}
 		slog.Error("gt command failed", "args", args, "stderr", stderr.String(), "error", err)
 		return nil, fmt.Errorf("%s: %s", err, stderr.String())
@@ -302,46 +477,127 @@ func (c *Client) runGTFromRoot(args ...string) ([]byte, error) {
 	return stdout.Bytes(), nil
 }
 
-// getAgentsFromBeads returns agents using the legacy beads-based lookup.
-// Used as fallback when gt status is unavailable.
+// getAgentsFromBeads returns agents using beads + filesystem auto-discovery.
+// Combines agent beads with filesystem scanning of crew/ and polecats/ directories.
 // rigName is used to filter agents to only those belonging to this rig.
 func (c *Client) getAgentsFromBeads(rigPath string) ([]types.Agent, error) {
-	args := []string{"list", "--json", "--type", "agent", "--all", "-n", "0"}
-
-	output, err := c.runBD(rigPath, args...)
-	if err != nil {
-		return nil, fmt.Errorf("bd list agents failed: %w", err)
-	}
-
-	var issues []types.Issue
-	if err := json.Unmarshal(output, &issues); err != nil {
-		return nil, fmt.Errorf("failed to parse agent issues: %w", err)
-	}
-
 	// Determine rig name from path for filtering
-	// - "." means HQ (town-level), agents have rig: hq
-	// - "townview" means townview rig, agents have rig: townview
-	// - "some/nested/path" means first component is the rig name
 	rigName := rigPath
 	if rigName == "." {
 		rigName = "hq"
-	} else if strings.Contains(rigName, "/") {
-		rigName = strings.Split(rigName, "/")[0]
 	}
 
-	// Convert issues to agents, filtering by rig
-	agents := make([]types.Agent, 0, len(issues))
-	for _, issue := range issues {
-		agent := issueToAgent(issue)
-		if agent != nil {
-			// Filter: only include agents belonging to this rig
-			if agent.Rig == rigName {
-				agents = append(agents, *agent)
+	// Start with agents from beads
+	agentMap := make(map[string]*types.Agent)
+
+	args := []string{"list", "--json", "--type", "agent", "--all", "-n", "0"}
+	output, err := c.runBD(rigPath, args...)
+	if err == nil {
+		var issues []types.Issue
+		if err := json.Unmarshal(output, &issues); err == nil {
+			for _, issue := range issues {
+				agent := issueToAgent(issue)
+				if agent != nil && agent.Rig == rigName {
+					agentMap[agent.Name] = agent
+				}
 			}
 		}
 	}
 
+	// Auto-discover agents from filesystem (crew/ and polecats/)
+	rigFullPath := filepath.Join(c.townRoot, rigPath)
+	if rigPath == "." {
+		rigFullPath = c.townRoot
+	}
+
+	// Discover crew members
+	crewDir := filepath.Join(rigFullPath, "crew")
+	if entries, err := os.ReadDir(crewDir); err == nil {
+		for _, entry := range entries {
+			if !entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
+				continue
+			}
+			name := entry.Name()
+			if _, exists := agentMap[name]; !exists {
+				// Create agent from filesystem discovery
+				agentMap[name] = &types.Agent{
+					ID:        fmt.Sprintf("%s-%s-crew-%s", getPrefix(rigName), rigName, name),
+					Name:      name,
+					RoleType:  types.RoleCrew,
+					Rig:       rigName,
+					State:     "idle", // Default state - no bead means idle
+					UpdatedAt: time.Now(),
+				}
+			}
+		}
+	}
+
+	// Discover polecats
+	polecatsDir := filepath.Join(rigFullPath, "polecats")
+	if entries, err := os.ReadDir(polecatsDir); err == nil {
+		for _, entry := range entries {
+			if !entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
+				continue
+			}
+			name := entry.Name()
+			if _, exists := agentMap[name]; !exists {
+				agentMap[name] = &types.Agent{
+					ID:        fmt.Sprintf("%s-%s-polecat-%s", getPrefix(rigName), rigName, name),
+					Name:      name,
+					RoleType:  types.RolePolecat,
+					Rig:       rigName,
+					State:     "idle",
+					UpdatedAt: time.Now(),
+				}
+			}
+		}
+	}
+
+	// Check for witness directory
+	witnessDir := filepath.Join(rigFullPath, "witness")
+	if _, err := os.Stat(witnessDir); err == nil {
+		if _, exists := agentMap["witness"]; !exists {
+			agentMap["witness"] = &types.Agent{
+				ID:        fmt.Sprintf("%s-%s-witness", getPrefix(rigName), rigName),
+				Name:      "witness",
+				RoleType:  types.RoleWitness,
+				Rig:       rigName,
+				State:     "idle",
+				UpdatedAt: time.Now(),
+			}
+		}
+	}
+
+	// Check for refinery directory
+	refineryDir := filepath.Join(rigFullPath, "refinery")
+	if _, err := os.Stat(refineryDir); err == nil {
+		if _, exists := agentMap["refinery"]; !exists {
+			agentMap["refinery"] = &types.Agent{
+				ID:        fmt.Sprintf("%s-%s-refinery", getPrefix(rigName), rigName),
+				Name:      "refinery",
+				RoleType:  types.RoleRefinery,
+				Rig:       rigName,
+				State:     "idle",
+				UpdatedAt: time.Now(),
+			}
+		}
+	}
+
+	// Convert map to slice
+	agents := make([]types.Agent, 0, len(agentMap))
+	for _, agent := range agentMap {
+		agents = append(agents, *agent)
+	}
+
 	return agents, nil
+}
+
+// getPrefix returns a short prefix for agent IDs based on rig name.
+func getPrefix(rigName string) string {
+	if len(rigName) >= 2 {
+		return strings.ToLower(rigName[:2])
+	}
+	return strings.ToLower(rigName)
 }
 
 // gtStatusOutput represents the gt status --json output.
@@ -622,14 +878,14 @@ func (c *Client) GetDependencies(rigPath string) ([]types.Dependency, error) {
 }
 
 // runGT executes a gt command in the given rig path.
-// Uses a timeout to prevent hanging on slow or unresponsive commands.
 func (c *Client) runGT(rigPath string, args ...string) ([]byte, error) {
 	gtPath := os.Getenv("GT_PATH")
 	if gtPath == "" {
 		gtPath = "gt"
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), gtCommandTimeout)
+	// Create context with 5 second timeout to prevent hangs
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, gtPath, args...)
@@ -643,8 +899,8 @@ func (c *Client) runGT(rigPath string, args ...string) ([]byte, error) {
 
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
-			slog.Error("gt command timed out", "args", args, "timeout", gtCommandTimeout)
-			return nil, fmt.Errorf("command timed out after %v", gtCommandTimeout)
+			slog.Warn("gt command timed out", "args", args)
+			return nil, fmt.Errorf("command timed out after 5s")
 		}
 		slog.Error("gt command failed", "args", args, "stderr", stderr.String(), "error", err)
 		return nil, fmt.Errorf("%s: %s", err, stderr.String())

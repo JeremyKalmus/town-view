@@ -21,7 +21,11 @@ api_routes:
     handler: handlers.ListIssues
     auth: none
     description: "List issues for a rig with filters"
-    query_params: [status, type, priority, assignee, limit, offset]
+    query_params: [status, type, types, priority, assignee, limit, offset, all]
+    notes: |
+      - types: comma-separated list of issue types (e.g., "task,bug,feature")
+      - all: when true, includes closed issues
+      Added 2026-01-22 ADR-004: types param for multi-type filtering
 
   - method: GET
     path: /api/rigs/:rigId/issues/:issueId
@@ -48,12 +52,58 @@ api_routes:
     auth: none
     description: "List agents for a rig"
 
-  # Server-Sent Events (SSE)
   - method: GET
-    path: /api/events
-    handler: handlers.EventsHandler
+    path: /api/rigs/:rigId/agents/:agentId/peek
+    handler: handlers.PeekAgent
     auth: none
-    description: "Real-time updates via Server-Sent Events (SSE)"
+    description: "Get agent peek data (terminal output, details)"
+    added: "2026-01-22 ADR-004"
+
+  - method: GET
+    path: /api/rigs/:rigId/agents/:agentId/mail
+    handler: handlers.GetAgentMail
+    auth: none
+    description: "Get mail for a specific agent"
+    query_params: [limit]
+    added: "2026-01-22 ADR-004"
+
+  # Activity endpoints
+  - method: GET
+    path: /api/rigs/:rigId/activity
+    handler: handlers.GetRecentActivity
+    auth: none
+    description: "Get recent activity events for a rig"
+    query_params: [limit]
+    added: "2026-01-22 ADR-004"
+
+  # Mail endpoints
+  - method: GET
+    path: /api/mail
+    handler: handlers.ListMail
+    auth: none
+    description: "List all mail across town"
+    added: "2026-01-22 ADR-004"
+
+  - method: GET
+    path: /api/mail/:mailId
+    handler: handlers.GetMailMessage
+    auth: none
+    description: "Get a single mail message by ID"
+    added: "2026-01-22 ADR-004"
+
+  - method: GET
+    path: /api/rigs/:rigId/mail
+    handler: handlers.ListRigMail
+    auth: none
+    description: "List mail for a rig"
+    added: "2026-01-22 ADR-004"
+
+  # WebSocket
+  - method: GET
+    path: /ws
+    handler: handlers.WebSocketHandler
+    auth: none
+    description: "Real-time updates subscription"
 
 services:
   - name: RigDiscovery
@@ -64,26 +114,33 @@ services:
   - name: BeadsClient
     location: internal/beads/client.go
     responsibility: "Execute bd and gt CLI commands and parse output"
-    dependencies: [exec]
+    dependencies: [exec, filesystem]
     methods:
-      - GetAgents: "Returns agents using gt status --json (live tmux data), falls back to beads"
-      - getAgentsFromStatus: "Parse gt status --json for live agent data"
-      - getAgentsFromBeads: "Legacy beads-based agent lookup (fallback)"
+      - GetAgents: "Returns agents using beads + filesystem auto-discovery"
+      - getAgentsFromBeads: "Combines agent beads with filesystem scanning of crew/ and polecats/"
+      - getPrefix: "Get short prefix for agent IDs based on rig name"
+    agent_discovery:  # documented 2026-01-22
+      description: |
+        Agent discovery combines two sources:
+        1. Agent beads from bd list --type agent (provides state, hook_bead, etc.)
+        2. Filesystem scanning of crew/, polecats/, witness/, refinery/ directories
+        Filesystem agents are created with default idle state if no bead exists.
+      scanned_directories:
+        - crew/: Creates crew role agents from subdirectory names
+        - polecats/: Creates polecat role agents from subdirectory names
+        - witness/: Creates witness agent if directory exists
+        - refinery/: Creates refinery agent if directory exists
+      merging: "Bead data takes precedence when both exist"
 
   - name: FileWatcher
     location: internal/watcher/watcher.go
     responsibility: "Watch .beads directories for changes"
     dependencies: [fsnotify]
 
-  - name: EventBroadcaster
-    location: internal/events/broadcaster.go
-    responsibility: "Thread-safe SSE client management and event broadcasting"
+  - name: WebSocketHub
+    location: internal/ws/hub.go
+    responsibility: "Manage WebSocket connections and broadcast changes"
     dependencies: []
-    methods:
-      - Register: "Add SSE client channel"
-      - Unregister: "Remove SSE client channel"
-      - Broadcast: "Send event to all connected clients"
-      - Run: "Main event loop for client management"
 
   - name: IssueService
     location: internal/issues/service.go
@@ -122,24 +179,19 @@ logging:
     - duration_ms
 
 events:
-  # SSE broadcast events (via EventBroadcaster)
-  # Format: data: {"type":"<event>", ...payload}\n\n
+  # WebSocket broadcast events
   - name: issue_changed
-    payload: "{ type: 'issue_changed', rig: string, issue: Issue }"
+    payload: "{ rig: string, issue: Issue }"
     when: "After bd update succeeds"
 
   - name: issue_created
-    payload: "{ type: 'issue_created', rig: string, issue: Issue }"
+    payload: "{ rig: string, issue: Issue }"
     when: "New issue detected via file watcher"
 
   - name: rig_discovered
-    payload: "{ type: 'rig_discovered', rig: Rig }"
+    payload: "{ rig: Rig }"
     when: "New rig detected"
 
   - name: agent_state_changed
-    payload: "{ type: 'agent_state_changed', rig: string, agent: Agent }"
+    payload: "{ rig: string, agent: Agent }"
     when: "Agent bead state changes"
-
-  - name: convoy_progress
-    payload: "{ type: 'convoy_progress', rig: string, convoy: string, progress: ConvoyProgress }"
-    when: "Convoy task completion updates"

@@ -92,6 +92,7 @@ export interface Agent {
   state: AgentState;
   hook_bead?: string;
   updated_at: string;
+  last_activity_at?: string;
 }
 
 // Issue update payload

@@ -1,0 +1,153 @@
+keeper_decision:
+  id: ADR-004
+  date: 2026-01-22
+  spec: "AgentPeekPanel Work vs Events separation pattern and new API routes"
+  mode: growth  # Default - no keeper.yaml found
+  status: approved
+
+  reuse:
+    frontend:
+      - SlideOutPanel (src/components/layout/slide-out.tsx) - container for AgentPeekPanel
+      - agent-bead-config.ts - centralized role→bead mapping (CRITICAL: use this for filtering)
+      - cachedFetch - for API calls with caching
+      - formatRelativeTime - for timestamps
+      - RoleBeadRow pattern - expandable bead display (already implemented)
+      - MailRow pattern - expandable mail display (already implemented)
+    backend:
+      - BeadsClient.GetAgents - agent discovery
+      - MailClient - mail operations (internal/mail/client.go)
+      - Existing pattern: ListIssues with query params
+
+  extensions:
+    frontend:
+      agent-bead-config.ts:
+        extend_categories: |
+          Add explicit work vs event bead type categorization:
+          - WORK_TYPES: ['task', 'bug', 'feature', 'chore', 'merge-request', 'molecule']
+          - EVENT_TYPES: ['event']
+          This formalizes the distinction already implicit in produces vs worksWith
+      AgentPeekPanel:
+        modify_tab_structure: |
+          Current: Tab 1 (Beads - mixed), Tab 2 (Mail), Tab 3 (Activity from API)
+          New: Tab 1 (Work - filtered), Tab 2 (Mail), Tab 3 (Events - filtered)
+          Work tab excludes 'event' type beads
+          Events tab shows only 'event' type beads
+    backend:
+      /api/rigs/{rigId}/issues:
+        add_query_param: "types - comma-separated list of issue types (ALREADY IMPLEMENTED)"
+
+  new_seeds:
+    # Routes that exist but need to be documented in seed vault
+    - type: route
+      name: GET /api/rigs/{rigId}/agents/{agentId}/mail
+      scope: agent-specific mail retrieval
+      justification: |
+        Required for AgentPeekPanel mail tab. Follows REST resource nesting pattern.
+        Implementation exists in handlers.go:GetAgentMail
+
+    - type: route
+      name: GET /api/mail/{mailId}
+      scope: single mail message retrieval
+      justification: |
+        Required for expanding mail to see full body. Standard REST resource pattern.
+        Implementation exists in handlers.go:GetMailMessage
+
+    - type: route
+      name: GET /api/rigs/{rigId}/activity
+      scope: rig activity stream
+      justification: |
+        Required for monitoring view activity feed. Returns recent events.
+        Implementation exists in handlers.go:GetRecentActivity
+
+    - type: route
+      name: GET /api/rigs/{rigId}/mail
+      scope: rig-level mail listing
+      justification: |
+        Required for rig mail overview. Returns mail for all agents in rig.
+        Implementation exists in handlers.go:ListRigMail
+
+    - type: route
+      name: GET /api/mail
+      scope: town-level mail listing
+      justification: |
+        Required for town dashboard mail view. Returns all mail across town.
+        Implementation exists in handlers.go:ListMail
+
+    - type: route
+      name: GET /api/rigs/{rigId}/agents/{agentId}/peek
+      scope: agent peek data
+      justification: |
+        Returns terminal output and agent details for peek panel.
+        Implementation exists in handlers.go:PeekAgent
+
+    - type: constant
+      name: WORK_BEAD_TYPES
+      scope: frontend/src/lib/agent-bead-config.ts
+      justification: |
+        Explicit constant for work bead types to use in filtering Tab 1.
+        Types: task, bug, feature, chore, merge-request, molecule
+
+    - type: constant
+      name: EVENT_BEAD_TYPES
+      scope: frontend/src/lib/agent-bead-config.ts
+      justification: |
+        Explicit constant for event bead types to use in filtering Tab 3.
+        Types: event
+
+  forbidden:
+    - Do NOT hardcode bead type filters in components - use agent-bead-config.ts
+    - Do NOT mix work and event beads in the same tab/list
+    - Do NOT fetch all bead types when role-specific filtering is needed
+    - Do NOT create separate components for Work vs Event rows - reuse RoleBeadRow with filtering
+
+  constraints:
+    - Tab 1 (Work) must filter OUT 'event' type beads
+    - Tab 3 (Events) must filter TO only 'event' type beads
+    - Both tabs must use the same RoleBeadRow component (expandable pattern)
+    - Role-specific tab labels must be preserved (Work History, Merge Queue, Patrol Activity)
+    - Events tab label should be consistent across all roles ("Events" or "Lifecycle")
+    - Use agent-bead-config.ts for determining which work types apply per role
+    - API calls should use 'types' query param for efficient filtering
+
+  verification:
+    test_files:
+      - file: src/components/features/monitoring/AgentPeekPanel.test.tsx
+        action: extend
+      - file: src/lib/agent-bead-config.test.ts
+        action: extend
+    criteria:
+      - id: AC-1
+        criterion: "Work tab shows only work bead types (task, bug, feature, chore, merge-request, molecule)"
+        test_name: "should filter out event beads from work tab"
+      - id: AC-2
+        criterion: "Events tab shows only event type beads"
+        test_name: "should show only event beads in events tab"
+      - id: AC-3
+        criterion: "Role-specific work tab labels are preserved"
+        test_name: "should display role-specific tab label for work tab"
+      - id: AC-4
+        criterion: "Beads are expandable to show full details"
+        test_name: "should expand bead row to show details on click"
+      - id: AC-5
+        criterion: "Mail messages are expandable to show full body"
+        test_name: "should fetch and display full mail body on expand"
+    fixtures:
+      - mockAgent (variants: idle, working, stuck)
+      - mockIssue (variants: open, closed, blocked)
+    run_command: "npm test -- --grep AgentPeekPanel"
+
+  rationale: |
+    The separation of Work beads from Event beads addresses a core UX concern:
+    users need to distinguish between "what is the agent doing" (work) vs
+    "what has happened" (lifecycle events like session start/end, wisp, patrol complete).
+
+    This decision:
+    1. REUSES existing agent-bead-config.ts for role→bead mapping
+    2. EXTENDS it with explicit WORK_BEAD_TYPES and EVENT_BEAD_TYPES constants
+    3. REUSES existing RoleBeadRow expandable component
+    4. Documents several routes that were implemented but not in seed vault
+
+    The backend routes (mail, activity, peek) already exist and follow REST conventions.
+    This decision formalizes their inclusion in the seed vault.
+
+    Mode is "growth" - prefer reuse and extension over new patterns.

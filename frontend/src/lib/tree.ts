@@ -1,4 +1,4 @@
-import type { Issue } from '@/types'
+import type { Issue, Dependency } from '@/types'
 
 /**
  * A tree node wrapping an Issue with its children.
@@ -11,7 +11,7 @@ export interface TreeNode {
 }
 
 /**
- * Extracts the parent ID from a bead ID.
+ * Extracts the parent ID from a bead ID using dotted format.
  * Examples:
  *   "to-b1e.1" -> "to-b1e"
  *   "to-b1e.1.2" -> "to-b1e.1"
@@ -26,7 +26,7 @@ export function getParentId(id: string): string | null {
 }
 
 /**
- * Checks if an issue is a root node (has no parent).
+ * Checks if an issue is a root node (has no parent in dotted format).
  */
 export function isRootNode(id: string): boolean {
   return getParentId(id) === null
@@ -34,12 +34,13 @@ export function isRootNode(id: string): boolean {
 
 /**
  * Builds a tree structure from a flat list of issues.
- * Uses the bead ID format to determine parent-child relationships.
+ * Uses parent-child dependencies first, then falls back to dotted ID format.
  *
  * @param issues - Flat array of issues
+ * @param dependencies - Optional array of dependencies (parent-child type used for hierarchy)
  * @returns Array of root TreeNodes with nested children
  */
-export function buildTree(issues: Issue[]): TreeNode[] {
+export function buildTree(issues: Issue[], dependencies?: Dependency[]): TreeNode[] {
   // Create a map for quick lookup
   const issueMap = new Map<string, Issue>()
   const nodeMap = new Map<string, TreeNode>()
@@ -49,24 +50,59 @@ export function buildTree(issues: Issue[]): TreeNode[] {
     issueMap.set(issue.id, issue)
   }
 
-  // Second pass: create nodes and build tree
-  const roots: TreeNode[] = []
+  // Build parent lookup from dependencies (parent-child type)
+  // In parent-child dependency: from_id is parent, to_id is child
+  const parentFromDeps = new Map<string, string>()
+  if (dependencies) {
+    for (const dep of dependencies) {
+      if (dep.type === 'parent-child') {
+        parentFromDeps.set(dep.to_id, dep.from_id)
+      }
+    }
+  }
 
-  // Sort issues by ID to ensure parents are processed before children
-  const sortedIssues = [...issues].sort((a, b) => a.id.localeCompare(b.id))
+  // Helper to get parent ID - prefer dependency-based, fall back to dotted ID
+  const getParentForIssue = (id: string): string | null => {
+    // First check dependencies
+    const depParent = parentFromDeps.get(id)
+    if (depParent && issueMap.has(depParent)) {
+      return depParent
+    }
+    // Fall back to dotted ID format
+    const dottedParent = getParentId(id)
+    if (dottedParent && issueMap.has(dottedParent)) {
+      return dottedParent
+    }
+    return null
+  }
 
-  for (const issue of sortedIssues) {
-    const parentId = getParentId(issue.id)
-    const depth = issue.id.split('.').length - 1
+  // Helper to calculate depth based on parent chain
+  const calculateDepth = (id: string, visited = new Set<string>()): number => {
+    if (visited.has(id)) return 0 // Prevent infinite loops
+    visited.add(id)
+    const parentId = getParentForIssue(id)
+    if (!parentId) return 0
+    return 1 + calculateDepth(parentId, visited)
+  }
 
+  // Second pass: create nodes with correct depths
+  for (const issue of issues) {
+    const depth = calculateDepth(issue.id)
     const node: TreeNode = {
       issue,
       children: [],
       depth,
       isExpanded: depth === 0, // Expand root nodes by default
     }
-
     nodeMap.set(issue.id, node)
+  }
+
+  // Third pass: build tree structure
+  const roots: TreeNode[] = []
+
+  for (const issue of issues) {
+    const node = nodeMap.get(issue.id)!
+    const parentId = getParentForIssue(issue.id)
 
     if (parentId === null) {
       // Root node
@@ -82,6 +118,18 @@ export function buildTree(issues: Issue[]): TreeNode[] {
       }
     }
   }
+
+  // Sort children by ID for consistent ordering
+  const sortChildren = (nodes: TreeNode[]) => {
+    nodes.sort((a, b) => a.issue.id.localeCompare(b.issue.id))
+    for (const node of nodes) {
+      if (node.children.length > 0) {
+        sortChildren(node.children)
+      }
+    }
+  }
+  sortChildren(roots)
+  roots.sort((a, b) => a.issue.id.localeCompare(b.issue.id))
 
   return roots
 }

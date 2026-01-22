@@ -35,8 +35,29 @@ enums:
       - gate
       - convoy
       - agent
+      - event  # Activity logging
+      - rig    # Rig metadata
     scope: global
     source: "beads data model"
+    # Bead Type Categories (documented 2026-01-22)
+    # See src/lib/utils.ts ISSUE_TYPE_CATALOG for full metadata
+    categories:
+      work:  # Things that get done
+        - task      # General work items
+        - bug       # Defects
+        - feature   # New functionality
+        - chore     # Maintenance
+      coordination:  # Organizing work
+        - epic      # Large work groupings
+        - convoy    # Coordinated work groups
+        - molecule  # Workflow definitions
+        - gate      # Approval checkpoints
+      infrastructure:  # System operations
+        - merge-request  # Code review tracking
+        - agent          # Agent state beads
+        - rig            # Rig metadata
+      system:  # Internal tracking
+        - event     # Activity logging
 
   - name: AgentRoleType
     values:

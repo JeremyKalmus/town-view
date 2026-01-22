@@ -126,6 +126,76 @@ hooks:
     purpose: "Mutation hook for updating issues"
     return_type: "{ update: (id, changes) => Promise, isPending: boolean }"
 
+  - name: useAgentView  # discovered 2026-01-22
+    location: src/hooks/useAgentView.ts
+    purpose: "Get role-specific view data for agents (filtered issues, queue, metrics)"
+    return_type: "UseAgentViewResult | null"
+    notes: |
+      Uses centralized agent-bead-config for consistent filtering.
+      Returns: config, workload, queue, relevantIssues, monitoredAgents,
+      mergeQueue, primaryMetric, showSection(), hookedIssue
+
+# Agent-Bead Configuration System (discovered 2026-01-22)
+# Central source of truth for agent role → bead type relationships
+agent_bead_config:
+  location: src/lib/agent-bead-config.ts
+  purpose: "Centralized mapping of agent roles to bead types for filtering and display"
+  exports:
+    - AGENT_VIEW_CONFIGS: "Record<role, AgentViewConfig> - configuration per role"
+    - getAgentViewConfig: "(role) => AgentViewConfig"
+    - filterIssuesForRole: "(issues, role) => Issue[] - filter to role-relevant beads"
+    - getAgentWorkload: "(issues, agent) => Issue[] - assigned work"
+    - getQueueForRole: "(issues, role) => Issue[] - available unassigned work"
+    - getMergeQueue: "(issues) => Issue[] - MRs for refinery view"
+    - getMonitoredAgents: "(agents, role) => Agent[] - agents being watched"
+    - shouldShowSection: "(role, section) => boolean - check if UI section applies"
+    - buildQueryForRole: "(role, agentId?) => IssueQueryParams - API query builder"
+  role_configs:
+    polecat:
+      worksWith: [task, bug, feature, chore]
+      produces: [merge-request, event]
+      cardSections: [hooked_bead, recent_activity]
+    crew:
+      worksWith: [task, bug, feature, epic, chore, convoy]
+      produces: [task, bug, feature, merge-request, event]
+      cardSections: [hooked_bead, work_queue, convoy_progress, recent_activity]
+    witness:
+      worksWith: [molecule]
+      monitors: [agent, merge-request]
+      cardSections: [patrol_status, monitored_agents, recent_activity]
+    refinery:
+      worksWith: [merge-request]
+      monitors: [merge-request]
+      cardSections: [merge_queue, recent_activity]
+    mayor:
+      worksWith: [convoy, epic]
+      produces: [convoy, task]
+      cardSections: [hooked_bead, convoy_progress, recent_activity]
+    deacon:
+      worksWith: [molecule]
+      monitors: [agent, rig]
+      cardSections: [patrol_status, monitored_agents, recent_activity]
+  bead_type_constants:  # Added 2026-01-22 ADR-004
+    WORK_BEAD_TYPES:
+      description: "Bead types representing actual work"
+      types: [task, bug, feature, chore, merge-request, molecule]
+      use_for: "Tab 1 in AgentPeekPanel - what the agent is DOING"
+    EVENT_BEAD_TYPES:
+      description: "Bead types representing lifecycle events"
+      types: [event]
+      use_for: "Tab 3 in AgentPeekPanel - what HAPPENED (session, wisp, patrol, merge events)"
+  when_to_use: |
+    Use this module whenever you need to:
+    - Filter issues by agent role
+    - Determine what bead types an agent works with
+    - Build role-specific UI views/cards
+    - Query for role-appropriate data
+    - Separate work beads from event beads (use WORK_BEAD_TYPES/EVENT_BEAD_TYPES)
+  forbidden_extensions:
+    - Do not add role-specific logic elsewhere - centralize here
+    - Do not hardcode bead type filters in components
+    - Do not mix work and event beads in the same list/tab
+
 state_stores:
   - name: rigStore
     location: src/stores/rig-store.ts

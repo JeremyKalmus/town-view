@@ -1,8 +1,7 @@
 import { useMemo } from 'react'
 import type { Issue, IssueStatus, IssueType } from '@/types'
-import { cn } from '@/lib/class-utils'
-import { getStatusBadgeClass, getStatusIcon } from '@/lib/status-utils'
-import { HIDDEN_TYPES } from './FilterBar'
+import { cn, getStatusBadgeClass, getStatusIcon } from '@/lib/utils'
+import { PLANNING_TYPES } from './FilterBar'
 
 /** Filter values for status or type selection */
 export interface KPIFilter {
@@ -55,13 +54,11 @@ const STATUS_ORDER: IssueStatus[] = [
   'tombstone',
 ]
 
-/** Type display order (excludes hidden system types) */
+/** Type display order - only planning types */
 const TYPE_ORDER: IssueType[] = [
   'epic',
-  'feature',
   'task',
   'bug',
-  'chore',
 ]
 
 /**
@@ -74,9 +71,9 @@ export function KPISummary({
   onFilterChange,
   className,
 }: KPISummaryProps) {
-  // Filter out hidden types (system-level beads like agent, molecule, etc.)
+  // Only include planning types (epic, task, bug)
   const visibleIssues = useMemo(() => {
-    return issues.filter(issue => !HIDDEN_TYPES.includes(issue.issue_type))
+    return issues.filter(issue => PLANNING_TYPES.includes(issue.issue_type))
   }, [issues])
 
   // Count visible issues by status
