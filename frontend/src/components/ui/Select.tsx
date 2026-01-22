@@ -18,7 +18,9 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
     return (
       <select
         className={cn(
-          'flex h-9 w-full rounded-md border bg-bg-secondary px-3 py-2 text-sm',
+          'flex h-9 w-full rounded-md border bg-bg-secondary px-3 py-2 text-sm text-text-primary',
+          // Force dark color scheme for native option elements
+          '[color-scheme:dark]',
           'focus:outline-none focus:ring-2 focus:ring-accent-chrome focus:ring-offset-2 focus:ring-offset-bg-primary',
           'disabled:cursor-not-allowed disabled:opacity-50',
           'transition-colors cursor-pointer',

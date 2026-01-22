@@ -28,10 +28,15 @@ components:
     forbidden_extensions: []
 
   - name: Select
-    location: src/components/ui/select.tsx
+    location: src/components/ui/Select.tsx
     variants: [default]
     when_to_use: "Dropdown selections"
     forbidden_extensions: []
+    notes: |
+      Uses native <select> with [color-scheme:dark] to ensure option elements
+      render with dark background. This is required because <option> elements
+      don't inherit CSS styles from parent - browsers render them with OS defaults.
+      Always include text-text-primary and [color-scheme:dark] classes.
 
   - name: Modal
     location: src/components/ui/modal.tsx

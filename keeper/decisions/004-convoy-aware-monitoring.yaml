@@ -1,0 +1,114 @@
+keeper_decision:
+  id: ADR-004
+  date: 2026-01-21
+  spec: "Epic: Convoy-Aware Monitoring View"
+  mode: growth
+  status: approved
+
+  reuse:
+    frontend:
+      - MonitoringView (extend with convoy grouping logic)
+      - WorkItemRow (use for individual issues within convoy groups)
+      - Card (for convoy group container)
+      - Badge (extend with progress variant)
+      - useWebSocket (for real-time convoy updates)
+      - design_tokens (status colors for progress states)
+    backend:
+      - GET /api/rigs/:rigId/issues (extend with include=convoy param)
+      - BeadsClient (extend with convoy lookup methods)
+      - WebSocketHub (extend with convoy events)
+      - FileWatcher (existing, watches for changes)
+    data:
+      - Issue type (extend with optional convoy field)
+      - IssueType enum (convoy already exists)
+      - IssueStatus enum (for progress calculation)
+
+  extensions:
+    frontend:
+      Badge:
+        add_variant: "progress"
+        description: "Circular progress indicator showing X/Y completion"
+      MonitoringView:
+        add_feature: "convoy-grouping"
+        description: "Group in-flight work by convoy with collapsible sections"
+    backend:
+      "/api/rigs/:rigId/issues":
+        add_query_param: "include=convoy"
+        description: "Enrich issues with convoy context (id, title, progress)"
+      BeadsClient:
+        add_method: "GetIssueConvoy(issueID string) (*ConvoyInfo, error)"
+        description: "Lookup convoy tracking an issue via bd dep list --direction=up --type=tracks"
+        add_method_2: "GetConvoyProgress(convoyID string) (*ConvoyProgress, error)"
+        description: "Get convoy completion stats (completed/total)"
+      WebSocketHub:
+        add_event: "convoy_progress_changed"
+        description: "Broadcast when convoy tracked issue changes status"
+    data:
+      Issue:
+        add_field: "convoy?: ConvoyInfo"
+        description: "Optional convoy context when include=convoy requested"
+
+  new_seeds:
+    - type: component
+      name: ConvoyGroupHeader
+      scope: src/components/features/monitoring/ConvoyGroupHeader.tsx
+      justification: |
+        Need collapsible header showing convoy title, progress bar, and expand/collapse.
+        TreeNode is for parent-child hierarchy, not grouping. Card is container only.
+        This is a distinct UI pattern for "group header with progress" not covered by existing.
+
+    - type: data
+      name: ConvoyInfo
+      scope: internal/types/convoy.go + src/types/convoy.ts
+      justification: |
+        New type for convoy context embedded in Issue response:
+        { id: string, title: string, progress: { completed: number, total: number } }
+        Keeps Issue type clean while allowing optional enrichment.
+
+    - type: data
+      name: ConvoyProgress
+      scope: internal/types/convoy.go + src/types/convoy.ts
+      justification: |
+        Separate type for progress tracking: { completed: number, total: number, percentage: number }
+        Used in ConvoyInfo and for WebSocket events.
+
+  forbidden:
+    - Cross-rig convoy aggregation (scope to current rig only per user request)
+    - New convoy management endpoints (this is read-only display, use gt convoy CLI for management)
+    - Polling for convoy updates (must use WebSocket for real-time)
+    - Breaking existing Issue response shape (convoy field must be optional)
+
+  constraints:
+    - include=convoy param is opt-in, default behavior unchanged for backward compatibility
+    - Convoy lookup uses bd dep list --direction=up --type=tracks (query town-level beads)
+    - Progress calculation: count issues with status=closed vs total tracked
+    - ConvoyGroupHeader must be collapsible (default expanded for <5 items, collapsed for >=5)
+    - Issues without convoy should appear in "Ungrouped Work" section at bottom
+    - WebSocket convoy_progress_changed should debounce (100ms) to avoid flood on batch updates
+    - Badge progress variant uses existing status colors (green for complete, yellow for partial)
+
+  rationale: |
+    This epic adds convoy context to the MonitoringView to help users understand how
+    in-flight work relates to larger initiatives. The approach prioritizes:
+
+    1. **Reuse over creation**: Extends existing components (MonitoringView, Badge, Card)
+       and API routes rather than creating new views or endpoints.
+
+    2. **Backward compatibility**: The include=convoy parameter is opt-in, preserving
+       existing API behavior. Issue type gains optional field, not breaking change.
+
+    3. **Real-time focus**: Uses existing WebSocket infrastructure with new event type
+       rather than polling. This addresses user's need for "more immediate" updates.
+
+    4. **Scoped implementation**: Limited to current rig's issues per user request,
+       avoiding complexity of cross-rig convoy aggregation.
+
+    The single new component (ConvoyGroupHeader) is justified because:
+    - TreeNode is for hierarchy navigation, not grouping with progress
+    - Card is a container, lacks collapsible header with progress semantics
+    - This pattern (grouped list with progress header) is distinct and reusable
+
+    The two new data types (ConvoyInfo, ConvoyProgress) are minimal additions that
+    keep the Issue type clean while enabling the enrichment pattern.
+
+    APPROVED: Implementation should follow constraints for backward compatibility.
