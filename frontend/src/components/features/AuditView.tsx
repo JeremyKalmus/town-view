@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRigStore } from '@/stores/rig-store'
 import { cachedFetch } from '@/services/cache'
 import { ConvoySelector, type ConvoySortBy } from './ConvoySelector'
+import { ConvoyTreeView } from './ConvoyTreeView'
 import { DateRangePicker, type DateRange } from '@/components/ui/DateRangePicker'
 import { AgentFilter } from './AgentFilter'
 import { MetricsDisplay } from './MetricsDisplay'
@@ -44,6 +45,9 @@ export function AuditView({ updatedIssueIds = new Set() }: AuditViewProps) {
   const [completedWork, setCompletedWork] = useState<Issue[]>([])
   const [completedWorkLoading, setCompletedWorkLoading] = useState(false)
   const [completedWorkError, setCompletedWorkError] = useState<string | null>(null)
+
+  // All issues (for building convoy hierarchy)
+  const [allIssues, setAllIssues] = useState<Issue[]>([])
 
   // Expanded item for full comparison view
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null)
@@ -103,6 +107,9 @@ export function AuditView({ updatedIssueIds = new Set() }: AuditViewProps) {
       })
 
       if (result.data) {
+        // Store all issues for convoy hierarchy
+        setAllIssues(result.data)
+
         // Filter to closed issues
         let filtered = result.data.filter((issue) => issue.status === 'closed')
 
@@ -292,12 +299,12 @@ export function AuditView({ updatedIssueIds = new Set() }: AuditViewProps) {
         </div>
       )}
 
-      {/* Completed Work List */}
+      {/* Completed Work - Hierarchical Tree View when convoy selected, Table View otherwise */}
       {!convoysError && (
         <div className="card">
           <div className="border-b border-border pb-2 mb-4">
             <h2 className="section-header">
-              COMPLETED WORK
+              {selectedConvoy ? 'CONVOY HIERARCHY' : 'COMPLETED WORK'}
               <span className="text-text-muted font-normal ml-2">
                 {selectedAgentFilter
                   ? `(${filteredCompletedWork.length} of ${completedWork.length} items)`
@@ -324,7 +331,14 @@ export function AuditView({ updatedIssueIds = new Set() }: AuditViewProps) {
                       ? 'No completed work found in the selected date range'
                       : 'No completed work found'}
             </div>
+          ) : selectedConvoy ? (
+            /* Hierarchical Tree View when convoy is selected */
+            <ConvoyTreeView
+              convoy={selectedConvoy}
+              allIssues={allIssues}
+            />
           ) : (
+            /* Flat Table View when no convoy selected */
             <div className="flex flex-col gap-2">
               {filteredCompletedWork.map((issue) => (
                 <CompletedWorkItem
