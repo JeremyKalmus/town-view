@@ -3,6 +3,7 @@ import { useRigStore } from '@/stores/rig-store'
 import { cachedFetch } from '@/services/cache'
 import { ConvoySelector, type ConvoySortBy } from './ConvoySelector'
 import { DateRangePicker, type DateRange } from '@/components/ui/DateRangePicker'
+import { AgentFilter } from './AgentFilter'
 import { MetricsDisplay } from './MetricsDisplay'
 import { AssignmentComparison } from './AssignmentComparison'
 import { getDescendants } from '@/lib/tree'
@@ -35,6 +36,9 @@ export function AuditView({ updatedIssueIds = new Set() }: AuditViewProps) {
     startDate: null,
     endDate: null,
   })
+
+  // Agent filter
+  const [selectedAgentFilter, setSelectedAgentFilter] = useState<string | null>(null)
 
   // Completed work items
   const [completedWork, setCompletedWork] = useState<Issue[]>([])
@@ -154,6 +158,14 @@ export function AuditView({ updatedIssueIds = new Set() }: AuditViewProps) {
     setExpandedItemId((prev) => (prev === issueId ? null : issueId))
   }, [])
 
+  // Filter completed work by selected agent
+  const filteredCompletedWork = useMemo(() => {
+    if (!selectedAgentFilter) {
+      return completedWork
+    }
+    return completedWork.filter((issue) => issue.assignee === selectedAgentFilter)
+  }, [completedWork, selectedAgentFilter])
+
   // Calculate metrics from completed work
   const metrics: AuditMetrics = useMemo(() => {
     if (completedWork.length === 0) {
@@ -253,6 +265,18 @@ export function AuditView({ updatedIssueIds = new Set() }: AuditViewProps) {
         </div>
       )}
 
+      {/* Agent Filter */}
+      {!convoysError && (
+        <div className="card mb-6">
+          <AgentFilter
+            closedIssues={completedWork}
+            selectedAgent={selectedAgentFilter}
+            onSelect={setSelectedAgentFilter}
+            className="max-w-md"
+          />
+        </div>
+      )}
+
       {/* Metrics Display */}
       {!convoysError && (
         <div className="mb-6">
@@ -270,7 +294,9 @@ export function AuditView({ updatedIssueIds = new Set() }: AuditViewProps) {
             <h2 className="section-header">
               COMPLETED WORK
               <span className="text-text-muted font-normal ml-2">
-                ({completedWork.length} {completedWork.length === 1 ? 'item' : 'items'})
+                {selectedAgentFilter
+                  ? `(${filteredCompletedWork.length} of ${completedWork.length} items)`
+                  : `(${completedWork.length} ${completedWork.length === 1 ? 'item' : 'items'})`}
               </span>
             </h2>
           </div>
@@ -281,19 +307,21 @@ export function AuditView({ updatedIssueIds = new Set() }: AuditViewProps) {
             <div className="py-8 text-center text-status-blocked text-sm">
               {completedWorkError}
             </div>
-          ) : completedWork.length === 0 ? (
+          ) : filteredCompletedWork.length === 0 ? (
             <div className="py-12 text-center text-text-muted">
-              {selectedConvoy && (dateRange.startDate || dateRange.endDate)
-                ? 'No completed work found for this convoy in the selected date range'
-                : selectedConvoy
-                  ? 'No completed work found for this convoy'
-                  : dateRange.startDate || dateRange.endDate
-                    ? 'No completed work found in the selected date range'
-                    : 'No completed work found'}
+              {selectedAgentFilter
+                ? 'No completed work found for this agent'
+                : selectedConvoy && (dateRange.startDate || dateRange.endDate)
+                  ? 'No completed work found for this convoy in the selected date range'
+                  : selectedConvoy
+                    ? 'No completed work found for this convoy'
+                    : dateRange.startDate || dateRange.endDate
+                      ? 'No completed work found in the selected date range'
+                      : 'No completed work found'}
             </div>
           ) : (
             <div className="flex flex-col gap-2">
-              {completedWork.map((issue) => (
+              {filteredCompletedWork.map((issue) => (
                 <CompletedWorkItem
                   key={issue.id}
                   issue={issue}
