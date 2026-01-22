@@ -98,6 +98,16 @@ type MoleculeProgress struct {
 	Status      string `json:"status"`
 }
 
+// ConvoyProgress represents the progress of a convoy's tracked issues.
+type ConvoyProgress struct {
+	ConvoyID   string `json:"convoy_id"`
+	Total      int    `json:"total"`       // Total tracked issues
+	Open       int    `json:"open"`        // Issues with status 'open'
+	InProgress int    `json:"in_progress"` // Issues with status 'in_progress'
+	Blocked    int    `json:"blocked"`     // Issues with status 'blocked'
+	Closed     int    `json:"closed"`      // Issues with status 'closed'
+}
+
 // PeekOutput represents output from peeking at an agent's session.
 type PeekOutput struct {
 	AgentID   string    `json:"agent_id"`
