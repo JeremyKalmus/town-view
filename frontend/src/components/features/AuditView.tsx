@@ -171,8 +171,8 @@ export function AuditView({ updatedIssueIds = new Set() }: AuditViewProps) {
     if (completedWork.length === 0) {
       return {
         timeToComplete: { avg: 0, min: 0, max: 0 },
-        reassignmentCount: 0,
-        mergeConflictCount: 0,
+        completionCount: 0,
+        typeBreakdown: { bugs: 0, tasks: 0, features: 0 },
       }
     }
 
@@ -192,14 +192,19 @@ export function AuditView({ updatedIssueIds = new Set() }: AuditViewProps) {
     const min = completionTimes.length > 0 ? Math.min(...completionTimes) : 0
     const max = completionTimes.length > 0 ? Math.max(...completionTimes) : 0
 
+    // Calculate type breakdown
+    const typeBreakdown = {
+      bugs: completedWork.filter((issue) => issue.issue_type === 'bug').length,
+      tasks: completedWork.filter((issue) => issue.issue_type === 'task').length,
+      features: completedWork.filter((issue) => issue.issue_type === 'feature').length,
+    }
+
     return {
       timeToComplete: { avg, min, max },
-      reassignmentCount: 0, // TODO: Track reassignments in backend
-      mergeConflictCount: 0, // TODO: Track merge conflicts in backend
+      completionCount: completedWork.length,
+      typeBreakdown,
       anomalyThresholds: {
         timeToComplete: 7 * 24 * 60 * 60 * 1000, // 7 days
-        reassignmentCount: 3,
-        mergeConflictCount: 2,
       },
     }
   }, [completedWork])

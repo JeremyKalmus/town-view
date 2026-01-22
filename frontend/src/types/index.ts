@@ -179,16 +179,21 @@ export interface TimeMetrics {
   max: number;
 }
 
+// Type breakdown for audit display
+export interface TypeBreakdown {
+  bugs: number;
+  tasks: number;
+  features: number;
+}
+
 // Audit metrics for convoy/issue analysis
 export interface AuditMetrics {
   timeToComplete: TimeMetrics;
-  reassignmentCount: number;
-  mergeConflictCount: number;
+  completionCount: number;
+  typeBreakdown: TypeBreakdown;
   // Anomaly thresholds (values above these are considered anomalies)
   anomalyThresholds?: {
     timeToComplete?: number;  // milliseconds
-    reassignmentCount?: number;
-    mergeConflictCount?: number;
   };
 }
 

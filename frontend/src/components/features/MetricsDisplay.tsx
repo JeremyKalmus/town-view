@@ -8,18 +8,14 @@ interface MetricsDisplayProps {
 
 /**
  * MetricsDisplay shows dashboard cards for audit metrics.
- * Displays time-to-complete (avg/min/max), re-assignments count,
- * and merge conflicts count with visual anomaly indicators.
+ * Displays time-to-complete (avg/min/max), completion count,
+ * and per-type breakdown with visual anomaly indicators.
  */
 export function MetricsDisplay({ metrics, className }: MetricsDisplayProps) {
-  const { timeToComplete, reassignmentCount, mergeConflictCount, anomalyThresholds } = metrics
+  const { timeToComplete, completionCount, typeBreakdown, anomalyThresholds } = metrics
 
   const isTimeAnomaly = anomalyThresholds?.timeToComplete !== undefined &&
     timeToComplete.avg > anomalyThresholds.timeToComplete
-  const isReassignmentAnomaly = anomalyThresholds?.reassignmentCount !== undefined &&
-    reassignmentCount > anomalyThresholds.reassignmentCount
-  const isConflictAnomaly = anomalyThresholds?.mergeConflictCount !== undefined &&
-    mergeConflictCount > anomalyThresholds.mergeConflictCount
 
   return (
     <div className={cn('grid grid-cols-1 md:grid-cols-3 gap-4', className)}>
@@ -47,38 +43,42 @@ export function MetricsDisplay({ metrics, className }: MetricsDisplayProps) {
       </MetricCard>
 
       <MetricCard
-        title="Re-assignments"
-        icon="↔"
-        isAnomaly={isReassignmentAnomaly}
+        title="Completed"
+        icon="✓"
       >
         <div className="flex items-center justify-center py-2">
-          <span className={cn(
-            'mono text-4xl font-bold',
-            isReassignmentAnomaly ? 'text-status-blocked' : 'text-text-primary'
-          )}>
-            {reassignmentCount}
+          <span className="mono text-4xl font-bold text-text-primary">
+            {completionCount}
           </span>
         </div>
         <div className="text-center text-xs text-text-muted">
-          {reassignmentCount === 1 ? 'reassignment' : 'reassignments'}
+          {completionCount === 1 ? 'issue closed' : 'issues closed'}
         </div>
       </MetricCard>
 
       <MetricCard
-        title="Merge Conflicts"
-        icon="⚡"
-        isAnomaly={isConflictAnomaly}
+        title="By Type"
+        icon="📊"
       >
-        <div className="flex items-center justify-center py-2">
-          <span className={cn(
-            'mono text-4xl font-bold',
-            isConflictAnomaly ? 'text-status-blocked' : 'text-text-primary'
-          )}>
-            {mergeConflictCount}
-          </span>
-        </div>
-        <div className="text-center text-xs text-text-muted">
-          {mergeConflictCount === 1 ? 'conflict' : 'conflicts'}
+        <div className="space-y-2">
+          <div className="flex items-baseline justify-between">
+            <span className="text-text-secondary text-sm">Bugs</span>
+            <span className="mono text-lg font-semibold text-status-blocked">
+              {typeBreakdown.bugs}
+            </span>
+          </div>
+          <div className="flex items-baseline justify-between">
+            <span className="text-text-secondary text-sm">Tasks</span>
+            <span className="mono text-lg font-semibold text-status-in-progress">
+              {typeBreakdown.tasks}
+            </span>
+          </div>
+          <div className="flex items-baseline justify-between">
+            <span className="text-text-secondary text-sm">Features</span>
+            <span className="mono text-lg font-semibold text-status-open">
+              {typeBreakdown.features}
+            </span>
+          </div>
         </div>
       </MetricCard>
     </div>
