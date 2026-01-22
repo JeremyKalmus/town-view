@@ -154,6 +154,21 @@ export function AuditView({ updatedIssueIds = new Set() }: AuditViewProps) {
     setSelectedConvoy(convoy)
   }, [])
 
+  // Check if any filter is active
+  const hasActiveFilters = useMemo(() => {
+    return selectedConvoy !== null ||
+      dateRange.startDate !== null ||
+      dateRange.endDate !== null ||
+      selectedAgentFilter !== null
+  }, [selectedConvoy, dateRange, selectedAgentFilter])
+
+  // Clear all filters
+  const handleClearAllFilters = useCallback(() => {
+    setSelectedConvoy(null)
+    setDateRange({ startDate: null, endDate: null })
+    setSelectedAgentFilter(null)
+  }, [])
+
   // Filter completed work by selected agent
   const filteredCompletedWork = useMemo(() => {
     if (!selectedAgentFilter) {
@@ -218,11 +233,21 @@ export function AuditView({ updatedIssueIds = new Set() }: AuditViewProps) {
   return (
     <div className="p-6">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="font-display text-2xl font-bold tracking-wide">AUDIT</h1>
-        <p className="text-text-muted text-sm mt-2">
-          Review completed work and historical data
-        </p>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h1 className="font-display text-2xl font-bold tracking-wide">AUDIT</h1>
+          <p className="text-text-muted text-sm mt-2">
+            Review completed work and historical data
+          </p>
+        </div>
+        {hasActiveFilters && (
+          <button
+            onClick={handleClearAllFilters}
+            className="px-3 py-1.5 text-sm rounded-md border border-border hover:border-text-muted transition-colors text-text-secondary hover:text-text-primary"
+          >
+            Clear all filters
+          </button>
+        )}
       </div>
 
       {/* Error state */}
@@ -310,21 +335,24 @@ export function AuditView({ updatedIssueIds = new Set() }: AuditViewProps) {
             </div>
           ) : filteredCompletedWork.length === 0 ? (
             <div className="py-12 text-center text-text-muted">
-              {selectedAgentFilter
-                ? 'No completed work found for this agent'
-                : selectedConvoy && (dateRange.startDate || dateRange.endDate)
-                  ? 'No completed work found for this convoy in the selected date range'
-                  : selectedConvoy
-                    ? 'No completed work found for this convoy'
-                    : dateRange.startDate || dateRange.endDate
-                      ? 'No completed work found in the selected date range'
-                      : 'No completed work found'}
+              {(() => {
+                const filterParts: string[] = []
+                if (selectedAgentFilter) filterParts.push('this agent')
+                if (selectedConvoy) filterParts.push('this convoy')
+                if (dateRange.startDate || dateRange.endDate) filterParts.push('the selected date range')
+
+                if (filterParts.length === 0) return 'No completed work found'
+                if (filterParts.length === 1) return `No completed work found for ${filterParts[0]}`
+                if (filterParts.length === 2) return `No completed work found for ${filterParts[0]} in ${filterParts[1]}`
+                return `No completed work found matching the current filters`
+              })()}
             </div>
           ) : selectedConvoy ? (
             /* Hierarchical Tree View when convoy is selected */
             <ConvoyTreeView
               convoy={selectedConvoy}
               allIssues={allIssues}
+              selectedAgentFilter={selectedAgentFilter}
             />
           ) : (
             <CompletedWorkTable

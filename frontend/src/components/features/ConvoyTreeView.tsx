@@ -10,6 +10,8 @@ interface ConvoyTreeViewProps {
   convoy: Issue
   /** All issues (used to build hierarchy) */
   allIssues: Issue[]
+  /** Filter to show only specific agent's work (null shows all) */
+  selectedAgentFilter?: string | null
   /** Optional class name */
   className?: string
 }
@@ -47,15 +49,34 @@ interface ConvoyNodeProps {
   node: TreeNode
   depth?: number
   defaultExpanded?: boolean
+  /** Filter to show only specific agent's work (null shows all) */
+  selectedAgentFilter?: string | null
 }
 
-function ConvoyNode({ node, depth = 0, defaultExpanded = true }: ConvoyNodeProps) {
+function ConvoyNode({ node, depth = 0, defaultExpanded = true, selectedAgentFilter }: ConvoyNodeProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded)
   const { issue } = node
   const hasChildren = node.children.length > 0
 
   const duration = calculateDuration(issue)
   const isClosed = issue.status === 'closed'
+
+  // Check if this node matches the agent filter (null filter = match all)
+  const matchesAgentFilter = !selectedAgentFilter || issue.assignee === selectedAgentFilter
+  // Check if any descendant matches the agent filter
+  const hasMatchingDescendant = useMemo(() => {
+    if (!selectedAgentFilter) return true
+    const checkDescendants = (nodes: TreeNode[]): boolean => {
+      for (const n of nodes) {
+        if (n.issue.assignee === selectedAgentFilter) return true
+        if (n.children.length > 0 && checkDescendants(n.children)) return true
+      }
+      return false
+    }
+    return checkDescendants(node.children)
+  }, [selectedAgentFilter, node.children])
+  // Node is relevant if it matches OR has matching descendants
+  const isRelevant = matchesAgentFilter || hasMatchingDescendant
 
   // Count closed children for progress display
   const progress = useMemo(() => {
@@ -85,7 +106,8 @@ function ConvoyNode({ node, depth = 0, defaultExpanded = true }: ConvoyNodeProps
           'flex items-center gap-3 py-2 px-3 -mx-2 rounded-md',
           'transition-colors duration-100',
           'hover:bg-bg-tertiary',
-          depth === 0 && 'bg-bg-tertiary/30 border border-border mb-1'
+          depth === 0 && 'bg-bg-tertiary/30 border border-border mb-1',
+          selectedAgentFilter && !isRelevant && 'opacity-30'
         )}
         style={{ paddingLeft: `${depth * 24 + 12}px` }}
       >
@@ -205,6 +227,7 @@ function ConvoyNode({ node, depth = 0, defaultExpanded = true }: ConvoyNodeProps
                 node={child}
                 depth={depth + 1}
                 defaultExpanded={defaultExpanded}
+                selectedAgentFilter={selectedAgentFilter}
               />
             ))}
         </div>
@@ -217,7 +240,7 @@ function ConvoyNode({ node, depth = 0, defaultExpanded = true }: ConvoyNodeProps
  * ConvoyTreeView - Displays a convoy (epic) with its children in hierarchical tree format.
  * Shows completion status, assignee, duration, and close_reason for each node.
  */
-export function ConvoyTreeView({ convoy, allIssues, className }: ConvoyTreeViewProps) {
+export function ConvoyTreeView({ convoy, allIssues, selectedAgentFilter, className }: ConvoyTreeViewProps) {
   // Build tree from all issues, then find the convoy node
   const convoyTree = useMemo(() => {
     // Get convoy and its descendants
@@ -256,7 +279,7 @@ export function ConvoyTreeView({ convoy, allIssues, className }: ConvoyTreeViewP
 
   return (
     <div className={cn('py-2', className)}>
-      <ConvoyNode node={convoyTree} depth={0} defaultExpanded={true} />
+      <ConvoyNode node={convoyTree} depth={0} defaultExpanded={true} selectedAgentFilter={selectedAgentFilter} />
     </div>
   )
 }
