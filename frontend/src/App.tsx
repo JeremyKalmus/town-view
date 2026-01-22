@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { PlanningView } from '@/components/features/PlanningView'
 import { MonitoringView } from '@/components/features/MonitoringView'
@@ -12,10 +12,9 @@ import { useRigStore } from '@/stores/rig-store'
 import { useToastStore } from '@/stores/toast-store'
 import { useConnectivityStore } from '@/stores/connectivity-store'
 import { useUIStore } from '@/stores/ui-store'
-import { useEventSource } from '@/hooks/useEventSource'
 import { useOffline } from '@/hooks/useOffline'
 import { cachedFetch } from '@/services/cache'
-import type { Rig, WSMessage } from '@/types'
+import type { Rig } from '@/types'
 
 function App() {
   const { selectedRig, setSelectedRig } = useRigStore()
@@ -27,72 +26,6 @@ function App() {
   const [error, setError] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [updatedIssueIds, setUpdatedIssueIds] = useState<Set<string>>(new Set())
-  const [_isFromCache, setIsFromCache] = useState(false)
-  const clearTimeoutRef = useRef<Map<string, number>>(new Map())
-  const refreshDebounceRef = useRef<number | null>(null)
-
-  // Debounced refresh to prevent flickering from rapid SSE messages
-  const triggerDebouncedRefresh = useCallback(() => {
-    if (refreshDebounceRef.current) {
-      clearTimeout(refreshDebounceRef.current)
-    }
-    refreshDebounceRef.current = window.setTimeout(() => {
-      setRefreshKey((k) => k + 1)
-      refreshDebounceRef.current = null
-    }, 500) // 500ms debounce
-  }, [])
-
-  // SSE for real-time updates
-  const handleSSEMessage = useCallback((msg: WSMessage) => {
-    console.log('[SSE] Received message:', msg)
-
-    if (msg.type === 'beads_changed' || msg.type === 'rig_update' || msg.type === 'issue_update' || msg.type === 'issue_changed') {
-      // Trigger debounced refresh when beads change
-      triggerDebouncedRefresh()
-    } else if (msg.type === 'rig_discovered') {
-      // Refresh rig list when new rig discovered
-      triggerDebouncedRefresh()
-    } else if (msg.type === 'agent_state_changed') {
-      // Refresh when agent state changes
-      triggerDebouncedRefresh()
-    } else if (msg.type === 'convoy_progress_changed') {
-      // Dispatch to registered convoy progress handlers (in MonitoringView)
-      const handlers = (window as unknown as { __convoyProgressHandlers?: Array<(msg: WSMessage) => void> }).__convoyProgressHandlers
-      if (handlers) {
-        handlers.forEach(handler => handler(msg))
-      }
-    }
-
-    // Track updated issue ID for flash animation
-    if (msg.type === 'issue_changed' && msg.payload?.id) {
-      const issueId = msg.payload.id as string
-      setUpdatedIssueIds((prev) => new Set(prev).add(issueId))
-
-      // Clear existing timeout for this issue if any
-      const existingTimeout = clearTimeoutRef.current.get(issueId)
-      if (existingTimeout) {
-        clearTimeout(existingTimeout)
-      }
-
-      // Clear the flash after animation completes (1.5s)
-      const timeoutId = window.setTimeout(() => {
-        setUpdatedIssueIds((prev) => {
-          const next = new Set(prev)
-          next.delete(issueId)
-          return next
-        })
-        clearTimeoutRef.current.delete(issueId)
-      }, 1500)
-
-      clearTimeoutRef.current.set(issueId, timeoutId)
-    }
-  }, [triggerDebouncedRefresh])
-
-  const { connected } = useEventSource({
-    onMessage: handleSSEMessage,
-    onConnect: () => console.log('[SSE] Connected to Town View'),
-    onDisconnect: () => console.log('[SSE] Disconnected'),
-  })
 
   // Offline detection and connectivity management
   const { tryReconnect } = useOffline({
@@ -119,7 +52,6 @@ function App() {
           (rig, index, self) => index === self.findIndex((r) => r.id === rig.id)
         )
         setRigs(uniqueRigs)
-        setIsFromCache(result.fromCache)
         // Select first rig by default (only if none selected)
         // Use getState() to read current value without adding to dependencies
         const currentSelectedRig = useRigStore.getState().selectedRig
@@ -152,7 +84,7 @@ function App() {
           selectedRig={selectedRig}
           onSelectRig={setSelectedRig}
           loading={loading}
-          connected={connected}
+          connected={true}
           httpConnected={connectivityStatus === 'online'}
         />
 
