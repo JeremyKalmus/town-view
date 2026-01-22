@@ -8,9 +8,17 @@ interface SidebarProps {
   selectedRig: Rig | null
   onSelectRig: (rig: Rig) => void
   loading: boolean
+  connected?: boolean
+  httpConnected?: boolean
 }
 
-export function Sidebar({ rigs, selectedRig, onSelectRig, loading }: SidebarProps) {
+export function Sidebar({ rigs, selectedRig, onSelectRig, loading, connected, httpConnected = true }: SidebarProps) {
+  // Determine overall connection status
+  // Online = both WS and HTTP connected
+  // Degraded = WS connected but HTTP issues (or vice versa)
+  // Offline = neither connected (falls through to default case)
+  const isFullyConnected = connected && httpConnected
+  const isDegraded = (connected && !httpConnected) || (!connected && httpConnected)
 
   return (
     <aside className="w-64 bg-bg-secondary border-r border-border flex flex-col">
@@ -53,8 +61,23 @@ export function Sidebar({ rigs, selectedRig, onSelectRig, loading }: SidebarProp
       </div>
 
       {/* Footer */}
-      <div className="p-4 border-t border-border text-xs text-text-muted">
+      <div className="p-4 border-t border-border text-xs text-text-muted flex items-center justify-between">
         <span>Gas Town</span>
+        <div className="flex items-center gap-1">
+          <span
+            className={cn(
+              'w-2 h-2 rounded-full',
+              isFullyConnected
+                ? 'bg-status-closed animate-pulse'
+                : isDegraded
+                ? 'bg-yellow-500 animate-pulse'
+                : 'bg-status-blocked'
+            )}
+          />
+          <span>
+            {isFullyConnected ? 'Live' : isDegraded ? 'Degraded' : 'Offline'}
+          </span>
+        </div>
       </div>
     </aside>
   )

@@ -195,17 +195,12 @@ export function useTreeKeyboardNavigation(
     [expandedIds, focusedId, onSelect, toggleExpanded]
   )
 
-  // Auto-focus first item only on initial mount (not on nodes change)
-  const hasInitialized = useRef(false)
+  // Auto-focus first item if nothing is focused
   useEffect(() => {
-    if (!hasInitialized.current && nodes.length > 0) {
-      hasInitialized.current = true
-      if (focusedId === null) {
-        setFocusedId(nodes[0].id)
-      }
+    if (focusedId === null && nodes.length > 0) {
+      setFocusedId(nodes[0].id)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nodes.length]) // Only depend on nodes.length, not nodes reference
+  }, [focusedId, nodes])
 
   const getTreeProps = useCallback(
     () => ({
