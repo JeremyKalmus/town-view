@@ -1,12 +1,14 @@
 import { useState, useCallback, useEffect } from 'react'
 import type { Issue } from '@/types'
 import type { SelectOption } from '@/components/ui'
-import { StatusDropdown } from './StatusDropdown'
-import { PriorityDropdown } from './PriorityDropdown'
-import { TitleInput } from './TitleInput'
-import { DescriptionTextarea } from './DescriptionTextarea'
-import { LabelsMultiSelect } from './LabelsMultiSelect'
-import { AssigneeDropdown } from './AssigneeDropdown'
+import {
+  StatusDropdown,
+  PriorityDropdown,
+  TitleInput,
+  DescriptionTextarea,
+  LabelsMultiSelect,
+  AssigneeDropdown,
+} from './FormFieldWrapper'
 import {
   type IssueFormData,
   type ValidationErrors,
