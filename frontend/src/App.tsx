@@ -31,7 +31,7 @@ function App() {
   const clearTimeoutRef = useRef<Map<string, number>>(new Map())
   const refreshDebounceRef = useRef<number | null>(null)
 
-  // Debounced refresh to prevent flickering from rapid WebSocket messages
+  // Debounced refresh to prevent flickering from rapid SSE messages
   const triggerDebouncedRefresh = useCallback(() => {
     if (refreshDebounceRef.current) {
       clearTimeout(refreshDebounceRef.current)
@@ -42,9 +42,9 @@ function App() {
     }, 500) // 500ms debounce
   }, [])
 
-  // WebSocket for real-time updates
-  const handleWSMessage = useCallback((msg: WSMessage) => {
-    console.log('[WS] Received message:', msg)
+  // SSE for real-time updates
+  const handleSSEMessage = useCallback((msg: WSMessage) => {
+    console.log('[SSE] Received message:', msg)
 
     if (msg.type === 'beads_changed' || msg.type === 'rig_update' || msg.type === 'issue_update' || msg.type === 'issue_changed') {
       // Trigger debounced refresh when beads change
@@ -89,7 +89,7 @@ function App() {
   }, [triggerDebouncedRefresh])
 
   const { connected } = useEventSource({
-    onMessage: handleWSMessage,
+    onMessage: handleSSEMessage,
     onConnect: () => console.log('[SSE] Connected to Town View'),
     onDisconnect: () => console.log('[SSE] Disconnected'),
   })

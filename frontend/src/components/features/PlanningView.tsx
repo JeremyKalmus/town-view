@@ -85,7 +85,7 @@ export function PlanningView({ refreshKey = 0, updatedIssueIds }: PlanningViewPr
     if (!selectedRig) return
 
     const fetchIssues = async () => {
-      // Only show loading skeleton on initial load, not on WebSocket refreshes
+      // Only show loading skeleton on initial load, not on SSE refreshes
       // This prevents TreeView from unmounting and losing expansion state
       const isInitialLoad = !hasLoadedRef.current
       if (isInitialLoad) {

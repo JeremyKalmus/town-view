@@ -104,7 +104,7 @@ export interface IssueUpdate {
   labels?: string[];
 }
 
-// WebSocket message
+// Server-Sent Events message
 export interface WSMessage {
   type: 'issue_changed' | 'issue_created' | 'issue_update' | 'beads_changed' | 'rig_discovered' | 'rig_update' | 'agent_state_changed' | 'mail_received' | 'convoy_progress_changed';
   rig?: string;

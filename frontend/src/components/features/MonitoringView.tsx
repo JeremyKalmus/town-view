@@ -67,8 +67,8 @@ export function MonitoringView({ rig, refreshKey = 0, updatedIssueIds = new Set(
     setActivityEvents,
   } = useMonitoringStore()
 
-  // Handle convoy progress updates from WebSocket
-  // Note: General WebSocket updates (issue_changed, etc.) are handled by App.tsx via refreshKey.
+  // Handle convoy progress updates from SSE
+  // Note: General SSE updates (issue_changed, etc.) are handled by App.tsx via refreshKey.
   // This callback only handles convoy_progress_changed for instant UI updates without refetching.
   const handleConvoyProgress = useCallback((msg: WSMessage) => {
     if (msg.rig && msg.rig !== rig.id) return
@@ -97,11 +97,11 @@ export function MonitoringView({ rig, refreshKey = 0, updatedIssueIds = new Set(
     }
   }, [rig.id])
 
-  // Subscribe to convoy progress updates via App.tsx's shared WebSocket
+  // Subscribe to convoy progress updates via App.tsx's shared SSE connection
   // The useEffect registers a listener that App.tsx can call
   useEffect(() => {
     // Store the handler on window for App.tsx to call
-    // This is a lightweight approach - no extra WebSocket connection
+    // This is a lightweight approach - no extra SSE connection
     const handlers = (window as unknown as { __convoyProgressHandlers?: Array<(msg: WSMessage) => void> }).__convoyProgressHandlers || []
     handlers.push(handleConvoyProgress)
     ;(window as unknown as { __convoyProgressHandlers: Array<(msg: WSMessage) => void> }).__convoyProgressHandlers = handlers

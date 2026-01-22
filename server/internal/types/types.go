@@ -85,7 +85,7 @@ type IssueUpdate struct {
 	Labels      *[]string `json:"labels,omitempty"`
 }
 
-// WSMessage represents a WebSocket message.
+// WSMessage represents a Server-Sent Events message.
 type WSMessage struct {
 	Type    string      `json:"type"`
 	Rig     string      `json:"rig,omitempty"`
