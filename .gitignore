@@ -25,3 +25,7 @@ state.json
 # Local Claude settings (handled by sparse checkout)
 .claude/
 server/townview
+
+# Gas Town (added by gt)
+.beads/
+.logs/
