@@ -6,11 +6,9 @@ import { ConvoyTreeView } from './ConvoyTreeView'
 import { DateRangePicker, type DateRange } from '@/components/ui/DateRangePicker'
 import { AgentFilter } from './AgentFilter'
 import { MetricsDisplay } from './MetricsDisplay'
-import { AssignmentComparison } from './AssignmentComparison'
+import { CompletedWorkTable } from './CompletedWorkTable'
 import { getDescendants } from '@/lib/tree'
 import type { Issue, AuditMetrics } from '@/types'
-import { cn } from '@/lib/class-utils'
-import { getStatusIcon } from '@/lib/status-utils'
 import { SkeletonCompletedWorkList, ErrorState } from '@/components/ui/Skeleton'
 
 interface AuditViewProps {
@@ -48,9 +46,6 @@ export function AuditView({ updatedIssueIds = new Set() }: AuditViewProps) {
 
   // All issues (for building convoy hierarchy)
   const [allIssues, setAllIssues] = useState<Issue[]>([])
-
-  // Expanded item for full comparison view
-  const [expandedItemId, setExpandedItemId] = useState<string | null>(null)
 
   // Retry counter for manual retry
   const [retryCount, setRetryCount] = useState(0)
@@ -157,12 +152,6 @@ export function AuditView({ updatedIssueIds = new Set() }: AuditViewProps) {
   // Handle convoy selection
   const handleConvoySelect = useCallback((convoy: Issue | null) => {
     setSelectedConvoy(convoy)
-    setExpandedItemId(null) // Collapse any expanded item
-  }, [])
-
-  // Handle item expansion toggle
-  const handleToggleExpand = useCallback((issueId: string) => {
-    setExpandedItemId((prev) => (prev === issueId ? null : issueId))
   }, [])
 
   // Filter completed work by selected agent
@@ -338,105 +327,11 @@ export function AuditView({ updatedIssueIds = new Set() }: AuditViewProps) {
               allIssues={allIssues}
             />
           ) : (
-            /* Flat Table View when no convoy selected */
-            <div className="flex flex-col gap-2">
-              {filteredCompletedWork.map((issue) => (
-                <CompletedWorkItem
-                  key={issue.id}
-                  issue={issue}
-                  isExpanded={expandedItemId === issue.id}
-                  onToggleExpand={() => handleToggleExpand(issue.id)}
-                  isUpdated={updatedIssueIds.has(issue.id)}
-                />
-              ))}
-            </div>
+            <CompletedWorkTable
+              issues={filteredCompletedWork}
+              updatedIssueIds={updatedIssueIds}
+            />
           )}
-        </div>
-      )}
-    </div>
-  )
-}
-
-interface CompletedWorkItemProps {
-  issue: Issue
-  isExpanded: boolean
-  onToggleExpand: () => void
-  isUpdated?: boolean
-}
-
-/**
- * Individual completed work item with expandable comparison view.
- */
-function CompletedWorkItem({ issue, isExpanded, onToggleExpand, isUpdated = false }: CompletedWorkItemProps) {
-  // For the comparison, we use the same issue for both original and final
-  // In a real implementation, the backend would provide the original state
-  // This is a placeholder until we have proper history tracking
-  const originalIssue: Issue = useMemo(() => ({
-    ...issue,
-    status: 'open', // Original would have been open
-    // Other fields would come from history
-  }), [issue])
-
-  return (
-    <div className={cn(
-      "border border-border rounded-md overflow-hidden",
-      isUpdated && "animate-flash-update"
-    )}>
-      {/* Summary row - always visible */}
-      <button
-        type="button"
-        onClick={onToggleExpand}
-        className={cn(
-          'w-full px-4 py-3 flex items-center gap-4 text-left',
-          'hover:bg-bg-tertiary/50 transition-colors',
-          isExpanded && 'bg-bg-tertiary/30'
-        )}
-      >
-        {/* Status icon */}
-        <span className="text-status-closed text-lg flex-shrink-0">
-          {getStatusIcon('closed')}
-        </span>
-
-        {/* Issue ID */}
-        <span className="mono text-xs text-text-muted flex-shrink-0 w-20">
-          {issue.id}
-        </span>
-
-        {/* Title */}
-        <span className="flex-1 truncate text-text-primary">
-          {issue.title}
-        </span>
-
-        {/* Closed date */}
-        <span className="text-sm text-text-muted flex-shrink-0">
-          {issue.closed_at
-            ? new Date(issue.closed_at).toLocaleDateString()
-            : '—'}
-        </span>
-
-        {/* Expand/collapse indicator */}
-        <svg
-          className={cn(
-            'w-4 h-4 text-text-muted transition-transform flex-shrink-0',
-            isExpanded && 'rotate-180'
-          )}
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M19 9l-7 7-7-7"
-          />
-        </svg>
-      </button>
-
-      {/* Expanded comparison view */}
-      {isExpanded && (
-        <div className="border-t border-border p-4 bg-bg-tertiary/20">
-          <AssignmentComparison original={originalIssue} final={issue} />
         </div>
       )}
     </div>
