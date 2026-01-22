@@ -1,0 +1,133 @@
+keeper_decision:
+  id: ADR-005
+  date: 2026-01-21
+  spec: "Epic: Migrate from WebSocket to Server-Sent Events"
+  mode: growth  # No keeper.yaml found, defaulting to growth
+  status: approved
+
+  context: |
+    The current WebSocket implementation has connection stability issues:
+    - Disconnects after idle periods (no ping/pong keepalive)
+    - Complex reconnection logic needed on client side
+    - Bidirectional capability unused (server only pushes to client)
+
+    The actual update pattern is:
+    - Status changes occur every few minutes (not real-time)
+    - All communication is server→client (no client→server messages)
+    - Simple event notifications, not streaming data
+
+    This is a SIMPLIFICATION - replacing complex WebSocket with simpler SSE.
+
+  reuse:
+    frontend:
+      - MonitoringView (update to use EventSource)
+      - PlanningView (update to use EventSource)
+      - App.tsx (update connection handling)
+      - useMail hook (update to use EventSource)
+    backend:
+      - watcher/watcher.go (change broadcast target from wsHub to eventBroadcaster)
+      - convoy/notifier.go (change broadcast target)
+      - handlers/handlers.go (change broadcast target)
+      - types/types.go (keep WSMessage type structure, rename to EventMessage)
+    data:
+      - Event types unchanged: beads_changed, mail_received, issue_changed, convoy_progress_changed
+
+  extensions:
+    # None - this is a replacement, not extension
+
+  removals:
+    backend:
+      - internal/ws/hub.go (entire WebSocket hub - replaced by EventBroadcaster)
+      - /ws route in main.go (replaced by /api/events)
+    frontend:
+      - hooks/useWebSocket.ts (replaced by useEventSource)
+
+  new_seeds:
+    - type: handler
+      name: EventStream
+      scope: server/internal/handlers/events.go
+      justification: |
+        SSE endpoint handler. Sets Content-Type: text/event-stream, streams
+        events as "data: {json}\n\n". Uses context cancellation for cleanup.
+        Much simpler than WebSocket - standard HTTP response streaming.
+
+    - type: hook
+      name: useEventSource
+      scope: frontend/src/hooks/useEventSource.ts
+      justification: |
+        Replacement for useWebSocket. Browser's native EventSource API handles
+        reconnection automatically with exponential backoff. ~30 lines vs ~100.
+        Returns { connected: boolean, lastEvent: EventMessage | null }.
+
+    - type: service
+      name: EventBroadcaster
+      scope: server/internal/events/broadcaster.go
+      justification: |
+        Replacement for WebSocketHub. Manages SSE client connections and
+        broadcasts events. No ping/pong, no binary frames - just text streaming.
+        ~50 lines vs ~150 for WebSocket hub.
+
+  forbidden:
+    - Keeping WebSocket alongside SSE (pick one, don't maintain both)
+    - Polling fallback (SSE has native reconnection, unnecessary)
+    - Client-to-server messages via SSE (use REST for mutations)
+    - Changing event type names or payload structures
+
+  constraints:
+    - SSE endpoint MUST set headers: Content-Type: text/event-stream, Cache-Control: no-cache
+    - Use context.Done() to detect client disconnect and cleanup
+    - Event format MUST be "data: {json}\n\n" per SSE spec
+    - Event types MUST remain: beads_changed, mail_received, issue_changed, convoy_progress_changed
+    - Frontend useEventSource MUST return same interface shape as useWebSocket for easy migration
+    - REST API endpoints unchanged - only push mechanism changes
+    - Update keeper seeds (backend.yaml, frontend.yaml) after migration
+
+  verification:
+    test_files:
+      - file: server/internal/events/broadcaster_test.go
+        action: create
+      - file: server/internal/handlers/events_test.go
+        action: create
+      - file: frontend/src/hooks/useEventSource.test.ts
+        action: create
+      - file: e2e/sse-connection.spec.ts
+        action: create
+    criteria:
+      - id: AC-1
+        criterion: "SSE endpoint streams events to connected clients"
+        test_name: "should broadcast events to all connected SSE clients"
+      - id: AC-2
+        criterion: "SSE endpoint handles client disconnect gracefully"
+        test_name: "should cleanup client when connection closes"
+      - id: AC-3
+        criterion: "EventSource reconnects automatically on disconnect"
+        test_name: "should reconnect automatically when connection lost"
+      - id: AC-4
+        criterion: "Event payloads match existing WebSocket format"
+        test_name: "should parse event data matching WSMessage structure"
+      - id: AC-5
+        criterion: "MonitoringView receives and displays updates via SSE"
+        test_name: "should update monitoring view when SSE event received"
+    fixtures:
+      - mockIssue
+      - mockAgent
+    run_command: "npm test && go test ./..."
+
+  rationale: |
+    **APPROVED** - This is a justified simplification, not scope expansion.
+
+    Why SSE over WebSocket:
+    1. **Matches use case**: Unidirectional (server→client), infrequent updates
+    2. **Simpler code**: ~80 fewer lines, no ping/pong management
+    3. **Native reconnection**: Browser handles it, no custom logic needed
+    4. **Better compatibility**: Standard HTTP, works through proxies
+
+    Why approved despite 3 new seeds:
+    - Net REMOVAL of complexity (deleting WebSocket hub)
+    - Direct 1:1 replacements, not additions
+    - Solving documented stability issues
+
+    Migration is low-risk:
+    - Event types/payloads unchanged
+    - REST API unchanged
+    - Can test SSE endpoint before switching frontend
