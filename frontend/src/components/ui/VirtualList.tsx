@@ -1,5 +1,5 @@
 import { useRef, useState, useCallback, useEffect, useMemo } from 'react'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-utils'
 
 interface VirtualListProps<T> {
   /** Array of items to render */

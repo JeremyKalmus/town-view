@@ -1,5 +1,6 @@
 import type { Issue } from '@/types'
-import { cn, getStatusIcon, getStatusBadgeClass } from '@/lib/utils'
+import { cn } from '@/lib/class-utils'
+import { getStatusBadgeClass, getStatusIcon } from '@/lib/status-utils'
 
 export interface BlockingContextProps {
   /** Issues that are blocking this work item */

@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import type { Issue, IssueStatus, IssueType } from '@/types'
-import { cn, getStatusBadgeClass, getStatusIcon } from '@/lib/utils'
+import { cn } from '@/lib/class-utils'
+import { getStatusBadgeClass, getStatusIcon } from '@/lib/status-utils'
 import { HIDDEN_TYPES } from './FilterBar'
 
 /** Filter values for status or type selection */

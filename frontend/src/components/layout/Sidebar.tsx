@@ -1,6 +1,6 @@
 import { Cog, Fuel } from 'lucide-react'
 import type { Rig, AgentState, AgentHealth } from '@/types'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-utils'
 import { Badge } from '@/components/ui'
 
 interface SidebarProps {

@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import type { IssueStatus, IssueType } from '@/types'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-utils'
 
 export interface TreeFilters {
   status: IssueStatus | 'all'

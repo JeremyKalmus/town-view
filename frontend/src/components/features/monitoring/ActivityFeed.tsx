@@ -1,5 +1,6 @@
 import type { ActivityEvent } from '@/types'
-import { cn, formatRelativeTime } from '@/lib/utils'
+import { cn } from '@/lib/class-utils'
+import { formatRelativeTime } from '@/lib/status-utils'
 
 const MAX_EVENTS = 100
 

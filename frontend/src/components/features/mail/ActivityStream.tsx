@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react'
 import type { Mail } from '@/types'
 import { MailItem } from './MailItem'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-utils'
 
 export interface ActivityStreamProps {
   messages: Mail[]

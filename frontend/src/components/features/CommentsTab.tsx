@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Comment } from '@/types'
-import { cn, formatRelativeTime } from '@/lib/utils'
+import { cn } from '@/lib/class-utils'
+import { formatRelativeTime } from '@/lib/status-utils'
 
 interface CommentsTabProps {
   issueId: string

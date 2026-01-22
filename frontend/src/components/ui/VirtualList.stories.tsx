@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react'
 import { useState, useCallback } from 'react'
 import { VirtualList, VirtualListDynamic, useVirtualListScroll } from './VirtualList'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-utils'
 
 // Generate mock data
 interface MockItem {

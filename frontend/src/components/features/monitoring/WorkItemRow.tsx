@@ -1,4 +1,5 @@
-import { cn, getAgentRoleIcon } from '@/lib/utils'
+import { getAgentRoleIcon } from '@/lib/agent-utils'
+import { cn } from '@/lib/class-utils'
 import type { Issue, Agent, MoleculeProgress } from '@/types'
 import { HealthBadge, type HealthStatus } from './HealthBadge'
 import { ProgressIndicator } from './ProgressIndicator'

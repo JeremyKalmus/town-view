@@ -1,4 +1,4 @@
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-utils'
 
 interface ShortcutHintProps {
   /** Keyboard key(s) to display (e.g., "/", "g d", "Esc") */

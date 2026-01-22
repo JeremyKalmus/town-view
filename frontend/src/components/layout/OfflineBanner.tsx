@@ -5,7 +5,7 @@
 
 import { WifiOff, RefreshCw, Database } from 'lucide-react'
 import { useConnectivityStore } from '@/stores/connectivity-store'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-utils'
 
 interface OfflineBannerProps {
   onRetry?: () => void

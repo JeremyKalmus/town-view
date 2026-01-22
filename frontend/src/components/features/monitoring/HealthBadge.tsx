@@ -1,4 +1,4 @@
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-utils'
 
 export type HealthStatus = 'normal' | 'concerning' | 'stuck'
 

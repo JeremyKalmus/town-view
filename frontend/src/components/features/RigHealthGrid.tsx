@@ -3,7 +3,8 @@ import type { Rig, Agent, AgentState } from '@/types'
 import { cachedFetch } from '@/services/cache'
 import { useRigStore } from '@/stores/rig-store'
 import { useUIStore } from '@/stores/ui-store'
-import { cn, getAgentStateIcon } from '@/lib/utils'
+import { getAgentStateIcon } from '@/lib/agent-utils'
+import { cn } from '@/lib/class-utils'
 
 interface RigHealthGridProps {
   /** Key to trigger refresh */

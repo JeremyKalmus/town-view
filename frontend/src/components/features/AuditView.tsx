@@ -7,7 +7,8 @@ import { MetricsDisplay } from './MetricsDisplay'
 import { AssignmentComparison } from './AssignmentComparison'
 import { getDescendants } from '@/lib/tree'
 import type { Issue, AuditMetrics } from '@/types'
-import { cn, getStatusIcon } from '@/lib/utils'
+import { cn } from '@/lib/class-utils'
+import { getStatusIcon } from '@/lib/status-utils'
 import { SkeletonCompletedWorkList, ErrorState } from '@/components/ui/Skeleton'
 
 interface AuditViewProps {

@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import type { Issue, TreeNode as TreeNodeType } from '@/types'
-import { cn, getStatusIcon, getPriorityBadgeClass, getPriorityLabel } from '@/lib/utils'
+import { cn } from '@/lib/class-utils'
+import { getPriorityBadgeClass, getPriorityLabel } from '@/lib/priority-utils'
+import { getStatusIcon } from '@/lib/status-utils'
 import { VirtualList } from '@/components/ui/VirtualList'
 import { useTreeKeyboardNavigation } from '@/hooks/useTreeKeyboardNavigation'
 

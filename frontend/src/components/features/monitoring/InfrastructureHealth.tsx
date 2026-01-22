@@ -1,6 +1,7 @@
 import type { Agent, AgentRoleType } from '@/types'
 import { AgentCard } from '../AgentCard'
-import { cn, getAgentRoleIcon } from '@/lib/utils'
+import { getAgentRoleIcon } from '@/lib/agent-utils'
+import { cn } from '@/lib/class-utils'
 
 interface InfrastructureHealthProps {
   agents: Agent[]

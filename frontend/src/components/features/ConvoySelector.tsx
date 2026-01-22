@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState, useEffect } from 'react'
 import type { Issue } from '@/types'
-import { cn, formatDate } from '@/lib/utils'
+import { cn } from '@/lib/class-utils'
+import { formatDate } from '@/lib/status-utils'
 
 export type ConvoySortBy = 'date' | 'name'
 

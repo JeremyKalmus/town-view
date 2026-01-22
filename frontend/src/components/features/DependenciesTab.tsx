@@ -1,7 +1,9 @@
 import { useEffect, useState, useCallback } from 'react'
 import type { Issue, IssueDependencies } from '@/types'
 import { cachedFetch } from '@/services/cache'
-import { cn, getStatusIcon, getStatusBadgeClass, getPriorityBadgeClass, getPriorityLabel } from '@/lib/utils'
+import { cn } from '@/lib/class-utils'
+import { getPriorityBadgeClass, getPriorityLabel } from '@/lib/priority-utils'
+import { getStatusBadgeClass, getStatusIcon } from '@/lib/status-utils'
 
 interface DependenciesTabProps {
   rigId: string

@@ -1,13 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react'
-import {
-  cn,
-  getStatusIcon,
-  getTreeStatusIconClass,
-  getTreeNodePriorityClass,
-  getTreeIndentClass,
-  getPriorityLabel,
-  getPriorityBadgeClass,
-} from '@/lib/utils'
+import { cn, getTreeIndentClass } from '@/lib/class-utils'
+import { getPriorityBadgeClass, getPriorityLabel, getTreeNodePriorityClass } from '@/lib/priority-utils'
+import { getStatusIcon, getTreeStatusIconClass } from '@/lib/status-utils'
 
 /**
  * Tree node styling demonstration component.

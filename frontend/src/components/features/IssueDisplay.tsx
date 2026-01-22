@@ -1,5 +1,7 @@
 import type { Issue } from '@/types'
-import { cn, formatDate, getStatusIcon, getStatusBadgeClass, getPriorityBadgeClass, getPriorityLabel } from '@/lib/utils'
+import { cn } from '@/lib/class-utils'
+import { getPriorityBadgeClass, getPriorityLabel } from '@/lib/priority-utils'
+import { formatDate, getStatusBadgeClass, getStatusIcon } from '@/lib/status-utils'
 
 interface IssueDisplayProps {
   issue: Issue

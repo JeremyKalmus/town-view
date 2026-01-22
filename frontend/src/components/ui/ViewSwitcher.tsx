@@ -1,4 +1,4 @@
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-utils'
 import { useUIStore, type ViewMode } from '@/stores/ui-store'
 
 interface ViewTab {

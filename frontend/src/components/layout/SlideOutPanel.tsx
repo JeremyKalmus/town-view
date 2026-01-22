@@ -1,6 +1,6 @@
 import { X } from 'lucide-react'
 import { useEffect, useCallback } from 'react'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-utils'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import { logError } from '@/lib/error-logger'
 

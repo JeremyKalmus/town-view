@@ -5,7 +5,7 @@ import { AgentCard } from './AgentCard'
 import { DependencyArrows } from './DependencyArrows'
 import { SkeletonIssueList, SkeletonStatGrid, VirtualList } from "@/components/ui"
 import { cachedFetch } from "@/services/cache"
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-utils'
 
 interface RigDashboardProps {
   rig: Rig

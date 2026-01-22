@@ -1,5 +1,5 @@
 import type { MoleculeProgress } from '@/types'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-utils'
 
 interface ProgressIndicatorProps {
   /** Progress data from API */

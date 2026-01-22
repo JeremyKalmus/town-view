@@ -5,7 +5,7 @@
 
 import * as ToastPrimitive from '@radix-ui/react-toast'
 import { X } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-utils'
 
 export type ToastVariant = 'success' | 'error' | 'info'
 

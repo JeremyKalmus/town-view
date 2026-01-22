@@ -26,7 +26,7 @@ import { SkeletonTreeView, ErrorState } from '@/components/ui/Skeleton'
 import { cachedFetch } from '@/services/cache'
 import { updateIssue } from '@/services/api'
 import { buildTree, getParentId } from '@/lib/tree'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-utils'
 import type { IssueFormData } from './issue-editor/validation'
 
 type PanelTab = 'edit' | 'dependencies' | 'comments' | 'history'

@@ -1,5 +1,6 @@
 import type { HistoryEntry } from '@/types'
-import { cn, formatRelativeTime } from '@/lib/utils'
+import { cn } from '@/lib/class-utils'
+import { formatRelativeTime } from '@/lib/status-utils'
 
 interface HistoryTabProps {
   entries: HistoryEntry[]

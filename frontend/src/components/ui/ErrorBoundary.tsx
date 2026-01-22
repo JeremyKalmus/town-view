@@ -1,6 +1,6 @@
 import { Component, type ReactNode } from 'react'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-utils'
 
 interface ErrorBoundaryProps {
   children: ReactNode

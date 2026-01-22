@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react'
 import type { Issue, Comment, HistoryEntry } from '@/types'
 import type { SelectOption } from '@/components/ui'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-utils'
 import { SlideOutPanel } from '@/components/layout/SlideOutPanel'
 import { IssueEditorForm } from './issue-editor/IssueEditorForm'
 import type { IssueFormData } from './issue-editor/validation'

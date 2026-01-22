@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-utils'
 import type { ConvoyProgress } from '@/types/convoy'
 
 export interface ConvoyGroupHeaderProps {

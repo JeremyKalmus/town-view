@@ -1,6 +1,6 @@
 import { useEffect, useCallback } from 'react'
 import { X, Keyboard } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-utils'
 import { getShortcutsByCategory } from '@/hooks/useKeyboardShortcuts'
 
 interface KeyboardShortcutsModalProps {

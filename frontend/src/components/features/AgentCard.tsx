@@ -1,5 +1,7 @@
 import type { Agent, AgentState } from '@/types'
-import { cn, formatRelativeTime, getAgentStateIcon, getAgentStateClass, getAgentStateBgClass, getAgentRoleIcon } from '@/lib/utils'
+import { getAgentRoleIcon, getAgentStateBgClass, getAgentStateClass, getAgentStateIcon } from '@/lib/agent-utils'
+import { cn } from '@/lib/class-utils'
+import { formatRelativeTime } from '@/lib/status-utils'
 
 interface AgentCardProps {
   agent: Agent

@@ -7,7 +7,7 @@ import { useState, useEffect, useRef } from 'react'
 import { RefreshCw, Terminal } from 'lucide-react'
 import { SlideOutPanel } from '@/components/layout/SlideOutPanel'
 import { useAgentPeek } from '@/hooks/useAgentPeek'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-utils'
 
 interface AgentPeekPanelProps {
   /** Whether the panel is open */

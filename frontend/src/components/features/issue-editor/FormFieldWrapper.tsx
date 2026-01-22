@@ -8,7 +8,7 @@ import {
   type MultiSelectOption,
 } from '@/components/ui'
 import type { IssueStatus } from '@/types'
-import { getStatusIcon } from '@/lib/utils'
+import { getStatusIcon } from '@/lib/status-utils'
 
 // ============================================================================
 // Field Type Discriminated Unions

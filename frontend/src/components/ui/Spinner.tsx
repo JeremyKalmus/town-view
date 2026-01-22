@@ -1,4 +1,4 @@
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/class-utils'
 
 interface SpinnerProps {
   /** Size variant: sm (16px), md (20px), lg (24px) */

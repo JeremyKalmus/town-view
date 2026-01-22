@@ -1,5 +1,7 @@
 import type { Issue } from '@/types'
-import { cn, getStatusIcon, getStatusBadgeClass, getPriorityBadgeClass, getPriorityLabel } from '@/lib/utils'
+import { cn } from '@/lib/class-utils'
+import { getPriorityBadgeClass, getPriorityLabel } from '@/lib/priority-utils'
+import { getStatusBadgeClass, getStatusIcon } from '@/lib/status-utils'
 
 interface AssignmentComparisonProps {
   /** The original state of the issue when it was dispatched/assigned */

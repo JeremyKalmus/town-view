@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Mail } from '@/types'
-import { cn, formatRelativeTime } from '@/lib/utils'
+import { cn } from '@/lib/class-utils'
+import { formatRelativeTime } from '@/lib/status-utils'
 
 export interface MailItemProps {
   mail: Mail
