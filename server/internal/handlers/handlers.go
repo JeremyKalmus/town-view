@@ -17,26 +17,29 @@ import (
 	"github.com/gastown/townview/internal/query"
 	"github.com/gastown/townview/internal/registry"
 	"github.com/gastown/townview/internal/rigmanager"
+	"github.com/gastown/townview/internal/telemetry"
 	"github.com/gastown/townview/internal/types"
 )
 
 // Handlers holds the HTTP handlers and their dependencies.
 type Handlers struct {
-	rigManager    *rigmanager.Manager
-	eventStore    *events.Store
-	agentRegistry *registry.Registry
-	mailClient    *mail.Client
-	townRoot      string
+	rigManager         *rigmanager.Manager
+	eventStore         *events.Store
+	agentRegistry      *registry.Registry
+	mailClient         *mail.Client
+	telemetryCollector telemetry.Collector
+	townRoot           string
 }
 
 // New creates a new Handlers instance.
-func New(rigManager *rigmanager.Manager, eventStore *events.Store, agentRegistry *registry.Registry, mailClient *mail.Client, townRoot string) *Handlers {
+func New(rigManager *rigmanager.Manager, eventStore *events.Store, agentRegistry *registry.Registry, mailClient *mail.Client, telemetryCollector telemetry.Collector, townRoot string) *Handlers {
 	return &Handlers{
-		rigManager:    rigManager,
-		eventStore:    eventStore,
-		agentRegistry: agentRegistry,
-		mailClient:    mailClient,
-		townRoot:      townRoot,
+		rigManager:         rigManager,
+		eventStore:         eventStore,
+		agentRegistry:      agentRegistry,
+		mailClient:         mailClient,
+		telemetryCollector: telemetryCollector,
+		townRoot:           townRoot,
 	}
 }
 
@@ -565,6 +568,24 @@ func (h *Handlers) ListRigMail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, messages)
+}
+
+// GetTestSuiteStatus handles GET /api/telemetry/tests
+// Returns the current status of all tests with their last_passed info.
+func (h *Handlers) GetTestSuiteStatus(w http.ResponseWriter, r *http.Request) {
+	if h.telemetryCollector == nil {
+		writeJSON(w, []telemetry.TestStatus{})
+		return
+	}
+
+	status, err := h.telemetryCollector.GetTestSuiteStatus()
+	if err != nil {
+		slog.Error("Failed to get test suite status", "error", err)
+		http.Error(w, "Failed to get test suite status", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, status)
 }
 
 // runBD executes a bd CLI command for write operations

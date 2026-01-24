@@ -14,6 +14,7 @@ import (
 	"github.com/gastown/townview/internal/mail"
 	"github.com/gastown/townview/internal/registry"
 	"github.com/gastown/townview/internal/rigmanager"
+	"github.com/gastown/townview/internal/telemetry"
 )
 
 func main() {
@@ -81,8 +82,18 @@ func main() {
 	// Mail client - still uses CLI (no replacement yet)
 	mailClient := mail.NewClient(root)
 
+	// Telemetry Collector - tracks test results, token usage, git changes
+	telemetryDBPath := filepath.Join(root, "telemetry.db")
+	telemetryCollector, err := telemetry.NewSQLiteCollector(telemetryDBPath)
+	if err != nil {
+		slog.Warn("Failed to create telemetry collector, telemetry endpoints will be disabled", "error", err)
+	}
+	if telemetryCollector != nil {
+		defer telemetryCollector.Close()
+	}
+
 	// Set up HTTP handlers with Service Layer
-	h := handlers.New(rigMgr, eventStore, agentRegistry, mailClient, root)
+	h := handlers.New(rigMgr, eventStore, agentRegistry, mailClient, telemetryCollector, root)
 	wsHandler := handlers.NewWebSocketHandler(rigMgr, eventStore, agentRegistry, mailClient)
 
 	// Start WebSocket hub
@@ -111,6 +122,9 @@ func main() {
 
 	// Mail (town-level)
 	mux.HandleFunc("GET /api/mail", h.ListMail)
+
+	// Telemetry (test suite status)
+	mux.HandleFunc("GET /api/telemetry/tests", h.GetTestSuiteStatus)
 
 	// WebSocket (real-time data streaming)
 	mux.Handle("GET /ws", wsHandler)
