@@ -74,6 +74,10 @@ func main() {
 	// Set up HTTP handlers
 	h := handlers.New(rigDiscovery, beadsClient, mailClient, eventBroadcaster)
 	eventsHandler := handlers.NewEventsHandler(eventBroadcaster)
+	wsHandler := handlers.NewWebSocketHandler(rigDiscovery, beadsClient, mailClient)
+
+	// Start WebSocket hub
+	go wsHandler.Hub().Run()
 
 	// Routes
 	mux := http.NewServeMux()
@@ -101,6 +105,9 @@ func main() {
 
 	// Server-Sent Events
 	mux.Handle("GET /api/events", eventsHandler)
+
+	// WebSocket
+	mux.Handle("GET /ws", wsHandler)
 
 	// Static files (frontend build)
 	mux.Handle("/", http.FileServer(http.Dir("./static")))
