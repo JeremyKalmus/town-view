@@ -413,3 +413,101 @@ func TestCollectorInterfaceCompliance(t *testing.T) {
 
 	var _ Collector = collector // Compile-time check
 }
+
+// TestTelemetry_RecordTestRun_WithCommitSHA verifies commit_sha is recorded and propagated.
+// ADR-014 AC-1, AC-2: TestRun has commit_sha, test_results inherits from parent run
+func TestTelemetry_RecordTestRun_WithCommitSHA(t *testing.T) {
+	collector, cleanup := createTestCollector(t)
+	defer cleanup()
+
+	run := TestRun{
+		AgentID:    "agent-1",
+		BeadID:     "bead-sha-test",
+		Timestamp:  "2026-01-24T12:00:00Z",
+		CommitSHA:  "abc123def456789",
+		Branch:     "feature/test-tracking",
+		Command:    "go test ./...",
+		Total:      3,
+		Passed:     2,
+		Failed:     1,
+		Skipped:    0,
+		DurationMS: 500,
+		Results: []TestResult{
+			{TestFile: "main_test.go", TestName: "TestA", Status: "passed", DurationMS: 100},
+			{TestFile: "main_test.go", TestName: "TestB", Status: "passed", DurationMS: 150},
+			{TestFile: "util_test.go", TestName: "TestC", Status: "failed", DurationMS: 250, ErrorMessage: "assertion failed"},
+		},
+	}
+
+	if err := collector.RecordTestRun(run); err != nil {
+		t.Fatalf("RecordTestRun failed: %v", err)
+	}
+
+	// Query and verify commit_sha and branch are preserved
+	results, err := collector.GetTestRuns(TelemetryFilter{BeadID: "bead-sha-test"})
+	if err != nil {
+		t.Fatalf("GetTestRuns failed: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 run, got %d", len(results))
+	}
+
+	r := results[0]
+	if r.CommitSHA != "abc123def456789" {
+		t.Errorf("expected CommitSHA=abc123def456789, got %s", r.CommitSHA)
+	}
+	if r.Branch != "feature/test-tracking" {
+		t.Errorf("expected Branch=feature/test-tracking, got %s", r.Branch)
+	}
+
+	// Verify individual results inherit commit_sha from parent run
+	if len(r.Results) != 3 {
+		t.Fatalf("expected 3 results, got %d", len(r.Results))
+	}
+	for i, tr := range r.Results {
+		if tr.CommitSHA != "abc123def456789" {
+			t.Errorf("result %d: expected CommitSHA=abc123def456789, got %s", i, tr.CommitSHA)
+		}
+	}
+}
+
+// TestTelemetry_RecordTestRun_WithoutCommitSHA verifies runs without commit_sha still work.
+func TestTelemetry_RecordTestRun_WithoutCommitSHA(t *testing.T) {
+	collector, cleanup := createTestCollector(t)
+	defer cleanup()
+
+	// Record a test run without commit_sha (backwards compatibility)
+	run := TestRun{
+		AgentID:    "agent-1",
+		BeadID:     "bead-no-sha",
+		Timestamp:  "2026-01-24T12:00:00Z",
+		Command:    "go test ./...",
+		Total:      1,
+		Passed:     1,
+		DurationMS: 100,
+		Results: []TestResult{
+			{TestFile: "test.go", TestName: "Test1", Status: "passed", DurationMS: 100},
+		},
+	}
+
+	if err := collector.RecordTestRun(run); err != nil {
+		t.Fatalf("RecordTestRun failed: %v", err)
+	}
+
+	results, err := collector.GetTestRuns(TelemetryFilter{BeadID: "bead-no-sha"})
+	if err != nil {
+		t.Fatalf("GetTestRuns failed: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 run, got %d", len(results))
+	}
+
+	// CommitSHA and Branch should be empty strings (not nil/null issues)
+	r := results[0]
+	if r.CommitSHA != "" {
+		t.Errorf("expected empty CommitSHA, got %s", r.CommitSHA)
+	}
+	if r.Branch != "" {
+		t.Errorf("expected empty Branch, got %s", r.Branch)
+	}
+}

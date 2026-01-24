@@ -40,6 +40,7 @@ type TestResult struct {
 	AgentID      string `json:"agent_id"`
 	BeadID       string `json:"bead_id,omitempty"`
 	Timestamp    string `json:"timestamp"`
+	CommitSHA    string `json:"commit_sha,omitempty"`
 	TestFile     string `json:"test_file"`
 	TestName     string `json:"test_name"`
 	Status       string `json:"status"` // passed, failed, skipped, error
@@ -53,6 +54,8 @@ type TestRun struct {
 	AgentID    string       `json:"agent_id"`
 	BeadID     string       `json:"bead_id,omitempty"`
 	Timestamp  string       `json:"timestamp"`
+	CommitSHA  string       `json:"commit_sha,omitempty"`
+	Branch     string       `json:"branch,omitempty"`
 	Command    string       `json:"command"`
 	Total      int          `json:"total"`
 	Passed     int          `json:"passed"`
@@ -215,6 +218,8 @@ func (c *SQLiteCollector) initSchema() error {
 		agent_id TEXT NOT NULL,
 		bead_id TEXT,
 		timestamp TEXT NOT NULL,
+		commit_sha TEXT,
+		branch TEXT,
 		command TEXT NOT NULL,
 		total INTEGER NOT NULL,
 		passed INTEGER NOT NULL,
@@ -225,6 +230,7 @@ func (c *SQLiteCollector) initSchema() error {
 	CREATE INDEX IF NOT EXISTS idx_test_runs_timestamp ON test_runs(timestamp);
 	CREATE INDEX IF NOT EXISTS idx_test_runs_agent_id ON test_runs(agent_id);
 	CREATE INDEX IF NOT EXISTS idx_test_runs_bead_id ON test_runs(bead_id);
+	CREATE INDEX IF NOT EXISTS idx_test_runs_commit_sha ON test_runs(commit_sha);
 
 	CREATE TABLE IF NOT EXISTS test_results (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -232,6 +238,7 @@ func (c *SQLiteCollector) initSchema() error {
 		agent_id TEXT NOT NULL,
 		bead_id TEXT,
 		timestamp TEXT NOT NULL,
+		commit_sha TEXT,
 		test_file TEXT NOT NULL,
 		test_name TEXT NOT NULL,
 		status TEXT NOT NULL,
@@ -243,6 +250,7 @@ func (c *SQLiteCollector) initSchema() error {
 	CREATE INDEX IF NOT EXISTS idx_test_results_run_id ON test_results(run_id);
 	CREATE INDEX IF NOT EXISTS idx_test_results_agent_id ON test_results(agent_id);
 	CREATE INDEX IF NOT EXISTS idx_test_results_bead_id ON test_results(bead_id);
+	CREATE INDEX IF NOT EXISTS idx_test_results_commit_sha ON test_results(commit_sha);
 	`
 	_, err := c.db.Exec(schema)
 	return err
@@ -299,9 +307,10 @@ func (c *SQLiteCollector) RecordTestRun(run TestRun) error {
 	}
 
 	result, err := tx.Exec(`
-		INSERT INTO test_runs (agent_id, bead_id, timestamp, command, total, passed, failed, skipped, duration_ms)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		INSERT INTO test_runs (agent_id, bead_id, timestamp, commit_sha, branch, command, total, passed, failed, skipped, duration_ms)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		run.AgentID, nullString(run.BeadID), run.Timestamp,
+		nullString(run.CommitSHA), nullString(run.Branch),
 		run.Command, run.Total, run.Passed, run.Failed, run.Skipped, run.DurationMS)
 	if err != nil {
 		return fmt.Errorf("insert test run: %w", err)
@@ -314,9 +323,10 @@ func (c *SQLiteCollector) RecordTestRun(run TestRun) error {
 
 	for _, r := range run.Results {
 		_, err := tx.Exec(`
-			INSERT INTO test_results (run_id, agent_id, bead_id, timestamp, test_file, test_name, status, duration_ms, error_message, stack_trace)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			INSERT INTO test_results (run_id, agent_id, bead_id, timestamp, commit_sha, test_file, test_name, status, duration_ms, error_message, stack_trace)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			runID, run.AgentID, nullString(run.BeadID), run.Timestamp,
+			nullString(run.CommitSHA),
 			r.TestFile, r.TestName, r.Status, r.DurationMS,
 			nullString(r.ErrorMessage), nullString(r.StackTrace))
 		if err != nil {
@@ -439,7 +449,7 @@ func (c *SQLiteCollector) GetGitSummary(filter TelemetryFilter) (GitSummary, err
 
 // GetTestRuns retrieves test run records matching the filter.
 func (c *SQLiteCollector) GetTestRuns(filter TelemetryFilter) ([]TestRun, error) {
-	query := `SELECT id, agent_id, COALESCE(bead_id, ''), timestamp, command, total, passed, failed, skipped, duration_ms FROM test_runs WHERE 1=1`
+	query := `SELECT id, agent_id, COALESCE(bead_id, ''), timestamp, COALESCE(commit_sha, ''), COALESCE(branch, ''), command, total, passed, failed, skipped, duration_ms FROM test_runs WHERE 1=1`
 	args := []interface{}{}
 
 	query, args = applyFilter(query, args, filter)
@@ -458,13 +468,13 @@ func (c *SQLiteCollector) GetTestRuns(filter TelemetryFilter) ([]TestRun, error)
 	for rows.Next() {
 		var runID int64
 		var r TestRun
-		if err := rows.Scan(&runID, &r.AgentID, &r.BeadID, &r.Timestamp, &r.Command, &r.Total, &r.Passed, &r.Failed, &r.Skipped, &r.DurationMS); err != nil {
+		if err := rows.Scan(&runID, &r.AgentID, &r.BeadID, &r.Timestamp, &r.CommitSHA, &r.Branch, &r.Command, &r.Total, &r.Passed, &r.Failed, &r.Skipped, &r.DurationMS); err != nil {
 			return nil, err
 		}
 
 		// Load individual results for this run
 		resultRows, err := c.db.Query(`
-			SELECT agent_id, COALESCE(bead_id, ''), timestamp, test_file, test_name, status, duration_ms, COALESCE(error_message, ''), COALESCE(stack_trace, '')
+			SELECT agent_id, COALESCE(bead_id, ''), timestamp, COALESCE(commit_sha, ''), test_file, test_name, status, duration_ms, COALESCE(error_message, ''), COALESCE(stack_trace, '')
 			FROM test_results WHERE run_id = ?`, runID)
 		if err != nil {
 			return nil, err
@@ -472,7 +482,7 @@ func (c *SQLiteCollector) GetTestRuns(filter TelemetryFilter) ([]TestRun, error)
 
 		for resultRows.Next() {
 			var tr TestResult
-			if err := resultRows.Scan(&tr.AgentID, &tr.BeadID, &tr.Timestamp, &tr.TestFile, &tr.TestName, &tr.Status, &tr.DurationMS, &tr.ErrorMessage, &tr.StackTrace); err != nil {
+			if err := resultRows.Scan(&tr.AgentID, &tr.BeadID, &tr.Timestamp, &tr.CommitSHA, &tr.TestFile, &tr.TestName, &tr.Status, &tr.DurationMS, &tr.ErrorMessage, &tr.StackTrace); err != nil {
 				resultRows.Close()
 				return nil, err
 			}
