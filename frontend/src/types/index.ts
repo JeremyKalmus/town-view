@@ -237,6 +237,30 @@ export interface ActivityEvent {
   timestamp: string;
 }
 
+// Test suite status from telemetry API
+export type TestStatusValue = 'passed' | 'failed' | 'skipped' | 'error';
+
+export interface TestStatus {
+  test_name: string;
+  test_file: string;
+  current_status: TestStatusValue;
+  last_run_at: string;
+  last_passed_at?: string;
+  last_passed_commit?: string;
+  fail_count: number;
+  total_runs: number;
+}
+
+// Test history entry for expanded view
+export interface TestHistoryEntry {
+  test_name: string;
+  status: TestStatusValue;
+  timestamp: string;
+  commit_sha?: string;
+  duration_ms: number;
+  error_message?: string;
+}
+
 // Work item health status based on duration
 export type WorkItemHealthStatus = 'healthy' | 'concerning' | 'stuck';
 
