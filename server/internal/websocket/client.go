@@ -3,6 +3,7 @@ package websocket
 import (
 	"encoding/json"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -32,6 +33,11 @@ type Client struct {
 	hub  *Hub
 	conn *websocket.Conn
 	send chan []byte
+
+	// Mutex protecting the closed flag
+	closeMu sync.RWMutex
+	// closed is true when the send channel has been closed
+	closed bool
 }
 
 // NewClient creates a new Client instance.
@@ -40,6 +46,37 @@ func NewClient(hub *Hub, conn *websocket.Conn) *Client {
 		hub:  hub,
 		conn: conn,
 		send: make(chan []byte, 256),
+	}
+}
+
+// Send safely sends a message to the client.
+// Returns false if the client is closed or the buffer is full.
+func (c *Client) Send(message []byte) bool {
+	c.closeMu.RLock()
+	defer c.closeMu.RUnlock()
+
+	if c.closed {
+		return false
+	}
+
+	select {
+	case c.send <- message:
+		return true
+	default:
+		// Buffer full
+		return false
+	}
+}
+
+// Close marks the client as closed and closes the send channel.
+// Safe to call multiple times.
+func (c *Client) Close() {
+	c.closeMu.Lock()
+	defer c.closeMu.Unlock()
+
+	if !c.closed {
+		c.closed = true
+		close(c.send)
 	}
 }
 

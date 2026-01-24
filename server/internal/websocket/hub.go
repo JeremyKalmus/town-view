@@ -72,7 +72,7 @@ func (h *Hub) Run() {
 			h.mu.Lock()
 			if _, ok := h.clients[client]; ok {
 				delete(h.clients, client)
-				close(client.send)
+				client.Close() // Safe close that sets the closed flag
 			}
 			h.mu.Unlock()
 			slog.Debug("WebSocket client unregistered", "addr", client.conn.RemoteAddr())
@@ -97,10 +97,8 @@ func (h *Hub) broadcastMessage(message []byte) {
 
 	var slowClients []*Client
 	for _, client := range clients {
-		select {
-		case client.send <- message:
-		default:
-			// Client buffer full, mark for removal
+		if !client.Send(message) {
+			// Client closed or buffer full, mark for removal
 			slowClients = append(slowClients, client)
 		}
 	}
@@ -111,7 +109,7 @@ func (h *Hub) broadcastMessage(message []byte) {
 		for _, client := range slowClients {
 			if _, ok := h.clients[client]; ok {
 				delete(h.clients, client)
-				close(client.send)
+				client.Close()
 			}
 		}
 		h.mu.Unlock()
@@ -145,27 +143,8 @@ func (h *Hub) sendSnapshotToClient(client *Client) {
 		return
 	}
 
-	// Check if client is still registered before sending
-	h.mu.RLock()
-	_, registered := h.clients[client]
-	h.mu.RUnlock()
-
-	if !registered {
-		return
-	}
-
-	// Use defer/recover to handle race where channel closes between check and send
-	defer func() {
-		if r := recover(); r != nil {
-			slog.Debug("Client disconnected during snapshot send", "error", r)
-		}
-	}()
-
-	select {
-	case client.send <- snapshot:
-	default:
-		// Client buffer full
-	}
+	// Use safe Send method which handles the closed channel race condition
+	client.Send(snapshot)
 }
 
 // TriggerBroadcast triggers an immediate broadcast to all clients.

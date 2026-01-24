@@ -79,11 +79,48 @@ export function IssueEditorForm({
     setTouched((prev) => new Set(prev).add(field))
   }, [])
 
+  // Format date for display
+  const formatDate = (dateStr: string) => {
+    try {
+      return new Date(dateStr).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    } catch {
+      return dateStr
+    }
+  }
+
   return (
     <form
       className="space-y-4"
       onSubmit={(e) => e.preventDefault()}
     >
+      {/* Metadata section (read-only) */}
+      <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-text-secondary pb-3 mb-1 border-b border-border">
+        {issue.created_by && (
+          <span title={issue.created_by}>
+            <span className="text-text-muted">Created by:</span>{' '}
+            <span className="text-text-primary">@{issue.created_by.split('/').pop()}</span>
+          </span>
+        )}
+        {issue.created_at && (
+          <span>
+            <span className="text-text-secondary">Created:</span>{' '}
+            {formatDate(issue.created_at)}
+          </span>
+        )}
+        {issue.updated_at && (
+          <span>
+            <span className="text-text-secondary">Updated:</span>{' '}
+            {formatDate(issue.updated_at)}
+          </span>
+        )}
+      </div>
+
       {/* Title - most important field */}
       <div onBlur={() => markTouched('title')}>
         <TitleInput

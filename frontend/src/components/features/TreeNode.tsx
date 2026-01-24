@@ -292,6 +292,13 @@ export function TreeNode({
           {data.issue.issue_type}
         </span>
 
+        {/* Created by */}
+        {data.issue.created_by && (
+          <span className="text-xs text-text-secondary flex-shrink-0 truncate max-w-[140px]" title={`Created by: ${data.issue.created_by}`}>
+            @{data.issue.created_by.split('/').pop()}
+          </span>
+        )}
+
         {/* Description toggle indicator */}
         {showDescriptionPreview && hasDescription && (
           <button
@@ -767,6 +774,13 @@ export function VirtualizedTreeView({
         <span className="text-xs px-2 py-0.5 rounded bg-bg-tertiary text-text-secondary flex-shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
           {data.issue.issue_type}
         </span>
+
+        {/* Created by */}
+        {data.issue.created_by && (
+          <span className="text-xs text-text-secondary flex-shrink-0 truncate max-w-[140px]" title={`Created by: ${data.issue.created_by}`}>
+            @{data.issue.created_by.split('/').pop()}
+          </span>
+        )}
       </div>
     )
   }
