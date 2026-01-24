@@ -2,12 +2,15 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 
-	"github.com/gastown/townview/internal/beads"
+	"github.com/gastown/townview/internal/events"
 	"github.com/gastown/townview/internal/mail"
-	"github.com/gastown/townview/internal/rigs"
+	"github.com/gastown/townview/internal/query"
+	"github.com/gastown/townview/internal/registry"
+	"github.com/gastown/townview/internal/rigmanager"
 	"github.com/gastown/townview/internal/types"
 	"github.com/gastown/townview/internal/websocket"
 	gorillaws "github.com/gorilla/websocket"
@@ -24,28 +27,30 @@ var upgrader = gorillaws.Upgrader{
 
 // Snapshot represents a full data snapshot sent to WebSocket clients.
 type Snapshot struct {
-	Type     string           `json:"type"`
-	Rigs     []types.Rig      `json:"rigs"`
-	Agents   []types.Agent    `json:"agents"`
-	Issues   []types.Issue    `json:"issues"`
-	Mail     []types.Mail     `json:"mail"`
+	Type     string                `json:"type"`
+	Rigs     []types.Rig           `json:"rigs"`
+	Agents   []types.Agent         `json:"agents"`
+	Issues   []types.Issue         `json:"issues"`
+	Mail     []types.Mail          `json:"mail"`
 	Activity []types.ActivityEvent `json:"activity"`
 }
 
 // WebSocketHandler handles WebSocket connections.
 type WebSocketHandler struct {
-	hub          *websocket.Hub
-	rigDiscovery *rigs.Discovery
-	beadsClient  *beads.Client
-	mailClient   *mail.Client
+	hub           *websocket.Hub
+	rigManager    *rigmanager.Manager
+	eventStore    *events.Store
+	agentRegistry *registry.Registry
+	mailClient    *mail.Client
 }
 
 // NewWebSocketHandler creates a new WebSocketHandler.
-func NewWebSocketHandler(rigDiscovery *rigs.Discovery, beadsClient *beads.Client, mailClient *mail.Client) *WebSocketHandler {
+func NewWebSocketHandler(rigManager *rigmanager.Manager, eventStore *events.Store, agentRegistry *registry.Registry, mailClient *mail.Client) *WebSocketHandler {
 	h := &WebSocketHandler{
-		rigDiscovery: rigDiscovery,
-		beadsClient:  beadsClient,
-		mailClient:   mailClient,
+		rigManager:    rigManager,
+		eventStore:    eventStore,
+		agentRegistry: agentRegistry,
+		mailClient:    mailClient,
 	}
 	h.hub = websocket.NewHub(h.buildSnapshot)
 	return h
@@ -83,38 +88,55 @@ func (h *WebSocketHandler) buildSnapshot() ([]byte, error) {
 		Activity: []types.ActivityEvent{},
 	}
 
-	// Get all rigs
-	rigList, err := h.rigDiscovery.ListRigs()
-	if err != nil {
-		slog.Error("Failed to list rigs for snapshot", "error", err)
-	} else {
-		snapshot.Rigs = rigList
+	// Get all rigs from RigManager (uses Service Layer)
+	snapshot.Rigs = h.rigManager.ListRigs()
+
+	// Get all issues from all rigs
+	issues := h.rigManager.ListAllIssues(query.IssueFilter{})
+	snapshot.Issues = issues
+
+	// Get all agents from Agent Registry
+	agents := h.agentRegistry.ListAgents(nil)
+	for _, agent := range agents {
+		a := types.Agent{
+			ID:        agent.ID,
+			Name:      agent.Name,
+			RoleType:  string(agent.Role),
+			Rig:       agent.Rig,
+			State:     string(agent.Status),
+			UpdatedAt: agent.LastHeartbeat,
+		}
+		if agent.CurrentBead != nil {
+			a.HookBead = *agent.CurrentBead
+		}
+		snapshot.Agents = append(snapshot.Agents, a)
 	}
 
-	// Get agents and issues for each rig
-	for _, rig := range snapshot.Rigs {
-		// Get agents
-		agents, err := h.beadsClient.GetAgents(rig.Path)
-		if err != nil {
-			slog.Debug("Failed to get agents for rig", "rig", rig.ID, "error", err)
-		} else {
-			snapshot.Agents = append(snapshot.Agents, agents...)
-		}
+	// Get recent activity from Event Store
+	activityEvents, err := h.eventStore.Query(events.EventFilter{
+		Limit: 50,
+	})
+	if err != nil {
+		slog.Debug("Failed to get activity for snapshot", "error", err)
+	} else {
+		for _, evt := range activityEvents {
+			// Parse payload for additional fields
+			var payload map[string]interface{}
+			if len(evt.Payload) > 0 {
+				json.Unmarshal(evt.Payload, &payload)
+			}
 
-		// Get issues (open only by default)
-		issues, err := h.beadsClient.ListIssues(rig.Path, nil)
-		if err != nil {
-			slog.Debug("Failed to get issues for rig", "rig", rig.ID, "error", err)
-		} else {
-			snapshot.Issues = append(snapshot.Issues, issues...)
-		}
+			issueID, _ := payload["issue_id"].(string)
+			title, _ := payload["title"].(string)
 
-		// Get recent activity
-		activity, err := h.beadsClient.GetRecentActivity(rig.Path, 20)
-		if err != nil {
-			slog.Debug("Failed to get activity for rig", "rig", rig.ID, "error", err)
-		} else {
-			snapshot.Activity = append(snapshot.Activity, activity...)
+			snapshot.Activity = append(snapshot.Activity, types.ActivityEvent{
+				ID:        fmt.Sprintf("%d", evt.ID),
+				IssueID:   issueID,
+				EventType: evt.Type,
+				Title:     title,
+				Actor:     evt.Source,
+				Timestamp: evt.Timestamp,
+			})
 		}
 	}
 

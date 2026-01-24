@@ -9,12 +9,11 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/gastown/townview/internal/beads"
 	"github.com/gastown/townview/internal/events"
 	"github.com/gastown/townview/internal/handlers"
 	"github.com/gastown/townview/internal/mail"
-	"github.com/gastown/townview/internal/rigs"
-	"github.com/gastown/townview/internal/watcher"
+	"github.com/gastown/townview/internal/registry"
+	"github.com/gastown/townview/internal/rigmanager"
 )
 
 func main() {
@@ -54,26 +53,37 @@ func main() {
 	}
 	slog.Info("Starting Town View", "town_root", root, "port", *port)
 
-	// Initialize services
-	beadsClient := beads.NewClient(root)
-	mailClient := mail.NewClient(root)
-	rigDiscovery := rigs.NewDiscovery(root, beadsClient)
-	eventBroadcaster := events.NewBroadcaster()
-	fileWatcher := watcher.New(root, eventBroadcaster)
+	// Initialize Service Layer components
 
-	// Start event broadcaster
-	go eventBroadcaster.Run()
-
-	// Start file watcher
-	if err := fileWatcher.Start(); err != nil {
-		slog.Error("Failed to start file watcher", "error", err)
+	// Event Store - central event collection (in-memory for now)
+	eventStore, err := events.NewStore(events.DefaultConfig())
+	if err != nil {
+		slog.Error("Failed to create EventStore", "error", err)
 		os.Exit(1)
 	}
-	defer fileWatcher.Stop()
+	defer eventStore.Close()
 
-	// Set up HTTP handlers
-	h := handlers.New(rigDiscovery, beadsClient, mailClient, eventBroadcaster)
-	wsHandler := handlers.NewWebSocketHandler(rigDiscovery, beadsClient, mailClient)
+	// Agent Registry - tracks all agent states
+	agentRegistry := registry.NewWithDefaults()
+	agentRegistry.Start()
+	defer agentRegistry.Stop()
+
+	// Rig Manager - discovers rigs and manages Query Services
+	rigMgr, err := rigmanager.New(rigmanager.Config{
+		TownRoot: root,
+	}, eventStore, agentRegistry)
+	if err != nil {
+		slog.Error("Failed to create RigManager", "error", err)
+		os.Exit(1)
+	}
+	defer rigMgr.Close()
+
+	// Mail client - still uses CLI (no replacement yet)
+	mailClient := mail.NewClient(root)
+
+	// Set up HTTP handlers with Service Layer
+	h := handlers.New(rigMgr, eventStore, agentRegistry, mailClient, root)
+	wsHandler := handlers.NewWebSocketHandler(rigMgr, eventStore, agentRegistry, mailClient)
 
 	// Start WebSocket hub
 	go wsHandler.Hub().Run()

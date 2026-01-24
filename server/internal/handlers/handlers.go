@@ -2,49 +2,47 @@
 package handlers
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 
-	"github.com/gastown/townview/internal/beads"
-	"github.com/gastown/townview/internal/convoy"
 	"github.com/gastown/townview/internal/events"
 	"github.com/gastown/townview/internal/mail"
-	"github.com/gastown/townview/internal/rigs"
+	"github.com/gastown/townview/internal/query"
+	"github.com/gastown/townview/internal/registry"
+	"github.com/gastown/townview/internal/rigmanager"
 	"github.com/gastown/townview/internal/types"
 )
 
 // Handlers holds the HTTP handlers and their dependencies.
 type Handlers struct {
-	rigDiscovery     *rigs.Discovery
-	beadsClient      *beads.Client
-	mailClient       *mail.Client
-	eventBroadcaster *events.Broadcaster
-	convoyNotifier   *convoy.Notifier
+	rigManager    *rigmanager.Manager
+	eventStore    *events.Store
+	agentRegistry *registry.Registry
+	mailClient    *mail.Client
+	townRoot      string
 }
 
 // New creates a new Handlers instance.
-func New(rigDiscovery *rigs.Discovery, beadsClient *beads.Client, mailClient *mail.Client, eventBroadcaster *events.Broadcaster) *Handlers {
+func New(rigManager *rigmanager.Manager, eventStore *events.Store, agentRegistry *registry.Registry, mailClient *mail.Client, townRoot string) *Handlers {
 	return &Handlers{
-		rigDiscovery:     rigDiscovery,
-		beadsClient:      beadsClient,
-		mailClient:       mailClient,
-		eventBroadcaster: eventBroadcaster,
-		convoyNotifier:   convoy.NewNotifier(beadsClient, eventBroadcaster),
+		rigManager:    rigManager,
+		eventStore:    eventStore,
+		agentRegistry: agentRegistry,
+		mailClient:    mailClient,
+		townRoot:      townRoot,
 	}
 }
 
 // ListRigs handles GET /api/rigs
 func (h *Handlers) ListRigs(w http.ResponseWriter, r *http.Request) {
-	rigs, err := h.rigDiscovery.ListRigs()
-	if err != nil {
-		slog.Error("Failed to list rigs", "error", err)
-		http.Error(w, "Failed to list rigs", http.StatusInternalServerError)
-		return
-	}
-
+	rigs := h.rigManager.ListRigs()
 	writeJSON(w, rigs)
 }
 
@@ -52,80 +50,59 @@ func (h *Handlers) ListRigs(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) GetRig(w http.ResponseWriter, r *http.Request) {
 	rigID := r.PathValue("rigId")
 
-	rig, err := h.rigDiscovery.GetRig(rigID)
+	rig, err := h.rigManager.GetRig(rigID)
 	if err != nil {
-		slog.Error("Failed to get rig", "rigId", rigID, "error", err)
-		http.Error(w, "Failed to get rig", http.StatusInternalServerError)
-		return
-	}
-
-	if rig == nil {
 		http.Error(w, "Rig not found", http.StatusNotFound)
 		return
 	}
 
-	writeJSON(w, rig)
+	// Convert to types.Rig
+	result := types.Rig{
+		ID:        rig.ID,
+		Name:      rig.Name,
+		Prefix:    rig.Prefix,
+		Path:      rig.Path,
+		BeadsPath: rig.BeadsPath,
+	}
+
+	writeJSON(w, result)
 }
 
 // ListIssues handles GET /api/rigs/{rigId}/issues
 func (h *Handlers) ListIssues(w http.ResponseWriter, r *http.Request) {
 	rigID := r.PathValue("rigId")
 
-	rig, err := h.rigDiscovery.GetRig(rigID)
-	if err != nil || rig == nil {
-		http.Error(w, "Rig not found", http.StatusNotFound)
-		return
-	}
+	// Build filter from query params
+	filter := query.IssueFilter{}
 
-	// Parse filters from query params
-	filters := make(map[string]string)
-	if status := r.URL.Query().Get("status"); status != "" {
-		filters["status"] = status
+	if status := r.URL.Query().Get("status"); status != "" && status != "all" {
+		filter.Status = []string{status}
 	}
 	if issueType := r.URL.Query().Get("type"); issueType != "" {
-		filters["type"] = issueType
-	}
-	if priority := r.URL.Query().Get("priority"); priority != "" {
-		filters["priority"] = priority
+		filter.Type = []string{issueType}
 	}
 	if assignee := r.URL.Query().Get("assignee"); assignee != "" {
-		filters["assignee"] = assignee
-	}
-	if r.URL.Query().Get("all") == "true" {
-		filters["all"] = "true"
+		filter.Assignee = assignee
 	}
 
-	issues, err := h.beadsClient.ListIssues(rig.Path, filters)
+	// Handle multiple types (comma-separated)
+	if typeFilter := r.URL.Query().Get("types"); typeFilter != "" {
+		filter.Type = strings.Split(typeFilter, ",")
+		for i := range filter.Type {
+			filter.Type[i] = strings.TrimSpace(filter.Type[i])
+		}
+	}
+
+	issues, err := h.rigManager.ListIssues(rigID, filter)
 	if err != nil {
 		slog.Error("Failed to list issues", "rigId", rigID, "error", err)
 		http.Error(w, "Failed to list issues", http.StatusInternalServerError)
 		return
 	}
 
-	// Filter by multiple types if specified (comma-separated)
-	if typeFilter := r.URL.Query().Get("types"); typeFilter != "" {
-		typeSet := make(map[string]bool)
-		for _, t := range strings.Split(typeFilter, ",") {
-			typeSet[strings.TrimSpace(t)] = true
-		}
-		filtered := make([]types.Issue, 0) // Initialize as empty slice, not nil
-		for _, issue := range issues {
-			if typeSet[issue.IssueType] {
-				filtered = append(filtered, issue)
-			}
-		}
-		issues = filtered
-	}
-
-	// Check for include=convoy query param
-	if r.URL.Query().Get("include") == "convoy" {
-		for i := range issues {
-			convoy, err := h.beadsClient.GetIssueConvoy(issues[i].ID)
-			if err == nil {
-				issues[i].Convoy = convoy
-			}
-			// If error or no convoy, Convoy remains nil (omitted in JSON)
-		}
+	// Ensure we return empty array not null
+	if issues == nil {
+		issues = []types.Issue{}
 	}
 
 	writeJSON(w, issues)
@@ -136,16 +113,15 @@ func (h *Handlers) GetIssue(w http.ResponseWriter, r *http.Request) {
 	rigID := r.PathValue("rigId")
 	issueID := r.PathValue("issueId")
 
-	rig, err := h.rigDiscovery.GetRig(rigID)
-	if err != nil || rig == nil {
-		http.Error(w, "Rig not found", http.StatusNotFound)
-		return
-	}
-
-	issue, err := h.beadsClient.GetIssue(rig.Path, issueID)
+	issue, err := h.rigManager.GetIssue(rigID, issueID)
 	if err != nil {
 		slog.Error("Failed to get issue", "rigId", rigID, "issueId", issueID, "error", err)
 		http.Error(w, "Failed to get issue", http.StatusInternalServerError)
+		return
+	}
+
+	if issue == nil {
+		http.Error(w, "Issue not found", http.StatusNotFound)
 		return
 	}
 
@@ -153,15 +129,10 @@ func (h *Handlers) GetIssue(w http.ResponseWriter, r *http.Request) {
 }
 
 // UpdateIssue handles PATCH /api/rigs/{rigId}/issues/{issueId}
+// This uses CLI for write operations (Query Service is read-only)
 func (h *Handlers) UpdateIssue(w http.ResponseWriter, r *http.Request) {
 	rigID := r.PathValue("rigId")
 	issueID := r.PathValue("issueId")
-
-	rig, err := h.rigDiscovery.GetRig(rigID)
-	if err != nil || rig == nil {
-		http.Error(w, "Rig not found", http.StatusNotFound)
-		return
-	}
 
 	var update types.IssueUpdate
 	if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
@@ -169,22 +140,44 @@ func (h *Handlers) UpdateIssue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	issue, err := h.beadsClient.UpdateIssue(rig.Path, issueID, update)
-	if err != nil {
+	// Build bd update command
+	args := []string{"update", issueID}
+	if update.Status != nil {
+		args = append(args, "--status", *update.Status)
+	}
+	if update.Priority != nil {
+		args = append(args, "--priority", strconv.Itoa(*update.Priority))
+	}
+	if update.Title != nil {
+		args = append(args, "--title", *update.Title)
+	}
+	if update.Assignee != nil {
+		args = append(args, "--assignee", *update.Assignee)
+	}
+
+	// Execute bd update
+	if err := h.runBD(rigID, args...); err != nil {
 		slog.Error("Failed to update issue", "rigId", rigID, "issueId", issueID, "error", err)
 		http.Error(w, "Failed to update issue", http.StatusInternalServerError)
 		return
 	}
 
-	// Broadcast change
-	h.eventBroadcaster.Broadcast(types.WSMessage{
-		Type:    "issue_changed",
-		Rig:     rigID,
-		Payload: issue,
-	})
+	// Refresh cache and return updated issue
+	h.rigManager.RefreshRig(rigID)
 
-	// Notify convoy progress change (debounced)
-	h.convoyNotifier.NotifyIssueChanged(rigID, rig.Path, issueID)
+	issue, err := h.rigManager.GetIssue(rigID, issueID)
+	if err != nil {
+		http.Error(w, "Failed to get updated issue", http.StatusInternalServerError)
+		return
+	}
+
+	// Emit event
+	if h.eventStore != nil {
+		h.eventStore.Emit("bead.updated", "townview/server", rigID, map[string]interface{}{
+			"issue_id": issueID,
+			"rig":      rigID,
+		})
+	}
 
 	writeJSON(w, issue)
 }
@@ -193,20 +186,31 @@ func (h *Handlers) UpdateIssue(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) ListAgents(w http.ResponseWriter, r *http.Request) {
 	rigID := r.PathValue("rigId")
 
-	rig, err := h.rigDiscovery.GetRig(rigID)
-	if err != nil || rig == nil {
-		http.Error(w, "Rig not found", http.StatusNotFound)
+	if h.agentRegistry == nil {
+		writeJSON(w, []types.Agent{})
 		return
 	}
 
-	agents, err := h.beadsClient.GetAgents(rig.Path)
-	if err != nil {
-		slog.Error("Failed to list agents", "rigId", rigID, "error", err)
-		http.Error(w, "Failed to list agents", http.StatusInternalServerError)
-		return
+	agents := h.agentRegistry.ListAgents(&registry.AgentFilter{Rig: &rigID})
+
+	// Convert to types.Agent
+	result := make([]types.Agent, 0, len(agents))
+	for _, a := range agents {
+		agent := types.Agent{
+			ID:        a.ID,
+			Name:      a.Name,
+			RoleType:  string(a.Role),
+			Rig:       a.Rig,
+			State:     string(a.Status),
+			UpdatedAt: a.LastHeartbeat,
+		}
+		if a.CurrentBead != nil {
+			agent.HookBead = *a.CurrentBead
+		}
+		result = append(result, agent)
 	}
 
-	writeJSON(w, agents)
+	writeJSON(w, result)
 }
 
 // GetIssueDependencies handles GET /api/rigs/{rigId}/issues/{issueId}/dependencies
@@ -214,13 +218,7 @@ func (h *Handlers) GetIssueDependencies(w http.ResponseWriter, r *http.Request) 
 	rigID := r.PathValue("rigId")
 	issueID := r.PathValue("issueId")
 
-	rig, err := h.rigDiscovery.GetRig(rigID)
-	if err != nil || rig == nil {
-		http.Error(w, "Rig not found", http.StatusNotFound)
-		return
-	}
-
-	deps, err := h.beadsClient.GetIssueDependencies(rig.Path, issueID)
+	deps, err := h.rigManager.GetDependencies(rigID, issueID)
 	if err != nil {
 		slog.Error("Failed to get issue dependencies", "rigId", rigID, "issueId", issueID, "error", err)
 		http.Error(w, "Failed to get issue dependencies", http.StatusInternalServerError)
@@ -235,12 +233,6 @@ func (h *Handlers) AddIssueDependency(w http.ResponseWriter, r *http.Request) {
 	rigID := r.PathValue("rigId")
 	issueID := r.PathValue("issueId")
 
-	rig, err := h.rigDiscovery.GetRig(rigID)
-	if err != nil || rig == nil {
-		http.Error(w, "Rig not found", http.StatusNotFound)
-		return
-	}
-
 	var req types.DependencyAdd
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -252,22 +244,15 @@ func (h *Handlers) AddIssueDependency(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.beadsClient.AddDependency(rig.Path, issueID, req.BlockerID); err != nil {
+	// Use bd dep add
+	if err := h.runBD(rigID, "dep", "add", issueID, req.BlockerID); err != nil {
 		slog.Error("Failed to add dependency", "rigId", rigID, "issueId", issueID, "blockerId", req.BlockerID, "error", err)
 		http.Error(w, "Failed to add dependency", http.StatusInternalServerError)
 		return
 	}
 
-	// Broadcast change
-	h.eventBroadcaster.Broadcast(types.WSMessage{
-		Type: "issue_changed",
-		Rig:  rigID,
-		Payload: map[string]string{
-			"id":         issueID,
-			"blocker_id": req.BlockerID,
-			"action":     "dependency_added",
-		},
-	})
+	// Refresh cache
+	h.rigManager.RefreshRig(rigID)
 
 	w.WriteHeader(http.StatusCreated)
 	writeJSON(w, map[string]string{"status": "ok"})
@@ -279,28 +264,15 @@ func (h *Handlers) RemoveIssueDependency(w http.ResponseWriter, r *http.Request)
 	issueID := r.PathValue("issueId")
 	blockerID := r.PathValue("blockerId")
 
-	rig, err := h.rigDiscovery.GetRig(rigID)
-	if err != nil || rig == nil {
-		http.Error(w, "Rig not found", http.StatusNotFound)
-		return
-	}
-
-	if err := h.beadsClient.RemoveDependency(rig.Path, issueID, blockerID); err != nil {
+	// Use bd dep remove
+	if err := h.runBD(rigID, "dep", "remove", issueID, blockerID); err != nil {
 		slog.Error("Failed to remove dependency", "rigId", rigID, "issueId", issueID, "blockerId", blockerID, "error", err)
 		http.Error(w, "Failed to remove dependency", http.StatusInternalServerError)
 		return
 	}
 
-	// Broadcast change
-	h.eventBroadcaster.Broadcast(types.WSMessage{
-		Type: "issue_changed",
-		Rig:  rigID,
-		Payload: map[string]string{
-			"id":         issueID,
-			"blocker_id": blockerID,
-			"action":     "dependency_removed",
-		},
-	})
+	// Refresh cache
+	h.rigManager.RefreshRig(rigID)
 
 	w.WriteHeader(http.StatusOK)
 	writeJSON(w, map[string]string{"status": "ok"})
@@ -310,17 +282,33 @@ func (h *Handlers) RemoveIssueDependency(w http.ResponseWriter, r *http.Request)
 func (h *Handlers) ListDependencies(w http.ResponseWriter, r *http.Request) {
 	rigID := r.PathValue("rigId")
 
-	rig, err := h.rigDiscovery.GetRig(rigID)
-	if err != nil || rig == nil {
-		http.Error(w, "Rig not found", http.StatusNotFound)
-		return
-	}
-
-	deps, err := h.beadsClient.GetDependencies(rig.Path)
+	// Get all issues and their dependencies
+	issues, err := h.rigManager.ListIssues(rigID, query.IssueFilter{})
 	if err != nil {
 		slog.Error("Failed to list dependencies", "rigId", rigID, "error", err)
 		http.Error(w, "Failed to list dependencies", http.StatusInternalServerError)
 		return
+	}
+
+	// Build dependency list
+	var deps []types.Dependency
+	for _, issue := range issues {
+		if issue.DependencyCount > 0 {
+			issueDeps, err := h.rigManager.GetDependencies(rigID, issue.ID)
+			if err == nil && issueDeps != nil {
+				for _, blocker := range issueDeps.Blockers {
+					deps = append(deps, types.Dependency{
+						FromID: issue.ID,
+						ToID:   blocker.ID,
+						Type:   "blocks",
+					})
+				}
+			}
+		}
+	}
+
+	if deps == nil {
+		deps = []types.Dependency{}
 	}
 
 	writeJSON(w, deps)
@@ -331,13 +319,7 @@ func (h *Handlers) GetMoleculeProgress(w http.ResponseWriter, r *http.Request) {
 	rigID := r.PathValue("rigId")
 	issueID := r.PathValue("issueId")
 
-	rig, err := h.rigDiscovery.GetRig(rigID)
-	if err != nil || rig == nil {
-		http.Error(w, "Rig not found", http.StatusNotFound)
-		return
-	}
-
-	progress, err := h.beadsClient.GetMoleculeProgress(rig.Path, issueID)
+	progress, err := h.rigManager.GetConvoyProgress(rigID, issueID)
 	if err != nil {
 		slog.Error("Failed to get molecule progress", "rigId", rigID, "issueId", issueID, "error", err)
 		http.Error(w, "Failed to get molecule progress", http.StatusInternalServerError)
@@ -348,15 +330,10 @@ func (h *Handlers) GetMoleculeProgress(w http.ResponseWriter, r *http.Request) {
 }
 
 // PeekAgent handles GET /api/rigs/{rigId}/agents/{agentId}/peek
+// This requires tmux access, uses gt peek command
 func (h *Handlers) PeekAgent(w http.ResponseWriter, r *http.Request) {
 	rigID := r.PathValue("rigId")
 	agentID := r.PathValue("agentId")
-
-	rig, err := h.rigDiscovery.GetRig(rigID)
-	if err != nil || rig == nil {
-		http.Error(w, "Rig not found", http.StatusNotFound)
-		return
-	}
 
 	// Parse lines query param (default: 50)
 	lines := 50
@@ -366,25 +343,42 @@ func (h *Handlers) PeekAgent(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	output, err := h.beadsClient.PeekAgent(rig.Path, agentID, lines)
+	// Build session name based on agent
+	sessionName := "gt-" + rigID + "-" + agentID
+
+	// Use tmux capture-pane
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "tmux", "capture-pane", "-t", sessionName, "-p", "-S", strconv.Itoa(-lines))
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
 	if err != nil {
-		slog.Error("Failed to peek agent", "rigId", rigID, "agentId", agentID, "error", err)
-		http.Error(w, "Failed to peek agent", http.StatusInternalServerError)
+		slog.Debug("Failed to peek agent", "session", sessionName, "error", err, "stderr", stderr.String())
+		// Return empty output instead of error
+		writeJSON(w, types.PeekOutput{
+			AgentID:   agentID,
+			Lines:     []string{},
+			Timestamp: time.Now(),
+		})
 		return
 	}
 
-	writeJSON(w, output)
+	output := strings.Split(strings.TrimRight(stdout.String(), "\n"), "\n")
+
+	writeJSON(w, types.PeekOutput{
+		AgentID:   agentID,
+		Lines:     output,
+		Timestamp: time.Now(),
+	})
 }
 
 // GetRecentActivity handles GET /api/rigs/{rigId}/activity
 func (h *Handlers) GetRecentActivity(w http.ResponseWriter, r *http.Request) {
 	rigID := r.PathValue("rigId")
-
-	rig, err := h.rigDiscovery.GetRig(rigID)
-	if err != nil || rig == nil {
-		http.Error(w, "Rig not found", http.StatusNotFound)
-		return
-	}
 
 	// Parse limit query param (default: 50)
 	limit := 50
@@ -394,14 +388,49 @@ func (h *Handlers) GetRecentActivity(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	events, err := h.beadsClient.GetRecentActivity(rig.Path, limit)
+	if h.eventStore == nil {
+		writeJSON(w, []types.ActivityEvent{})
+		return
+	}
+
+	// Query events from event store
+	eventList, err := h.eventStore.Query(events.EventFilter{
+		Rig:   rigID,
+		Limit: limit,
+	})
 	if err != nil {
 		slog.Error("Failed to get recent activity", "rigId", rigID, "error", err)
 		http.Error(w, "Failed to get recent activity", http.StatusInternalServerError)
 		return
 	}
 
-	writeJSON(w, events)
+	// Convert to ActivityEvent format
+	activity := make([]types.ActivityEvent, 0, len(eventList))
+	for _, e := range eventList {
+		// Extract fields from payload (json.RawMessage)
+		var payload map[string]interface{}
+		if len(e.Payload) > 0 {
+			json.Unmarshal(e.Payload, &payload)
+		}
+
+		issueID, _ := payload["issue_id"].(string)
+		title, _ := payload["title"].(string)
+		oldValue, _ := payload["old_value"].(string)
+		newValue, _ := payload["new_value"].(string)
+
+		activity = append(activity, types.ActivityEvent{
+			ID:        strconv.FormatInt(e.ID, 10),
+			IssueID:   issueID,
+			EventType: e.Type,
+			Title:     title,
+			OldValue:  oldValue,
+			NewValue:  newValue,
+			Actor:     e.Source,
+			Timestamp: e.Timestamp,
+		})
+	}
+
+	writeJSON(w, activity)
 }
 
 // GetAgentMail handles GET /api/rigs/{rigId}/agents/{agentId}/mail
@@ -409,21 +438,13 @@ func (h *Handlers) GetAgentMail(w http.ResponseWriter, r *http.Request) {
 	rigID := r.PathValue("rigId")
 	agentID := r.PathValue("agentId")
 
-	rig, err := h.rigDiscovery.GetRig(rigID)
-	if err != nil || rig == nil {
-		http.Error(w, "Rig not found", http.StatusNotFound)
-		return
-	}
-
 	// Build agent address from agentID
-	// agentID could be "witness", "refinery", "crew/jeremy", or just a polecat name
 	var agentAddress string
 	if agentID == "witness" || agentID == "refinery" {
 		agentAddress = rigID + "/" + agentID
 	} else if len(agentID) > 5 && agentID[:5] == "crew/" {
 		agentAddress = rigID + "/" + agentID
 	} else {
-		// Assume it's a polecat or crew member name - try crew first
 		agentAddress = rigID + "/crew/" + agentID
 	}
 
@@ -435,6 +456,12 @@ func (h *Handlers) GetAgentMail(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	rig, err := h.rigManager.GetRig(rigID)
+	if err != nil {
+		http.Error(w, "Rig not found", http.StatusNotFound)
+		return
+	}
+
 	opts := mail.ListMailOptions{
 		Limit:   limit,
 		Address: agentAddress,
@@ -442,12 +469,10 @@ func (h *Handlers) GetAgentMail(w http.ResponseWriter, r *http.Request) {
 
 	messages, err := h.mailClient.ListMail(rig.Path, opts)
 	if err != nil {
-		// Try without the crew/ prefix if that failed
+		// Try polecats prefix
 		opts.Address = rigID + "/polecats/" + agentID
 		messages, err = h.mailClient.ListMail(rig.Path, opts)
 		if err != nil {
-			slog.Debug("Failed to get agent mail", "agent", agentID, "error", err)
-			// Return empty array instead of error
 			writeJSON(w, []interface{}{})
 			return
 		}
@@ -472,9 +497,8 @@ func (h *Handlers) GetMailMessage(w http.ResponseWriter, r *http.Request) {
 
 // ListMail handles GET /api/mail
 func (h *Handlers) ListMail(w http.ResponseWriter, r *http.Request) {
-	// Parse query params
 	opts := mail.ListMailOptions{
-		Limit: 50, // Default limit
+		Limit: 50,
 	}
 
 	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
@@ -493,7 +517,6 @@ func (h *Handlers) ListMail(w http.ResponseWriter, r *http.Request) {
 		opts.UnreadOnly = true
 	}
 
-	// Use town-level mail (no specific rig)
 	messages, err := h.mailClient.ListMail("", opts)
 	if err != nil {
 		slog.Error("Failed to list mail", "error", err)
@@ -508,15 +531,14 @@ func (h *Handlers) ListMail(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) ListRigMail(w http.ResponseWriter, r *http.Request) {
 	rigID := r.PathValue("rigId")
 
-	rig, err := h.rigDiscovery.GetRig(rigID)
-	if err != nil || rig == nil {
+	rig, err := h.rigManager.GetRig(rigID)
+	if err != nil {
 		http.Error(w, "Rig not found", http.StatusNotFound)
 		return
 	}
 
-	// Parse query params
 	opts := mail.ListMailOptions{
-		Limit: 50, // Default limit
+		Limit: 50,
 	}
 
 	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
@@ -543,6 +565,30 @@ func (h *Handlers) ListRigMail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, messages)
+}
+
+// runBD executes a bd CLI command for write operations
+func (h *Handlers) runBD(rigID string, args ...string) error {
+	rig, err := h.rigManager.GetRig(rigID)
+	if err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "bd", args...)
+	cmd.Dir = rig.AbsPath
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		slog.Error("bd command failed", "args", args, "stderr", stderr.String(), "error", err)
+		return err
+	}
+
+	return nil
 }
 
 // writeJSON writes a JSON response.
