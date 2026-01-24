@@ -1,0 +1,94 @@
+id: ADR-010
+title: Event Store Interface Contract
+status: proposed
+date: 2026-01-24
+context: |
+  Townview needs a structured event log to capture all state changes.
+  Currently, changes are detected via file watching with no semantic meaning.
+  The Event Store provides a foundation for audit trails, replay, and debugging.
+
+decision: |
+  Create an Event Store service with the following interface:
+
+  ## Event Schema
+  ```typescript
+  interface Event {
+    id: string              // UUID
+    timestamp: string       // ISO 8601
+    type: string            // e.g., "bead.created", "agent.started"
+    source: string          // e.g., "townview/polecats/obsidian"
+    rig: string             // e.g., "townview"
+    payload: unknown        // Type-specific data
+    metadata?: {
+      correlation_id?: string  // Link related events
+      causation_id?: string    // What triggered this event
+    }
+  }
+  ```
+
+  ## Event Types
+  - `bead.created` - New bead/issue created
+  - `bead.updated` - Bead status/fields changed
+  - `bead.closed` - Bead completed
+  - `agent.started` - Agent session began
+  - `agent.heartbeat` - Agent still alive
+  - `agent.stopped` - Agent session ended
+  - `agent.work_started` - Agent began work on bead
+  - `agent.work_completed` - Agent finished bead
+  - `convoy.created` - New convoy dispatched
+  - `convoy.progress` - Convoy progress changed
+  - `convoy.completed` - All convoy work done
+
+  ## Service Interface
+  ```typescript
+  interface EventStore {
+    // Write
+    emit(type: string, payload: unknown, metadata?: EventMetadata): Promise<Event>
+
+    // Read
+    query(filter: EventFilter): Promise<Event[]>
+    subscribe(filter: EventFilter, callback: (event: Event) => void): Unsubscribe
+
+    // Replay
+    replayFrom(timestamp: string, filter?: EventFilter): AsyncIterable<Event>
+  }
+
+  interface EventFilter {
+    type?: string | string[]
+    source?: string
+    rig?: string
+    since?: string
+    until?: string
+    limit?: number
+  }
+  ```
+
+  ## Storage
+  - SQLite table: `events`
+  - Indexed on: timestamp, type, source, rig
+  - Retention: configurable (default 30 days)
+
+consequences:
+  - All state changes become traceable
+  - Enables audit view with full history
+  - Foundation for other services (registry, telemetry)
+  - Slight write overhead for event persistence
+
+verification:
+  test_files:
+    - file: server/internal/events/store_test.go
+      action: create
+  criteria:
+    - id: AC-1
+      criterion: "Events are persisted to SQLite"
+      test: "TestEventStore_Emit_PersistsToDatabase"
+    - id: AC-2
+      criterion: "Events can be queried by type and time range"
+      test: "TestEventStore_Query_FiltersByTypeAndTime"
+    - id: AC-3
+      criterion: "Subscribers receive real-time events"
+      test: "TestEventStore_Subscribe_ReceivesEvents"
+    - id: AC-4
+      criterion: "Events can be replayed from timestamp"
+      test: "TestEventStore_Replay_FromTimestamp"
+  run_command: "go test ./server/internal/events/..."

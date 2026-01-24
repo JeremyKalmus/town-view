@@ -89,16 +89,32 @@ func (h *Hub) Run() {
 // broadcastMessage sends a message to all connected clients.
 func (h *Hub) broadcastMessage(message []byte) {
 	h.mu.RLock()
-	defer h.mu.RUnlock()
-
+	clients := make([]*Client, 0, len(h.clients))
 	for client := range h.clients {
+		clients = append(clients, client)
+	}
+	h.mu.RUnlock()
+
+	var slowClients []*Client
+	for _, client := range clients {
 		select {
 		case client.send <- message:
 		default:
-			// Client buffer full, close connection
-			close(client.send)
-			delete(h.clients, client)
+			// Client buffer full, mark for removal
+			slowClients = append(slowClients, client)
 		}
+	}
+
+	// Remove slow clients (need write lock)
+	if len(slowClients) > 0 {
+		h.mu.Lock()
+		for _, client := range slowClients {
+			if _, ok := h.clients[client]; ok {
+				delete(h.clients, client)
+				close(client.send)
+			}
+		}
+		h.mu.Unlock()
 	}
 }
 
@@ -128,6 +144,22 @@ func (h *Hub) sendSnapshotToClient(client *Client) {
 		slog.Error("Failed to get snapshot for new client", "error", err)
 		return
 	}
+
+	// Check if client is still registered before sending
+	h.mu.RLock()
+	_, registered := h.clients[client]
+	h.mu.RUnlock()
+
+	if !registered {
+		return
+	}
+
+	// Use defer/recover to handle race where channel closes between check and send
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Debug("Client disconnected during snapshot send", "error", r)
+		}
+	}()
 
 	select {
 	case client.send <- snapshot:

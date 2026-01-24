@@ -1,0 +1,151 @@
+id: ADR-012
+title: Telemetry Collector Interface Contract
+status: proposed
+date: 2026-01-24
+context: |
+  Currently no visibility into token usage, git changes, or test results.
+  Need to capture this data for cost tracking, audit, and quality assessment.
+  Telemetry flows from agents to the collector, which persists and aggregates.
+
+decision: |
+  Create a Telemetry Collector service that captures operational metrics from agents.
+
+  ## Telemetry Types
+
+  ### Token Usage
+  ```typescript
+  interface TokenUsage {
+    agent_id: string
+    bead_id?: string
+    timestamp: string
+    input_tokens: number
+    output_tokens: number
+    model: string             // e.g., "claude-opus-4-5-20251101"
+    request_type: 'chat' | 'tool_use' | 'completion'
+  }
+  ```
+
+  ### Git Changes
+  ```typescript
+  interface GitChange {
+    agent_id: string
+    bead_id?: string
+    timestamp: string
+    commit_sha: string
+    branch: string
+    files_changed: number
+    insertions: number
+    deletions: number
+    message: string
+    diff_summary?: string     // First 1000 chars of diff
+  }
+  ```
+
+  ### Test Results
+  ```typescript
+  interface TestResult {
+    agent_id: string
+    bead_id?: string
+    timestamp: string
+    test_file: string
+    test_name: string
+    status: 'passed' | 'failed' | 'skipped' | 'error'
+    duration_ms: number
+    error_message?: string
+    stack_trace?: string
+  }
+
+  interface TestRun {
+    agent_id: string
+    bead_id?: string
+    timestamp: string
+    command: string
+    total: number
+    passed: number
+    failed: number
+    skipped: number
+    duration_ms: number
+    results: TestResult[]
+  }
+  ```
+
+  ## Service Interface
+  ```typescript
+  interface TelemetryCollector {
+    // Ingest
+    recordTokenUsage(usage: TokenUsage): Promise<void>
+    recordGitChange(change: GitChange): Promise<void>
+    recordTestRun(run: TestRun): Promise<void>
+
+    // Query - Token Usage
+    getTokenUsage(filter: TelemetryFilter): Promise<TokenUsage[]>
+    getTokenSummary(filter: TelemetryFilter): Promise<TokenSummary>
+
+    // Query - Git Changes
+    getGitChanges(filter: TelemetryFilter): Promise<GitChange[]>
+    getGitSummary(filter: TelemetryFilter): Promise<GitSummary>
+
+    // Query - Test Results
+    getTestRuns(filter: TelemetryFilter): Promise<TestRun[]>
+    getTestSummary(filter: TelemetryFilter): Promise<TestSummary>
+
+    // Aggregates
+    getBeadTelemetry(beadId: string): Promise<BeadTelemetry>
+    getAgentTelemetry(agentId: string): Promise<AgentTelemetry>
+  }
+
+  interface TelemetryFilter {
+    agent_id?: string
+    bead_id?: string
+    rig?: string
+    since?: string
+    until?: string
+    limit?: number
+  }
+
+  interface TokenSummary {
+    total_input: number
+    total_output: number
+    total_cost_usd?: number
+    by_model: Record<string, { input: number; output: number }>
+    by_agent: Record<string, { input: number; output: number }>
+  }
+  ```
+
+  ## Storage
+  - SQLite tables: `token_usage`, `git_changes`, `test_runs`, `test_results`
+  - Indexed on: timestamp, agent_id, bead_id
+  - Aggregation tables for summaries (materialized views)
+
+  ## Integration
+  - Agents report via HTTP POST or heartbeat payload
+  - Event Store receives `telemetry.tokens`, `telemetry.git`, `telemetry.tests` events
+  - UI subscribes for real-time updates
+
+consequences:
+  - Full visibility into operational costs (tokens)
+  - Audit trail of code changes per bead
+  - Test quality tracking per agent/bead
+  - Requires agent-side instrumentation
+
+verification:
+  test_files:
+    - file: server/internal/telemetry/collector_test.go
+      action: create
+  criteria:
+    - id: AC-1
+      criterion: "Token usage is recorded and queryable"
+      test: "TestTelemetry_RecordTokenUsage_Queryable"
+    - id: AC-2
+      criterion: "Git changes are recorded with diff summary"
+      test: "TestTelemetry_RecordGitChange_WithDiff"
+    - id: AC-3
+      criterion: "Test runs aggregate individual results"
+      test: "TestTelemetry_RecordTestRun_AggregatesResults"
+    - id: AC-4
+      criterion: "Summaries aggregate across time range"
+      test: "TestTelemetry_GetSummary_AggregatesTimeRange"
+    - id: AC-5
+      criterion: "Bead telemetry shows all related data"
+      test: "TestTelemetry_GetBeadTelemetry_CombinesAllTypes"
+  run_command: "go test ./server/internal/telemetry/..."

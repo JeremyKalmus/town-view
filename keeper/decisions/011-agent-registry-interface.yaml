@@ -1,0 +1,116 @@
+id: ADR-011
+title: Agent Registry Interface Contract
+status: proposed
+date: 2026-01-24
+context: |
+  Agent state is currently assembled from 3 sources: filesystem, tmux sessions, and beads.
+  These can disagree, leading to stale or incorrect UI state.
+  The Agent Registry provides a single source of truth for "who is running and what are they doing."
+
+decision: |
+  Create an Agent Registry service with heartbeat-based state management.
+
+  ## Agent State Schema
+  ```typescript
+  interface AgentState {
+    id: string                    // e.g., "townview/polecats/obsidian"
+    rig: string                   // e.g., "townview"
+    role: 'witness' | 'refinery' | 'crew' | 'polecat' | 'deacon' | 'mayor'
+    name: string                  // e.g., "obsidian"
+    status: 'starting' | 'running' | 'idle' | 'working' | 'stuck' | 'stopping' | 'stopped'
+
+    // Work tracking
+    current_bead?: string         // Bead ID being worked on
+    current_bead_started?: string // When work started (ISO 8601)
+
+    // Health
+    last_heartbeat: string        // ISO 8601
+    heartbeat_interval_ms: number // Expected interval
+    missed_heartbeats: number     // Count of missed beats
+
+    // Session info
+    session_id?: string           // tmux session name
+    started_at: string            // When agent started
+
+    // Telemetry pointers
+    tokens_used?: number          // Cumulative token count
+    last_commit?: string          // Last git commit SHA
+  }
+  ```
+
+  ## Heartbeat Protocol
+  Agents send heartbeats every 30 seconds (configurable):
+  ```typescript
+  interface Heartbeat {
+    agent_id: string
+    timestamp: string
+    status: AgentState['status']
+    current_bead?: string
+    tokens_since_last?: number
+  }
+  ```
+
+  ## Service Interface
+  ```typescript
+  interface AgentRegistry {
+    // Registration
+    register(agent: AgentRegistration): Promise<AgentState>
+    deregister(agentId: string): Promise<void>
+
+    // Heartbeat
+    heartbeat(beat: Heartbeat): Promise<AgentState>
+
+    // Query
+    getAgent(agentId: string): AgentState | null
+    listAgents(filter?: AgentFilter): AgentState[]
+    getAgentsByRig(rigId: string): AgentState[]
+
+    // Subscribe
+    onAgentChange(callback: (agent: AgentState, event: 'registered' | 'updated' | 'deregistered') => void): Unsubscribe
+  }
+
+  interface AgentFilter {
+    rig?: string
+    role?: AgentState['role']
+    status?: AgentState['status']
+  }
+  ```
+
+  ## Stuck Detection
+  - Agent is "stuck" if: status=working AND current_bead unchanged for >15 minutes
+  - Agent is "dead" if: missed_heartbeats > 3
+  - Dead agents auto-deregister after 5 minutes of no heartbeat
+
+  ## Integration with Event Store
+  - `agent.registered` event on register
+  - `agent.heartbeat` event on heartbeat (sampled, not every beat)
+  - `agent.status_changed` event on status transitions
+  - `agent.deregistered` event on deregister
+
+consequences:
+  - Single source of truth for agent state
+  - Real-time UI updates via subscription
+  - Stuck/dead detection is authoritative
+  - Requires agents to implement heartbeat protocol
+
+verification:
+  test_files:
+    - file: server/internal/registry/registry_test.go
+      action: create
+  criteria:
+    - id: AC-1
+      criterion: "Agents can register and appear in list"
+      test: "TestAgentRegistry_Register_AppearsInList"
+    - id: AC-2
+      criterion: "Heartbeats update agent state"
+      test: "TestAgentRegistry_Heartbeat_UpdatesState"
+    - id: AC-3
+      criterion: "Missing heartbeats increment counter"
+      test: "TestAgentRegistry_MissedHeartbeat_IncrementsCounter"
+    - id: AC-4
+      criterion: "Dead agents auto-deregister"
+      test: "TestAgentRegistry_DeadAgent_AutoDeregisters"
+    - id: AC-5
+      criterion: "Status changes emit events"
+      test: "TestAgentRegistry_StatusChange_EmitsEvent"
+  run_command: "go test ./server/internal/registry/..."

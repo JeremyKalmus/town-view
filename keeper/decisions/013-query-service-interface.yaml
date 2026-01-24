@@ -1,0 +1,134 @@
+id: ADR-013
+title: Query Service Interface Contract
+status: proposed
+date: 2026-01-24
+context: |
+  Current data access shells out to CLI commands (bd, gt) for every request.
+  This is slow, creates process overhead, and CLI wasn't designed for UI queries.
+  The Query Service provides direct SQLite access with in-memory caching.
+
+decision: |
+  Create a Query Service that provides fast, direct access to beads data.
+
+  ## Data Sources
+  - Beads SQLite database (direct read access)
+  - Event Store (for derived/computed data)
+  - Agent Registry (for live agent state)
+  - Telemetry Collector (for metrics)
+
+  ## Query Interface
+  ```typescript
+  interface QueryService {
+    // Rigs
+    listRigs(): Promise<Rig[]>
+    getRig(rigId: string): Promise<Rig | null>
+
+    // Issues/Beads
+    listIssues(filter: IssueFilter): Promise<Issue[]>
+    getIssue(issueId: string): Promise<Issue | null>
+    getIssueWithRelations(issueId: string): Promise<IssueWithRelations>
+
+    // Dependencies
+    getDependencies(issueId: string): Promise<Dependencies>
+    getDependencyGraph(rootId: string): Promise<DependencyGraph>
+
+    // Convoys
+    listConvoys(filter: ConvoyFilter): Promise<Convoy[]>
+    getConvoy(convoyId: string): Promise<ConvoyWithProgress>
+    getConvoyProgress(convoyId: string): Promise<ConvoyProgress>
+
+    // Agents (delegates to Agent Registry)
+    listAgents(rigId?: string): Promise<AgentState[]>
+    getAgent(agentId: string): Promise<AgentState | null>
+
+    // Activity (from Event Store)
+    getRecentActivity(filter: ActivityFilter): Promise<ActivityEvent[]>
+
+    // Aggregates
+    getRigSummary(rigId: string): Promise<RigSummary>
+    getSystemHealth(): Promise<SystemHealth>
+  }
+
+  interface IssueFilter {
+    rig?: string
+    status?: string | string[]
+    type?: string | string[]
+    assignee?: string
+    parent?: string
+    convoy?: string
+    limit?: number
+    offset?: number
+  }
+  ```
+
+  ## Caching Strategy
+  ```typescript
+  interface CacheConfig {
+    // Hot data (in-memory)
+    rigs: { ttl: 60_000 }           // 1 minute
+    agents: { ttl: 5_000 }           // 5 seconds (live data)
+    convoyProgress: { ttl: 10_000 }  // 10 seconds
+
+    // Warm data (short TTL)
+    issues: { ttl: 30_000 }          // 30 seconds
+    dependencies: { ttl: 60_000 }    // 1 minute
+
+    // Cold data (longer TTL)
+    activity: { ttl: 300_000 }       // 5 minutes
+  }
+  ```
+
+  ## Cache Invalidation
+  - Subscribe to Event Store for relevant events
+  - `bead.*` events invalidate issue cache
+  - `agent.*` events invalidate agent cache
+  - `convoy.*` events invalidate convoy cache
+
+  ## Direct SQLite Access
+  ```go
+  // Instead of:
+  output, _ := exec.Command("bd", "list", "--json").Output()
+
+  // Direct access:
+  rows, _ := db.Query(`
+    SELECT id, title, status, ...
+    FROM issues
+    WHERE status IN (?, ?)
+    ORDER BY updated_at DESC
+    LIMIT ?
+  `, "open", "in_progress", 100)
+  ```
+
+  ## Computed Fields (not stored in beads)
+  - `convoy.progress` - computed from descendant statuses
+  - `rig.agent_health` - from Agent Registry
+  - `issue.time_in_status` - computed from event history
+
+consequences:
+  - 10-100x faster queries (no process spawn)
+  - Consistent data model (not CLI output parsing)
+  - Cache reduces database load
+  - Requires schema knowledge of beads DB
+  - Must handle beads schema changes
+
+verification:
+  test_files:
+    - file: server/internal/query/service_test.go
+      action: create
+  criteria:
+    - id: AC-1
+      criterion: "Issues queried directly from SQLite"
+      test: "TestQueryService_ListIssues_DirectSQLite"
+    - id: AC-2
+      criterion: "Cache returns data without DB hit"
+      test: "TestQueryService_ListIssues_CacheHit"
+    - id: AC-3
+      criterion: "Cache invalidates on relevant events"
+      test: "TestQueryService_CacheInvalidation_OnEvent"
+    - id: AC-4
+      criterion: "Convoy progress computed correctly"
+      test: "TestQueryService_ConvoyProgress_Computed"
+    - id: AC-5
+      criterion: "Dependency graph traverses correctly"
+      test: "TestQueryService_DependencyGraph_Traversal"
+  run_command: "go test ./server/internal/query/..."
