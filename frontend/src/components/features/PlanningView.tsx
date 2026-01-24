@@ -13,6 +13,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import type { Issue, Comment, HistoryEntry, Dependency } from '@/types'
 import { useRigStore } from '@/stores/rig-store'
 import { useToastStore } from '@/stores/toast-store'
+import { useDataStore, selectIssuesByRig, selectConnected } from '@/stores/data-store'
 import { TreeView, VirtualizedTreeView, countTreeNodes, type TreeNodeData } from './TreeNode'
 import { FilterBar, getVisibleNodeIds } from './FilterBar'
 import { KPISummary, type KPIFilter } from './KPISummary'
@@ -41,10 +42,21 @@ export function PlanningView({ refreshKey = 0, updatedIssueIds }: PlanningViewPr
   const { selectedRig, treeFilters, setTreeFilters } = useRigStore()
   const { showToast } = useToastStore()
 
-  // Issues state
-  const [issues, setIssues] = useState<Issue[]>([])
-  const [loading, setLoading] = useState(true)
+  // Data store (WebSocket-fed)
+  const wsIssues = useDataStore(selectIssuesByRig(selectedRig?.id || ''))
+  const wsConnected = useDataStore(selectConnected)
+
+  // HTTP fallback state
+  const [httpIssues, setHttpIssues] = useState<Issue[]>([])
+  const [httpLoading, setHttpLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Track if we've done initial load (to avoid showing skeleton on background refreshes)
+  const hasLoadedRef = useRef(false)
+
+  // Use WebSocket data when connected and available, otherwise HTTP fallback
+  const issues = wsConnected && wsIssues.length > 0 ? wsIssues : httpIssues
+  const loading = !wsConnected && httpLoading && !hasLoadedRef.current
 
   // Panel state
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null)
@@ -72,24 +84,28 @@ export function PlanningView({ refreshKey = 0, updatedIssueIds }: PlanningViewPr
   // Retry counter for manual retry
   const [retryCount, setRetryCount] = useState(0)
 
-  // Track if we've done initial load (to avoid showing skeleton on background refreshes)
-  const hasLoadedRef = useRef(false)
-
   // Reset hasLoaded when rig changes so we show skeleton on rig switch
   useEffect(() => {
     hasLoadedRef.current = false
   }, [selectedRig?.id])
 
-  // Fetch issues
+  // Fetch issues via HTTP as fallback
   useEffect(() => {
     if (!selectedRig) return
+
+    // Skip HTTP fetch if WebSocket is connected and has data
+    if (wsConnected && wsIssues.length > 0) {
+      hasLoadedRef.current = true
+      setHttpLoading(false)
+      return
+    }
 
     const fetchIssues = async () => {
       // Only show loading skeleton on initial load, not on SSE refreshes
       // This prevents TreeView from unmounting and losing expansion state
       const isInitialLoad = !hasLoadedRef.current
       if (isInitialLoad) {
-        setLoading(true)
+        setHttpLoading(true)
       }
       setError(null)
 
@@ -100,17 +116,17 @@ export function PlanningView({ refreshKey = 0, updatedIssueIds }: PlanningViewPr
       })
 
       if (result.data) {
-        setIssues(result.data)
+        setHttpIssues(result.data)
         hasLoadedRef.current = true
-        setLoading(false)
+        setHttpLoading(false)
       } else if (result.error) {
         setError(result.error)
-        setLoading(false)
+        setHttpLoading(false)
       }
     }
 
     fetchIssues()
-  }, [selectedRig, refreshKey, retryCount])
+  }, [selectedRig, refreshKey, retryCount, wsConnected, wsIssues.length])
 
   // Handle retry
   const handleRetry = useCallback(() => {
@@ -275,8 +291,8 @@ export function PlanningView({ refreshKey = 0, updatedIssueIds }: PlanningViewPr
 
     if (result.success) {
       showToast('Issue Updated', `${selectedIssue.id} has been updated successfully.`, 'success')
-      // Update local state
-      setIssues((prev) =>
+      // Update local HTTP state (WebSocket will refresh from server)
+      setHttpIssues((prev) =>
         prev.map((i) => (i.id === selectedIssue.id && result.issue ? result.issue : i))
       )
       if (result.issue) {

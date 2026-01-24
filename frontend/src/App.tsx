@@ -12,7 +12,9 @@ import { useRigStore } from '@/stores/rig-store'
 import { useToastStore } from '@/stores/toast-store'
 import { useConnectivityStore } from '@/stores/connectivity-store'
 import { useUIStore } from '@/stores/ui-store'
+import { useDataStore, selectRigs, selectConnected } from '@/stores/data-store'
 import { useOffline } from '@/hooks/useOffline'
+import { useWebSocket } from '@/hooks/useWebSocket'
 import { cachedFetch } from '@/services/cache'
 import type { Rig } from '@/types'
 
@@ -21,11 +23,23 @@ function App() {
   const { toast, hideToast } = useToastStore()
   const { status: connectivityStatus } = useConnectivityStore()
   const { viewMode } = useUIStore()
-  const [rigs, setRigs] = useState<Rig[]>([])
+
+  // WebSocket connection for real-time updates
+  useWebSocket({ debug: process.env.NODE_ENV === 'development' })
+
+  // Data from WebSocket store
+  const wsRigs = useDataStore(selectRigs)
+  const wsConnected = useDataStore(selectConnected)
+
+  // HTTP fallback state (used when WebSocket not connected)
+  const [httpRigs, setHttpRigs] = useState<Rig[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
-  const [updatedIssueIds, setUpdatedIssueIds] = useState<Set<string>>(new Set())
+  const [updatedIssueIds] = useState<Set<string>>(new Set())
+
+  // Use WebSocket rigs when connected and available, otherwise HTTP fallback
+  const rigs = wsConnected && wsRigs.length > 0 ? wsRigs : httpRigs
 
   // Offline detection and connectivity management
   const { tryReconnect } = useOffline({
@@ -39,7 +53,7 @@ function App() {
   })
 
   useEffect(() => {
-    // Fetch rigs on mount or when refresh triggered
+    // Fetch rigs via HTTP as fallback (WebSocket provides real-time updates)
     const fetchRigs = async () => {
       const result = await cachedFetch<Rig[]>('/api/rigs', {
         cacheTTL: 5 * 60 * 1000, // 5 minutes
@@ -51,13 +65,7 @@ function App() {
         const uniqueRigs = result.data.filter(
           (rig, index, self) => index === self.findIndex((r) => r.id === rig.id)
         )
-        setRigs(uniqueRigs)
-        // Select first rig by default (only if none selected)
-        // Use getState() to read current value without adding to dependencies
-        const currentSelectedRig = useRigStore.getState().selectedRig
-        if (uniqueRigs.length > 0 && !currentSelectedRig) {
-          setSelectedRig(uniqueRigs[0])
-        }
+        setHttpRigs(uniqueRigs)
         setLoading(false)
         // Clear error if we have data (even cached)
         if (result.fromCache && result.error) {
@@ -73,7 +81,15 @@ function App() {
     }
 
     fetchRigs()
-  }, [setSelectedRig, refreshKey]) // Removed selectedRig - use getState() instead
+  }, [refreshKey])
+
+  // Select first rig by default when rigs become available
+  useEffect(() => {
+    const currentSelectedRig = useRigStore.getState().selectedRig
+    if (rigs.length > 0 && !currentSelectedRig) {
+      setSelectedRig(rigs[0])
+    }
+  }, [rigs, setSelectedRig])
 
   return (
     <ToastProvider duration={4000}>
@@ -83,8 +99,8 @@ function App() {
           rigs={rigs}
           selectedRig={selectedRig}
           onSelectRig={setSelectedRig}
-          loading={loading}
-          connected={true}
+          loading={loading && !wsConnected}
+          connected={wsConnected}
           httpConnected={connectivityStatus === 'online'}
         />
 

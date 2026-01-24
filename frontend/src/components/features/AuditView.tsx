@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRigStore } from '@/stores/rig-store'
+import { useDataStore, selectIssuesByRig, selectConnected } from '@/stores/data-store'
 import { cachedFetch } from '@/services/cache'
 import { ConvoySelector, type ConvoySortBy } from './ConvoySelector'
 import { ConvoyTreeView } from './ConvoyTreeView'
@@ -23,12 +24,27 @@ interface AuditViewProps {
 export function AuditView({ updatedIssueIds = new Set() }: AuditViewProps) {
   const { selectedRig } = useRigStore()
 
-  // Convoy selection state
-  const [convoys, setConvoys] = useState<Issue[]>([])
+  // Data store (WebSocket-fed)
+  const wsIssues = useDataStore(selectIssuesByRig(selectedRig?.id || ''))
+  const wsConnected = useDataStore(selectConnected)
+
+  // HTTP fallback state
+  const [httpIssues, setHttpIssues] = useState<Issue[]>([])
+  const [httpLoading, setHttpLoading] = useState(true)
+  const [httpError, setHttpError] = useState<string | null>(null)
+
+  // Use WebSocket data when connected and available, otherwise HTTP fallback
+  const allIssues = wsConnected && wsIssues.length > 0 ? wsIssues : httpIssues
+  const convoysLoading = !wsConnected && httpLoading
+  const convoysError = !wsConnected ? httpError : null
+
+  // Convoy selection state (derived from allIssues)
+  const convoys = useMemo(() =>
+    allIssues.filter((issue) => issue.issue_type === 'convoy'),
+    [allIssues]
+  )
   const [selectedConvoy, setSelectedConvoy] = useState<Issue | null>(null)
   const [convoySortBy, setConvoySortBy] = useState<ConvoySortBy>('date')
-  const [convoysLoading, setConvoysLoading] = useState(true)
-  const [convoysError, setConvoysError] = useState<string | null>(null)
 
   // Date range filter
   const [dateRange, setDateRange] = useState<DateRange>({
@@ -39,29 +55,62 @@ export function AuditView({ updatedIssueIds = new Set() }: AuditViewProps) {
   // Agent filter
   const [selectedAgentFilter, setSelectedAgentFilter] = useState<string | null>(null)
 
-  // Completed work items
-  const [completedWork, setCompletedWork] = useState<Issue[]>([])
-  const [completedWorkLoading, setCompletedWorkLoading] = useState(false)
-  const [completedWorkError, setCompletedWorkError] = useState<string | null>(null)
+  // Completed work (derived from allIssues with filters)
+  const completedWork = useMemo(() => {
+    // Filter to closed issues
+    let filtered = allIssues.filter((issue) => issue.status === 'closed')
 
-  // All issues (for building convoy hierarchy)
-  const [allIssues, setAllIssues] = useState<Issue[]>([])
+    // Filter by date range if set
+    if (dateRange.startDate) {
+      const start = new Date(dateRange.startDate)
+      filtered = filtered.filter((issue) => {
+        const closedAt = issue.closed_at ? new Date(issue.closed_at) : null
+        return closedAt && closedAt >= start
+      })
+    }
+    if (dateRange.endDate) {
+      const end = new Date(dateRange.endDate)
+      end.setHours(23, 59, 59, 999)
+      filtered = filtered.filter((issue) => {
+        const closedAt = issue.closed_at ? new Date(issue.closed_at) : null
+        return closedAt && closedAt <= end
+      })
+    }
+
+    // Filter by convoy - show only descendants of the selected convoy
+    if (selectedConvoy) {
+      const convoyDescendants = getDescendants(allIssues, selectedConvoy.id)
+      const descendantIds = new Set(convoyDescendants.map((i) => i.id))
+      filtered = filtered.filter((issue) => descendantIds.has(issue.id))
+    }
+
+    return filtered
+  }, [allIssues, dateRange, selectedConvoy])
+
+  const completedWorkLoading = convoysLoading
+  const completedWorkError = convoysError
 
   // Retry counter for manual retry
   const [retryCount, setRetryCount] = useState(0)
 
-  // Fetch convoys when rig changes
+  // Fetch issues via HTTP as fallback
   useEffect(() => {
     if (!selectedRig) {
-      setConvoys([])
-      setConvoysLoading(false)
+      setHttpIssues([])
+      setHttpLoading(false)
       return
     }
 
-    setConvoysLoading(true)
-    setConvoysError(null)
+    // Skip HTTP fetch if WebSocket is connected and has data
+    if (wsConnected && wsIssues.length > 0) {
+      setHttpLoading(false)
+      return
+    }
 
-    const fetchConvoys = async () => {
+    setHttpLoading(true)
+    setHttpError(null)
+
+    const fetchIssues = async () => {
       const url = `/api/rigs/${selectedRig.id}/issues?all=true`
       const result = await cachedFetch<Issue[]>(url, {
         cacheTTL: 2 * 60 * 1000,
@@ -69,80 +118,16 @@ export function AuditView({ updatedIssueIds = new Set() }: AuditViewProps) {
       })
 
       if (result.data) {
-        // Filter to only convoy-type issues
-        const convoyIssues = result.data.filter(
-          (issue) => issue.issue_type === 'convoy'
-        )
-        setConvoys(convoyIssues)
+        setHttpIssues(result.data)
       } else {
-        setConvoysError(result.error || 'Failed to load convoys')
-        setConvoys([])
+        setHttpError(result.error || 'Failed to load issues')
+        setHttpIssues([])
       }
-      setConvoysLoading(false)
+      setHttpLoading(false)
     }
 
-    fetchConvoys()
-  }, [selectedRig?.id, retryCount])
-
-  // Fetch completed work when convoy or date range changes
-  useEffect(() => {
-    if (!selectedRig) {
-      setCompletedWork([])
-      return
-    }
-
-    setCompletedWorkLoading(true)
-    setCompletedWorkError(null)
-
-    const fetchCompletedWork = async () => {
-      const url = `/api/rigs/${selectedRig.id}/issues?all=true`
-      const result = await cachedFetch<Issue[]>(url, {
-        cacheTTL: 2 * 60 * 1000,
-        returnStaleOnError: true,
-      })
-
-      if (result.data) {
-        // Store all issues for convoy hierarchy
-        setAllIssues(result.data)
-
-        // Filter to closed issues
-        let filtered = result.data.filter((issue) => issue.status === 'closed')
-
-        // Filter by date range if set
-        if (dateRange.startDate) {
-          const start = new Date(dateRange.startDate)
-          filtered = filtered.filter((issue) => {
-            const closedAt = issue.closed_at ? new Date(issue.closed_at) : null
-            return closedAt && closedAt >= start
-          })
-        }
-        if (dateRange.endDate) {
-          const end = new Date(dateRange.endDate)
-          end.setHours(23, 59, 59, 999)
-          filtered = filtered.filter((issue) => {
-            const closedAt = issue.closed_at ? new Date(issue.closed_at) : null
-            return closedAt && closedAt <= end
-          })
-        }
-
-        // Filter by convoy - show only descendants of the selected convoy
-        if (selectedConvoy) {
-          const allIssues = result.data
-          const convoyDescendants = getDescendants(allIssues, selectedConvoy.id)
-          const descendantIds = new Set(convoyDescendants.map((i) => i.id))
-          filtered = filtered.filter((issue) => descendantIds.has(issue.id))
-        }
-
-        setCompletedWork(filtered)
-      } else {
-        setCompletedWorkError(result.error || 'Failed to load completed work')
-        setCompletedWork([])
-      }
-      setCompletedWorkLoading(false)
-    }
-
-    fetchCompletedWork()
-  }, [selectedRig?.id, selectedConvoy?.id, dateRange, retryCount])
+    fetchIssues()
+  }, [selectedRig?.id, retryCount, wsConnected, wsIssues.length])
 
   // Handle retry
   const handleRetry = useCallback(() => {

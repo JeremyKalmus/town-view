@@ -1,5 +1,6 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import type { Agent, Rig, ActivityEvent } from '@/types'
+import { useDataStore, selectConnected, selectMail, selectActivity } from '@/stores/data-store'
 import { cachedFetch } from '@/services/cache'
 import { RigHealthGrid } from './RigHealthGrid'
 import { InfrastructureHealth } from './monitoring/InfrastructureHealth'
@@ -23,19 +24,23 @@ interface MailMessage {
 
 /**
  * Convert mail messages to activity events for display in ActivityFeed.
+ * Accepts both MailMessage (HTTP) and Mail (WebSocket) types.
  */
-function mailToActivityEvents(messages: MailMessage[]): ActivityEvent[] {
-  return messages.map((msg) => ({
-    id: msg.id,
-    issue_id: '', // Mail doesn't have issue_id
-    issue_type: 'event' as const,
-    title: msg.subject,
-    event_type: 'mail',
-    old_value: null,
-    new_value: msg.body.slice(0, 100) + (msg.body.length > 100 ? '...' : ''),
-    actor: msg.from,
-    timestamp: msg.timestamp,
-  }))
+function mailToActivityEvents(messages: Array<MailMessage | { id: string; from: string; subject: string; body?: string; timestamp: string }>): ActivityEvent[] {
+  return messages.map((msg) => {
+    const body = msg.body || ''
+    return {
+      id: msg.id,
+      issue_id: '', // Mail doesn't have issue_id
+      issue_type: 'event' as const,
+      title: msg.subject,
+      event_type: 'mail',
+      old_value: null,
+      new_value: body.slice(0, 100) + (body.length > 100 ? '...' : ''),
+      actor: msg.from,
+      timestamp: msg.timestamp,
+    }
+  })
 }
 
 /**
@@ -46,20 +51,58 @@ function mailToActivityEvents(messages: MailMessage[]): ActivityEvent[] {
  * - Activity stream (mail/events)
  */
 export function TownDashboard({ refreshKey = 0 }: TownDashboardProps) {
-  const [infrastructureAgents, setInfrastructureAgents] = useState<Agent[]>([])
-  const [infrastructureLoading, setInfrastructureLoading] = useState(true)
-  const [infrastructureError, setInfrastructureError] = useState<string | null>(null)
+  // Data store (WebSocket-fed)
+  const wsAgents = useDataStore((state) => state.agents)
+  const wsMail = useDataStore(selectMail)
+  const wsActivity = useDataStore(selectActivity)
+  const wsConnected = useDataStore(selectConnected)
 
-  const [mailMessages, setMailMessages] = useState<MailMessage[]>([])
-  const [mailLoading, setMailLoading] = useState(true)
-  const [mailError, setMailError] = useState<string | null>(null)
+  // HTTP fallback state
+  const [httpInfrastructureAgents, setHttpInfrastructureAgents] = useState<Agent[]>([])
+  const [httpLoading, setHttpLoading] = useState(true)
+  const [httpError, setHttpError] = useState<string | null>(null)
+
+  const [httpMailMessages, setHttpMailMessages] = useState<MailMessage[]>([])
+  const [httpMailLoading, setHttpMailLoading] = useState(true)
+  const [httpMailError, setHttpMailError] = useState<string | null>(null)
 
   const [retryCount, setRetryCount] = useState(0)
 
-  // Fetch infrastructure agents from all rigs
+  // Derive infrastructure agents from WebSocket data
+  const wsInfrastructureAgents = useMemo(() => {
+    const allAgents: Agent[] = []
+    for (const rigId of Object.keys(wsAgents)) {
+      allAgents.push(...wsAgents[rigId])
+    }
+    return allAgents.filter(
+      (agent) =>
+        agent.role_type === 'mayor' ||
+        agent.role_type === 'deacon' ||
+        agent.role_type === 'refinery'
+    )
+  }, [wsAgents])
+
+  // Use WebSocket data when connected, otherwise HTTP fallback
+  const hasWsAgents = wsConnected && wsInfrastructureAgents.length > 0
+  const infrastructureAgents = hasWsAgents ? wsInfrastructureAgents : httpInfrastructureAgents
+  const infrastructureLoading = !wsConnected && httpLoading
+  const infrastructureError = !wsConnected ? httpError : null
+
+  const hasWsMail = wsConnected && wsMail.length > 0
+  const mailMessages = hasWsMail ? wsMail : httpMailMessages
+  const mailLoading = !wsConnected && httpMailLoading
+  const mailError = !wsConnected ? httpMailError : null
+
+  // Fetch infrastructure agents from all rigs via HTTP as fallback
   useEffect(() => {
-    setInfrastructureLoading(true)
-    setInfrastructureError(null)
+    // Skip HTTP fetch if WebSocket is connected and has data
+    if (wsConnected && wsInfrastructureAgents.length > 0) {
+      setHttpLoading(false)
+      return
+    }
+
+    setHttpLoading(true)
+    setHttpError(null)
 
     const fetchInfrastructureAgents = async () => {
       try {
@@ -70,8 +113,8 @@ export function TownDashboard({ refreshKey = 0 }: TownDashboardProps) {
         })
 
         if (!rigsResult.data) {
-          setInfrastructureError(rigsResult.error || 'Failed to load rigs')
-          setInfrastructureLoading(false)
+          setHttpError(rigsResult.error || 'Failed to load rigs')
+          setHttpLoading(false)
           return
         }
 
@@ -95,22 +138,28 @@ export function TownDashboard({ refreshKey = 0 }: TownDashboardProps) {
             agent.role_type === 'refinery'
         )
 
-        setInfrastructureAgents(infraAgents)
-        setInfrastructureLoading(false)
+        setHttpInfrastructureAgents(infraAgents)
+        setHttpLoading(false)
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to load infrastructure agents'
-        setInfrastructureError(message)
-        setInfrastructureLoading(false)
+        setHttpError(message)
+        setHttpLoading(false)
       }
     }
 
     fetchInfrastructureAgents()
-  }, [refreshKey, retryCount])
+  }, [refreshKey, retryCount, wsConnected, wsInfrastructureAgents.length])
 
-  // Fetch town-level mail
+  // Fetch town-level mail via HTTP as fallback
   useEffect(() => {
-    setMailLoading(true)
-    setMailError(null)
+    // Skip HTTP fetch if WebSocket is connected and has data
+    if (wsConnected && wsMail.length > 0) {
+      setHttpMailLoading(false)
+      return
+    }
+
+    setHttpMailLoading(true)
+    setHttpMailError(null)
 
     const fetchMail = async () => {
       try {
@@ -119,25 +168,30 @@ export function TownDashboard({ refreshKey = 0 }: TownDashboardProps) {
           throw new Error(`Failed to fetch mail: ${response.statusText}`)
         }
         const messages: MailMessage[] = await response.json()
-        setMailMessages(messages)
-        setMailLoading(false)
+        setHttpMailMessages(messages)
+        setHttpMailLoading(false)
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to load mail'
-        setMailError(message)
-        setMailLoading(false)
+        setHttpMailError(message)
+        setHttpMailLoading(false)
       }
     }
 
     fetchMail()
-  }, [refreshKey, retryCount])
+  }, [refreshKey, retryCount, wsConnected, wsMail.length])
 
   // Handle retry
   const handleRetry = useCallback(() => {
     setRetryCount((c) => c + 1)
   }, [])
 
-  // Convert mail to activity events
-  const activityEvents = mailToActivityEvents(mailMessages)
+  // Use WebSocket activity when available, otherwise convert mail to activity events
+  const activityEvents = useMemo(() => {
+    if (wsConnected && wsActivity.length > 0) {
+      return wsActivity
+    }
+    return mailToActivityEvents(mailMessages)
+  }, [wsConnected, wsActivity, mailMessages])
 
   return (
     <div className="flex flex-col lg:flex-row gap-6 p-6 h-full">

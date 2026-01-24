@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import type { Rig, Agent, Issue } from '@/types'
+import { useDataStore, selectAgentsByRig, selectIssuesByRig, selectConnected, selectLastUpdated } from '@/stores/data-store'
 import { cachedFetch } from '@/services/cache'
 import { cn } from '@/lib/class-utils'
 import { formatRelativeTime } from '@/lib/status-utils'
@@ -46,10 +47,30 @@ function isAgentStuck(agent: Agent): boolean {
  * Organized by role type: witness → refinery → crew → polecats
  */
 export function MonitoringView({ rig, refreshKey = 0 }: MonitoringViewProps) {
-  const [agents, setAgents] = useState<Agent[]>([])
-  const [issues, setIssues] = useState<Issue[]>([])
-  const [loading, setLoading] = useState(true)
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  // Data store (WebSocket-fed)
+  const wsAgents = useDataStore(selectAgentsByRig(rig.id))
+  const wsIssues = useDataStore(selectIssuesByRig(rig.id))
+  const wsConnected = useDataStore(selectConnected)
+  const wsLastUpdated = useDataStore(selectLastUpdated)
+
+  // HTTP fallback state
+  const [httpAgents, setHttpAgents] = useState<Agent[]>([])
+  const [httpIssues, setHttpIssues] = useState<Issue[]>([])
+  const [httpLoading, setHttpLoading] = useState(true)
+  const [httpLastUpdated, setHttpLastUpdated] = useState<Date | null>(null)
+
+  // Use WebSocket data when connected and available, otherwise HTTP fallback
+  const agents = wsConnected && wsAgents.length > 0 ? wsAgents : httpAgents
+  const allIssues = wsConnected && wsIssues.length > 0 ? wsIssues : httpIssues
+  // Filter to in_progress issues for monitoring view
+  const issues = useMemo(() =>
+    allIssues.filter(issue => issue.status === 'in_progress'),
+    [allIssues]
+  )
+  const loading = !wsConnected && httpLoading
+  const lastUpdated = wsConnected && wsLastUpdated
+    ? new Date(wsLastUpdated)
+    : httpLastUpdated
 
   // Error states
   const [agentsError, setAgentsError] = useState<string | null>(null)
@@ -69,9 +90,15 @@ export function MonitoringView({ rig, refreshKey = 0 }: MonitoringViewProps) {
     isInitialLoadRef.current = true
   }, [rig.id])
 
-  // Fetch agents for rig
+  // Fetch agents via HTTP as fallback
   useEffect(() => {
-    setLoading(true)
+    // Skip HTTP fetch if WebSocket is connected and has data
+    if (wsConnected && wsAgents.length > 0) {
+      setHttpLoading(false)
+      return
+    }
+
+    setHttpLoading(true)
     setAgentsError(null)
 
     const fetchAgents = async () => {
@@ -84,29 +111,34 @@ export function MonitoringView({ rig, refreshKey = 0 }: MonitoringViewProps) {
       })
 
       if (result.data) {
-        setAgents(result.data)
-        setLastUpdated(new Date())
+        setHttpAgents(result.data)
+        setHttpLastUpdated(new Date())
         if (result.fromCache && result.error) {
           console.warn('[Agents] Using cached data:', result.error)
         }
       } else {
         console.error('Failed to fetch agents:', result.error)
         setAgentsError(result.error || 'Failed to load agents')
-        setAgents([])
+        setHttpAgents([])
       }
-      setLoading(false)
+      setHttpLoading(false)
       // Mark initial load as complete
       isInitialLoadRef.current = false
     }
 
     fetchAgents()
-  }, [rig.id, refreshKey, retryCount])
+  }, [rig.id, refreshKey, retryCount, wsConnected, wsAgents.length])
 
-  // Fetch issues (without convoy enrichment - that was causing crashes)
+  // Fetch issues via HTTP as fallback
   useEffect(() => {
+    // Skip HTTP fetch if WebSocket is connected and has data
+    if (wsConnected && wsIssues.length > 0) {
+      return
+    }
+
     const fetchIssues = async () => {
-      // Only fetch in_progress issues - no need for all issues
-      const url = `/api/rigs/${rig.id}/issues?status=in_progress`
+      // Fetch all issues, filter client-side
+      const url = `/api/rigs/${rig.id}/issues?all=true`
       const skipCache = isInitialLoadRef.current
       const result = await cachedFetch<Issue[]>(url, {
         cacheTTL: 2 * 60 * 1000,
@@ -115,12 +147,12 @@ export function MonitoringView({ rig, refreshKey = 0 }: MonitoringViewProps) {
       })
 
       if (result.data) {
-        setIssues(result.data)
+        setHttpIssues(result.data)
       }
     }
 
     fetchIssues()
-  }, [rig.id, refreshKey, retryCount])
+  }, [rig.id, refreshKey, retryCount, wsConnected, wsIssues.length])
 
   // Handle retry
   const handleRetry = useCallback(() => {
