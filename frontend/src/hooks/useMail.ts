@@ -1,43 +1,31 @@
 /**
- * Hook for fetching and managing mail messages.
- * Supports real-time updates via SSE.
+ * Hook for accessing mail messages from the central data store.
+ * Mail data is pushed via WebSocket and stored in the data store.
  */
 
-import { useState, useEffect, useCallback } from 'react'
-import type { Mail, WSMessage } from '@/types'
-import { useEventSource } from './useEventSource'
-import { extractErrorMessage } from './useFetch'
-
-/** Maximum number of messages to display */
-const MAX_MESSAGES = 50
+import { useCallback, useMemo } from 'react'
+import { useDataStore, selectMail } from '@/stores/data-store'
+import type { Mail } from '@/types'
 
 export interface UseMailResult {
   /** List of mail messages (most recent first) */
   messages: Mail[]
-  /** Whether messages are currently being fetched */
-  loading: boolean
-  /** Error message if fetch failed */
-  error: string | null
+  /** Whether WebSocket is connected (data is live) */
+  connected: boolean
   /** Number of unread messages */
   unreadCount: number
-  /** Refetch messages */
-  refetch: () => void
-  /** Mark a message as read */
+  /** Mark a message as read (local only, fire-and-forget to API) */
   markAsRead: (id: string) => void
-  /** Mark all messages as read */
+  /** Mark all messages as read (local only, fire-and-forget to API) */
   markAllAsRead: () => void
-  /** Load more messages (for infinite scroll) */
-  loadMore: () => void
-  /** Whether there are more messages to load */
-  hasMore: boolean
 }
 
 /**
- * Fetch and manage mail messages with real-time SSE updates.
+ * Access mail messages from the WebSocket-powered data store.
  *
  * @example
  * ```tsx
- * const { messages, loading, unreadCount, markAsRead } = useMail()
+ * const { messages, connected, unreadCount, markAsRead } = useMail()
  *
  * return (
  *   <div>
@@ -50,111 +38,37 @@ export interface UseMailResult {
  * ```
  */
 export function useMail(): UseMailResult {
-  const [messages, setMessages] = useState<Mail[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [offset, setOffset] = useState(0)
-  const [hasMore, setHasMore] = useState(true)
-
-  // Handle incoming SSE messages
-  const handleSSEMessage = useCallback((msg: WSMessage) => {
-    if (msg.type === 'mail_received' && msg.payload) {
-      const newMail = msg.payload as unknown as Mail
-      setMessages((prev) => {
-        // Add new message at the beginning, keep max limit
-        const updated = [newMail, ...prev].slice(0, MAX_MESSAGES)
-        return updated
-      })
-    }
-  }, [])
-
-  // Connect to SSE for real-time updates
-  useEventSource({
-    onMessage: handleSSEMessage,
-  })
-
-  // Fetch messages from API
-  const fetchMessages = useCallback(async (reset = true) => {
-    setLoading(true)
-    setError(null)
-
-    const currentOffset = reset ? 0 : offset
-
-    try {
-      const response = await fetch(`/api/mail?limit=${MAX_MESSAGES}&offset=${currentOffset}`)
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch mail: ${response.statusText}`)
-      }
-
-      const data: Mail[] = await response.json()
-
-      if (reset) {
-        setMessages(data)
-        setOffset(data.length)
-      } else {
-        setMessages((prev) => [...prev, ...data])
-        setOffset((prev) => prev + data.length)
-      }
-
-      // If we got fewer than requested, no more to load
-      setHasMore(data.length === MAX_MESSAGES)
-    } catch (err) {
-      setError(extractErrorMessage(err, 'Failed to fetch mail'))
-      if (reset) {
-        setMessages([])
-      }
-    } finally {
-      setLoading(false)
-    }
-  }, [offset])
-
-  // Initial fetch
-  useEffect(() => {
-    fetchMessages(true)
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  const messages = useDataStore(selectMail)
+  const connected = useDataStore((state) => state.connected)
 
   // Calculate unread count
-  const unreadCount = messages.filter((m) => !m.read).length
+  const unreadCount = useMemo(
+    () => messages.filter((m) => !m.read).length,
+    [messages]
+  )
 
-  // Mark single message as read
+  // Mark single message as read (fire and forget to API)
   const markAsRead = useCallback((id: string) => {
-    setMessages((prev) =>
-      prev.map((msg) => (msg.id === id ? { ...msg, read: true } : msg))
-    )
-
-    // Optionally send to API (fire and forget)
+    // Note: The data store receives fresh snapshots, so we don't need to
+    // update local state. The API call will update the server state,
+    // which will be reflected in the next snapshot.
     fetch(`/api/mail/${id}/read`, { method: 'POST' }).catch(() => {
-      // Ignore errors for now
+      // Ignore errors - next snapshot will have correct state
     })
   }, [])
 
-  // Mark all messages as read
+  // Mark all messages as read (fire and forget to API)
   const markAllAsRead = useCallback(() => {
-    setMessages((prev) => prev.map((msg) => ({ ...msg, read: true })))
-
-    // Optionally send to API (fire and forget)
     fetch('/api/mail/read-all', { method: 'POST' }).catch(() => {
-      // Ignore errors for now
+      // Ignore errors - next snapshot will have correct state
     })
   }, [])
-
-  // Load more messages (infinite scroll)
-  const loadMore = useCallback(() => {
-    if (!loading && hasMore) {
-      fetchMessages(false)
-    }
-  }, [loading, hasMore, fetchMessages])
 
   return {
     messages,
-    loading,
-    error,
+    connected,
     unreadCount,
-    refetch: () => fetchMessages(true),
     markAsRead,
     markAllAsRead,
-    loadMore,
-    hasMore,
   }
 }

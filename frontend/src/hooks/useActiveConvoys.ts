@@ -1,9 +1,10 @@
 /**
- * Hook for fetching and polling active convoy data.
- * Used to display convoy progress in the monitoring view.
+ * Hook for accessing active convoy data from the central data store.
+ * Convoy data is pushed via WebSocket and stored in the data store.
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useMemo } from 'react'
+import { useDataStore, selectIssuesByRig } from '@/stores/data-store'
 import type { Issue, ConvoyProgress } from '@/types'
 
 /**
@@ -19,36 +20,33 @@ export interface ConvoyWithProgress extends Omit<Issue, 'convoy'> {
 }
 
 export interface UseActiveConvoysOptions {
-  /** Polling interval in milliseconds (default: 30000) */
-  pollInterval?: number
-  /** Pause polling when false (default: true) */
+  /** Whether to include the hook (default: true) */
   enabled?: boolean
 }
 
 export interface UseActiveConvoysResult {
   /** List of active convoys with progress data */
   convoys: ConvoyWithProgress[]
-  /** Whether data is currently being fetched */
+  /** Whether data is being loaded (false once WebSocket connects) */
   loading: boolean
-  /** Error message if fetch failed */
+  /** Error message (always null with WebSocket) */
   error: string | null
-  /** Manually trigger a refresh */
+  /** Whether WebSocket is connected (data is live) */
+  connected: boolean
+  /** Refresh is a no-op since data comes from WebSocket */
   refresh: () => void
 }
 
 /**
- * Fetch and poll active convoy data for a rig.
+ * Access active convoy data for a rig from the WebSocket-powered data store.
  *
- * @param rigId - The rig ID to fetch convoys for
- * @param options - Optional configuration for polling
- * @returns Convoys, loading state, error, and refresh function
+ * @param rigId - The rig ID to get convoys for
+ * @param options - Optional configuration
+ * @returns Convoys with connection status
  *
  * @example
  * ```tsx
- * const { convoys, loading, error, refresh } = useActiveConvoys(rigId, {
- *   pollInterval: 15000,  // Poll every 15 seconds
- *   enabled: isTabVisible // Pause when tab is hidden
- * })
+ * const { convoys, connected } = useActiveConvoys(rigId)
  *
  * // Display convoy progress
  * convoys.map(c => (
@@ -62,104 +60,49 @@ export function useActiveConvoys(
   rigId: string | undefined,
   options: UseActiveConvoysOptions = {}
 ): UseActiveConvoysResult {
-  const { pollInterval = 30000, enabled = true } = options
+  const { enabled = true } = options
 
-  const [convoys, setConvoys] = useState<ConvoyWithProgress[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  // Get issues for this rig from data store
+  const allIssues = useDataStore(rigId ? selectIssuesByRig(rigId) : () => [])
+  const connected = useDataStore((state) => state.connected)
 
-  // Track if component is mounted to prevent state updates after unmount
-  const mountedRef = useRef(true)
-  const intervalRef = useRef<number | null>(null)
-
-  useEffect(() => {
-    mountedRef.current = true
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
-
-  const fetchConvoys = useCallback(async () => {
-    if (!rigId) {
-      return
-    }
-
-    setLoading(true)
-    setError(null)
-
-    try {
-      const url = `/api/rigs/${rigId}/issues?types=convoy&status=open,in_progress&include=convoy`
-      const response = await fetch(url)
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch convoys: ${response.statusText}`)
-      }
-
-      const issues: Issue[] | null = await response.json()
-
-      if (mountedRef.current) {
-        // Filter to only issues with convoy data (they should all have it due to include=convoy)
-        // Handle null response from API (Go returns null for empty slices)
-        const convoysWithProgress: ConvoyWithProgress[] = (issues ?? [])
-          .filter((issue): issue is Issue & { convoy: NonNullable<Issue['convoy']> } =>
-            issue.convoy !== undefined && issue.convoy !== null
-          )
-          .map(issue => ({
-            ...issue,
-            convoy: issue.convoy
-          }))
-
-        setConvoys(convoysWithProgress)
-      }
-    } catch (err) {
-      if (mountedRef.current) {
-        const message = err instanceof Error ? err.message : 'Failed to fetch convoys'
-        setError(message)
-      }
-    } finally {
-      if (mountedRef.current) {
-        setLoading(false)
-      }
-    }
-  }, [rigId])
-
-  // Initial fetch and polling setup
-  useEffect(() => {
+  // Filter to active convoys with progress data
+  const convoys = useMemo(() => {
     if (!enabled || !rigId) {
-      // Clear interval if disabled
-      if (intervalRef.current !== null) {
-        window.clearInterval(intervalRef.current)
-        intervalRef.current = null
-      }
-      return
+      return []
     }
 
-    // Initial fetch
-    fetchConvoys()
+    return allIssues
+      .filter((issue): issue is Issue & { convoy: NonNullable<Issue['convoy']> } =>
+        // Must be a convoy type
+        issue.issue_type === 'convoy' &&
+        // Must be active (open or in_progress)
+        (issue.status === 'open' || issue.status === 'in_progress') &&
+        // Must have convoy data with progress
+        issue.convoy !== undefined &&
+        issue.convoy !== null &&
+        issue.convoy.progress !== undefined
+      )
+      .map((issue) => ({
+        ...issue,
+        convoy: issue.convoy,
+      }))
+  }, [allIssues, enabled, rigId])
 
-    // Set up polling
-    intervalRef.current = window.setInterval(fetchConvoys, pollInterval)
+  // Refresh is a no-op - data comes from WebSocket automatically
+  const refresh = () => {
+    // Data is pushed via WebSocket, no manual refresh needed
+  }
 
-    return () => {
-      if (intervalRef.current !== null) {
-        window.clearInterval(intervalRef.current)
-        intervalRef.current = null
-      }
-    }
-  }, [enabled, rigId, pollInterval, fetchConvoys])
-
-  // Reset state when rigId changes
-  useEffect(() => {
-    if (!rigId) {
-      setConvoys([])
-      setError(null)
-    }
-  }, [rigId])
+  // Loading state: true until first snapshot received
+  const lastUpdated = useDataStore((state) => state.lastUpdated)
+  const loading = lastUpdated === null
 
   return {
     convoys,
     loading,
-    error,
-    refresh: fetchConvoys,
+    error: null, // No error state with WebSocket - it reconnects automatically
+    connected,
+    refresh,
   }
 }

@@ -73,7 +73,6 @@ func main() {
 
 	// Set up HTTP handlers
 	h := handlers.New(rigDiscovery, beadsClient, mailClient, eventBroadcaster)
-	eventsHandler := handlers.NewEventsHandler(eventBroadcaster)
 	wsHandler := handlers.NewWebSocketHandler(rigDiscovery, beadsClient, mailClient)
 
 	// Start WebSocket hub
@@ -103,10 +102,7 @@ func main() {
 	// Mail (town-level)
 	mux.HandleFunc("GET /api/mail", h.ListMail)
 
-	// Server-Sent Events
-	mux.Handle("GET /api/events", eventsHandler)
-
-	// WebSocket
+	// WebSocket (real-time data streaming)
 	mux.Handle("GET /ws", wsHandler)
 
 	// Static files (frontend build)
