@@ -109,6 +109,39 @@ type TestSummary struct {
 	ByAgent     map[string]int `json:"by_agent"` // run count per agent
 }
 
+// TestHistoryEntry represents a single test result in history.
+type TestHistoryEntry struct {
+	TestName     string `json:"test_name"`
+	Status       string `json:"status"`
+	Timestamp    string `json:"timestamp"`
+	CommitSHA    string `json:"commit_sha,omitempty"`
+	DurationMS   int    `json:"duration_ms"`
+	ErrorMessage string `json:"error_message,omitempty"`
+}
+
+// TestRegression represents a test that regressed (was passing, now failing).
+type TestRegression struct {
+	TestName        string `json:"test_name"`
+	TestFile        string `json:"test_file"`
+	LastPassedAt    string `json:"last_passed_at"`
+	LastPassedCommit string `json:"last_passed_commit,omitempty"`
+	FirstFailedAt   string `json:"first_failed_at"`
+	FirstFailedCommit string `json:"first_failed_commit,omitempty"`
+	ErrorMessage    string `json:"error_message,omitempty"`
+}
+
+// TestStatus represents the current status of a test with last_passed info.
+type TestStatus struct {
+	TestName       string `json:"test_name"`
+	TestFile       string `json:"test_file"`
+	CurrentStatus  string `json:"current_status"`
+	LastRunAt      string `json:"last_run_at"`
+	LastPassedAt   string `json:"last_passed_at,omitempty"`
+	LastPassedCommit string `json:"last_passed_commit,omitempty"`
+	FailCount      int    `json:"fail_count"`       // consecutive failures
+	TotalRuns      int    `json:"total_runs"`
+}
+
 // BeadTelemetry aggregates all telemetry for a single bead.
 type BeadTelemetry struct {
 	BeadID       string       `json:"bead_id"`
@@ -149,6 +182,12 @@ type Collector interface {
 	// Query - Test Results
 	GetTestRuns(filter TelemetryFilter) ([]TestRun, error)
 	GetTestSummary(filter TelemetryFilter) (TestSummary, error)
+
+	// Regression Detection Queries (ADR-014 AC-3, AC-4, AC-5)
+	GetTestHistory(testName string, limit int) ([]TestHistoryEntry, error)
+	GetLastPassedCommit(testName string) (string, error)
+	GetRegressions(since string) ([]TestRegression, error)
+	GetTestSuiteStatus() ([]TestStatus, error)
 
 	// Aggregates
 	GetBeadTelemetry(beadID string) (BeadTelemetry, error)
@@ -251,6 +290,8 @@ func (c *SQLiteCollector) initSchema() error {
 	CREATE INDEX IF NOT EXISTS idx_test_results_agent_id ON test_results(agent_id);
 	CREATE INDEX IF NOT EXISTS idx_test_results_bead_id ON test_results(bead_id);
 	CREATE INDEX IF NOT EXISTS idx_test_results_commit_sha ON test_results(commit_sha);
+	CREATE INDEX IF NOT EXISTS idx_test_results_test_name_timestamp ON test_results(test_name, timestamp);
+	CREATE INDEX IF NOT EXISTS idx_test_results_test_name_status_timestamp ON test_results(test_name, status, timestamp);
 	`
 	_, err := c.db.Exec(schema)
 	return err
@@ -516,6 +557,245 @@ func (c *SQLiteCollector) GetTestSummary(filter TelemetryFilter) (TestSummary, e
 	}
 
 	return summary, nil
+}
+
+// GetTestHistory returns chronological test results for a specific test.
+func (c *SQLiteCollector) GetTestHistory(testName string, limit int) ([]TestHistoryEntry, error) {
+	query := `
+		SELECT test_name, status, timestamp, COALESCE(commit_sha, ''), duration_ms, COALESCE(error_message, '')
+		FROM test_results
+		WHERE test_name = ?
+		ORDER BY timestamp DESC
+	`
+	args := []interface{}{testName}
+
+	if limit > 0 {
+		query += " LIMIT ?"
+		args = append(args, limit)
+	}
+
+	rows, err := c.db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query test history: %w", err)
+	}
+	defer rows.Close()
+
+	var results []TestHistoryEntry
+	for rows.Next() {
+		var e TestHistoryEntry
+		if err := rows.Scan(&e.TestName, &e.Status, &e.Timestamp, &e.CommitSHA, &e.DurationMS, &e.ErrorMessage); err != nil {
+			return nil, fmt.Errorf("scan test history entry: %w", err)
+		}
+		results = append(results, e)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate test history: %w", err)
+	}
+
+	if results == nil {
+		results = []TestHistoryEntry{}
+	}
+
+	return results, nil
+}
+
+// GetLastPassedCommit returns the most recent commit SHA where the test passed.
+func (c *SQLiteCollector) GetLastPassedCommit(testName string) (string, error) {
+	query := `
+		SELECT COALESCE(commit_sha, '')
+		FROM test_results
+		WHERE test_name = ? AND status = 'passed' AND commit_sha IS NOT NULL AND commit_sha != ''
+		ORDER BY timestamp DESC
+		LIMIT 1
+	`
+
+	var commitSHA string
+	err := c.db.QueryRow(query, testName).Scan(&commitSHA)
+	if err == sql.ErrNoRows {
+		return "", nil // No passing commit found
+	}
+	if err != nil {
+		return "", fmt.Errorf("query last passed commit: %w", err)
+	}
+
+	return commitSHA, nil
+}
+
+// GetRegressions returns tests that were passing but now fail since the given timestamp.
+func (c *SQLiteCollector) GetRegressions(since string) ([]TestRegression, error) {
+	// Find tests that have both a passing result before and a failing result after the 'since' time,
+	// where the most recent result is a failure.
+	// A regression requires: (1) test currently failing, (2) test had a prior pass, (3) first failure since 'since' is after the last pass
+	query := `
+		WITH latest_results AS (
+			SELECT
+				test_name,
+				test_file,
+				status,
+				timestamp,
+				commit_sha,
+				error_message,
+				ROW_NUMBER() OVER (PARTITION BY test_name ORDER BY timestamp DESC) as rn
+			FROM test_results
+		),
+		last_passed AS (
+			SELECT
+				test_name,
+				MAX(timestamp) as last_passed_at,
+				(SELECT commit_sha FROM test_results t2
+				 WHERE t2.test_name = test_results.test_name AND t2.status = 'passed'
+				 ORDER BY t2.timestamp DESC LIMIT 1) as last_passed_commit
+			FROM test_results
+			WHERE status = 'passed'
+			GROUP BY test_name
+		),
+		first_failed_since AS (
+			SELECT
+				test_name,
+				MIN(timestamp) as first_failed_at,
+				(SELECT commit_sha FROM test_results t2
+				 WHERE t2.test_name = test_results.test_name AND t2.status = 'failed' AND t2.timestamp >= ?
+				 ORDER BY t2.timestamp ASC LIMIT 1) as first_failed_commit,
+				(SELECT error_message FROM test_results t2
+				 WHERE t2.test_name = test_results.test_name AND t2.status = 'failed' AND t2.timestamp >= ?
+				 ORDER BY t2.timestamp ASC LIMIT 1) as error_message
+			FROM test_results
+			WHERE status = 'failed' AND timestamp >= ?
+			GROUP BY test_name
+		)
+		SELECT
+			lr.test_name,
+			lr.test_file,
+			lp.last_passed_at,
+			COALESCE(lp.last_passed_commit, '') as last_passed_commit,
+			ff.first_failed_at,
+			COALESCE(ff.first_failed_commit, '') as first_failed_commit,
+			COALESCE(ff.error_message, '') as error_message
+		FROM latest_results lr
+		JOIN first_failed_since ff ON lr.test_name = ff.test_name
+		JOIN last_passed lp ON lr.test_name = lp.test_name
+		WHERE lr.rn = 1 AND lr.status = 'failed'
+		  AND lp.last_passed_at < ff.first_failed_at
+		ORDER BY ff.first_failed_at DESC
+	`
+
+	rows, err := c.db.Query(query, since, since, since)
+	if err != nil {
+		return nil, fmt.Errorf("query regressions: %w", err)
+	}
+	defer rows.Close()
+
+	var results []TestRegression
+	for rows.Next() {
+		var r TestRegression
+		if err := rows.Scan(&r.TestName, &r.TestFile, &r.LastPassedAt, &r.LastPassedCommit,
+			&r.FirstFailedAt, &r.FirstFailedCommit, &r.ErrorMessage); err != nil {
+			return nil, fmt.Errorf("scan regression: %w", err)
+		}
+		results = append(results, r)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate regressions: %w", err)
+	}
+
+	if results == nil {
+		results = []TestRegression{}
+	}
+
+	return results, nil
+}
+
+// GetTestSuiteStatus returns the status of all tests with their last_passed info.
+func (c *SQLiteCollector) GetTestSuiteStatus() ([]TestStatus, error) {
+	query := `
+		WITH latest_results AS (
+			SELECT
+				test_name,
+				test_file,
+				status,
+				timestamp,
+				commit_sha,
+				ROW_NUMBER() OVER (PARTITION BY test_name ORDER BY timestamp DESC) as rn
+			FROM test_results
+		),
+		last_passed AS (
+			SELECT
+				test_name,
+				MAX(timestamp) as last_passed_at,
+				(SELECT commit_sha FROM test_results t2
+				 WHERE t2.test_name = test_results.test_name AND t2.status = 'passed'
+				 ORDER BY t2.timestamp DESC LIMIT 1) as last_passed_commit
+			FROM test_results
+			WHERE status = 'passed'
+			GROUP BY test_name
+		),
+		fail_counts AS (
+			SELECT
+				test_name,
+				COUNT(*) as consecutive_fails
+			FROM (
+				SELECT
+					test_name,
+					status,
+					timestamp,
+					(SELECT MIN(t2.timestamp) FROM test_results t2
+					 WHERE t2.test_name = test_results.test_name AND t2.status = 'passed'
+					 AND t2.timestamp > test_results.timestamp) as next_pass
+				FROM test_results
+				WHERE status = 'failed'
+			) t
+			WHERE next_pass IS NULL
+			GROUP BY test_name
+		),
+		total_runs AS (
+			SELECT test_name, COUNT(*) as total_runs
+			FROM test_results
+			GROUP BY test_name
+		)
+		SELECT
+			lr.test_name,
+			lr.test_file,
+			lr.status as current_status,
+			lr.timestamp as last_run_at,
+			COALESCE(lp.last_passed_at, '') as last_passed_at,
+			COALESCE(lp.last_passed_commit, '') as last_passed_commit,
+			COALESCE(fc.consecutive_fails, 0) as fail_count,
+			COALESCE(tr.total_runs, 0) as total_runs
+		FROM latest_results lr
+		LEFT JOIN last_passed lp ON lr.test_name = lp.test_name
+		LEFT JOIN fail_counts fc ON lr.test_name = fc.test_name
+		LEFT JOIN total_runs tr ON lr.test_name = tr.test_name
+		WHERE lr.rn = 1
+		ORDER BY lr.test_name
+	`
+
+	rows, err := c.db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("query test suite status: %w", err)
+	}
+	defer rows.Close()
+
+	var results []TestStatus
+	for rows.Next() {
+		var s TestStatus
+		if err := rows.Scan(&s.TestName, &s.TestFile, &s.CurrentStatus, &s.LastRunAt,
+			&s.LastPassedAt, &s.LastPassedCommit, &s.FailCount, &s.TotalRuns); err != nil {
+			return nil, fmt.Errorf("scan test status: %w", err)
+		}
+		results = append(results, s)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate test suite status: %w", err)
+	}
+
+	if results == nil {
+		results = []TestStatus{}
+	}
+
+	return results, nil
 }
 
 // GetBeadTelemetry retrieves all telemetry data for a specific bead.

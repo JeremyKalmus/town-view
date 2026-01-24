@@ -511,3 +511,418 @@ func TestTelemetry_RecordTestRun_WithoutCommitSHA(t *testing.T) {
 		t.Errorf("expected empty Branch, got %s", r.Branch)
 	}
 }
+
+// TestTelemetry_GetTestHistory_ReturnsChronologicalResults verifies test history is returned in order.
+// ADR-014 AC-3: Test history returns chronological results
+func TestTelemetry_GetTestHistory_ReturnsChronologicalResults(t *testing.T) {
+	collector, cleanup := createTestCollector(t)
+	defer cleanup()
+
+	// Record multiple test results for the same test at different times
+	runs := []TestRun{
+		{
+			AgentID:   "agent-1",
+			Timestamp: "2026-01-24T10:00:00Z",
+			CommitSHA: "commit1",
+			Command:   "go test",
+			Results: []TestResult{
+				{TestFile: "main_test.go", TestName: "TestFoo", Status: "passed", DurationMS: 100},
+			},
+		},
+		{
+			AgentID:   "agent-1",
+			Timestamp: "2026-01-24T11:00:00Z",
+			CommitSHA: "commit2",
+			Command:   "go test",
+			Results: []TestResult{
+				{TestFile: "main_test.go", TestName: "TestFoo", Status: "passed", DurationMS: 110},
+			},
+		},
+		{
+			AgentID:   "agent-1",
+			Timestamp: "2026-01-24T12:00:00Z",
+			CommitSHA: "commit3",
+			Command:   "go test",
+			Results: []TestResult{
+				{TestFile: "main_test.go", TestName: "TestFoo", Status: "failed", DurationMS: 120, ErrorMessage: "assertion failed"},
+			},
+		},
+	}
+
+	for _, run := range runs {
+		if err := collector.RecordTestRun(run); err != nil {
+			t.Fatalf("RecordTestRun failed: %v", err)
+		}
+	}
+
+	// Get test history
+	history, err := collector.GetTestHistory("TestFoo", 0)
+	if err != nil {
+		t.Fatalf("GetTestHistory failed: %v", err)
+	}
+
+	// Should return 3 entries, most recent first
+	if len(history) != 3 {
+		t.Fatalf("expected 3 entries, got %d", len(history))
+	}
+
+	// Verify order (most recent first)
+	if history[0].Timestamp != "2026-01-24T12:00:00Z" {
+		t.Errorf("expected first entry at 12:00, got %s", history[0].Timestamp)
+	}
+	if history[0].Status != "failed" {
+		t.Errorf("expected first entry status=failed, got %s", history[0].Status)
+	}
+	if history[0].CommitSHA != "commit3" {
+		t.Errorf("expected first entry commit=commit3, got %s", history[0].CommitSHA)
+	}
+
+	if history[2].Timestamp != "2026-01-24T10:00:00Z" {
+		t.Errorf("expected last entry at 10:00, got %s", history[2].Timestamp)
+	}
+	if history[2].Status != "passed" {
+		t.Errorf("expected last entry status=passed, got %s", history[2].Status)
+	}
+
+	// Test with limit
+	limited, err := collector.GetTestHistory("TestFoo", 2)
+	if err != nil {
+		t.Fatalf("GetTestHistory with limit failed: %v", err)
+	}
+	if len(limited) != 2 {
+		t.Errorf("expected 2 entries with limit, got %d", len(limited))
+	}
+
+	// Test non-existent test
+	empty, err := collector.GetTestHistory("TestNonExistent", 0)
+	if err != nil {
+		t.Fatalf("GetTestHistory for non-existent test failed: %v", err)
+	}
+	if len(empty) != 0 {
+		t.Errorf("expected 0 entries for non-existent test, got %d", len(empty))
+	}
+}
+
+// TestTelemetry_GetLastPassedCommit_FindsMostRecentPass verifies correct commit is returned.
+// ADR-014 AC-4: GetLastPassedCommit returns most recent passing commit
+func TestTelemetry_GetLastPassedCommit_FindsMostRecentPass(t *testing.T) {
+	collector, cleanup := createTestCollector(t)
+	defer cleanup()
+
+	// Record test results with varying statuses
+	runs := []TestRun{
+		{
+			AgentID:   "agent-1",
+			Timestamp: "2026-01-24T10:00:00Z",
+			CommitSHA: "commit-pass-1",
+			Command:   "go test",
+			Results: []TestResult{
+				{TestFile: "test.go", TestName: "TestBar", Status: "passed", DurationMS: 100},
+			},
+		},
+		{
+			AgentID:   "agent-1",
+			Timestamp: "2026-01-24T11:00:00Z",
+			CommitSHA: "commit-fail-1",
+			Command:   "go test",
+			Results: []TestResult{
+				{TestFile: "test.go", TestName: "TestBar", Status: "failed", DurationMS: 100},
+			},
+		},
+		{
+			AgentID:   "agent-1",
+			Timestamp: "2026-01-24T12:00:00Z",
+			CommitSHA: "commit-pass-2",
+			Command:   "go test",
+			Results: []TestResult{
+				{TestFile: "test.go", TestName: "TestBar", Status: "passed", DurationMS: 100},
+			},
+		},
+		{
+			AgentID:   "agent-1",
+			Timestamp: "2026-01-24T13:00:00Z",
+			CommitSHA: "commit-fail-2",
+			Command:   "go test",
+			Results: []TestResult{
+				{TestFile: "test.go", TestName: "TestBar", Status: "failed", DurationMS: 100},
+			},
+		},
+	}
+
+	for _, run := range runs {
+		if err := collector.RecordTestRun(run); err != nil {
+			t.Fatalf("RecordTestRun failed: %v", err)
+		}
+	}
+
+	// Get last passed commit
+	commit, err := collector.GetLastPassedCommit("TestBar")
+	if err != nil {
+		t.Fatalf("GetLastPassedCommit failed: %v", err)
+	}
+
+	// Should return commit-pass-2 (most recent pass)
+	if commit != "commit-pass-2" {
+		t.Errorf("expected commit-pass-2, got %s", commit)
+	}
+
+	// Test for a test that never passed
+	runs2 := []TestRun{
+		{
+			AgentID:   "agent-1",
+			Timestamp: "2026-01-24T10:00:00Z",
+			CommitSHA: "commit-x",
+			Command:   "go test",
+			Results: []TestResult{
+				{TestFile: "test.go", TestName: "TestNeverPassed", Status: "failed", DurationMS: 100},
+			},
+		},
+	}
+	for _, run := range runs2 {
+		if err := collector.RecordTestRun(run); err != nil {
+			t.Fatalf("RecordTestRun failed: %v", err)
+		}
+	}
+
+	noCommit, err := collector.GetLastPassedCommit("TestNeverPassed")
+	if err != nil {
+		t.Fatalf("GetLastPassedCommit for never-passed test failed: %v", err)
+	}
+	if noCommit != "" {
+		t.Errorf("expected empty string for never-passed test, got %s", noCommit)
+	}
+
+	// Test for non-existent test
+	nonExistent, err := collector.GetLastPassedCommit("TestNonExistent")
+	if err != nil {
+		t.Fatalf("GetLastPassedCommit for non-existent test failed: %v", err)
+	}
+	if nonExistent != "" {
+		t.Errorf("expected empty string for non-existent test, got %s", nonExistent)
+	}
+}
+
+// TestTelemetry_GetRegressions_DetectsNewFailures verifies regression detection works.
+// ADR-014 AC-5: GetRegressions detects tests that were passing but now fail
+func TestTelemetry_GetRegressions_DetectsNewFailures(t *testing.T) {
+	collector, cleanup := createTestCollector(t)
+	defer cleanup()
+
+	// Set up test scenario:
+	// TestStable: passed -> passed (no regression)
+	// TestRegressed: passed -> failed (regression)
+	// TestAlwaysFailed: failed -> failed (not a regression since no prior pass)
+	// TestRecovered: failed -> passed (not a regression)
+
+	runs := []TestRun{
+		// Day 1: Initial state
+		{
+			AgentID:   "agent-1",
+			Timestamp: "2026-01-24T10:00:00Z",
+			CommitSHA: "commit-day1",
+			Command:   "go test",
+			Results: []TestResult{
+				{TestFile: "stable_test.go", TestName: "TestStable", Status: "passed", DurationMS: 100},
+				{TestFile: "regressed_test.go", TestName: "TestRegressed", Status: "passed", DurationMS: 100},
+				{TestFile: "always_failed_test.go", TestName: "TestAlwaysFailed", Status: "failed", DurationMS: 100},
+				{TestFile: "recovered_test.go", TestName: "TestRecovered", Status: "failed", DurationMS: 100},
+			},
+		},
+		// Day 2: After changes
+		{
+			AgentID:   "agent-1",
+			Timestamp: "2026-01-24T14:00:00Z",
+			CommitSHA: "commit-day2",
+			Command:   "go test",
+			Results: []TestResult{
+				{TestFile: "stable_test.go", TestName: "TestStable", Status: "passed", DurationMS: 100},
+				{TestFile: "regressed_test.go", TestName: "TestRegressed", Status: "failed", DurationMS: 100, ErrorMessage: "expected true, got false"},
+				{TestFile: "always_failed_test.go", TestName: "TestAlwaysFailed", Status: "failed", DurationMS: 100},
+				{TestFile: "recovered_test.go", TestName: "TestRecovered", Status: "passed", DurationMS: 100},
+			},
+		},
+	}
+
+	for _, run := range runs {
+		if err := collector.RecordTestRun(run); err != nil {
+			t.Fatalf("RecordTestRun failed: %v", err)
+		}
+	}
+
+	// Get regressions since noon on day 2
+	regressions, err := collector.GetRegressions("2026-01-24T12:00:00Z")
+	if err != nil {
+		t.Fatalf("GetRegressions failed: %v", err)
+	}
+
+	// Should only find TestRegressed as a regression
+	// TestAlwaysFailed is not a regression because it never passed
+	// TestStable and TestRecovered are not regressions because they're passing
+	if len(regressions) != 1 {
+		t.Fatalf("expected 1 regression, got %d", len(regressions))
+	}
+
+	reg := regressions[0]
+	if reg.TestName != "TestRegressed" {
+		t.Errorf("expected TestRegressed, got %s", reg.TestName)
+	}
+	if reg.TestFile != "regressed_test.go" {
+		t.Errorf("expected regressed_test.go, got %s", reg.TestFile)
+	}
+	if reg.LastPassedCommit != "commit-day1" {
+		t.Errorf("expected LastPassedCommit=commit-day1, got %s", reg.LastPassedCommit)
+	}
+	if reg.FirstFailedCommit != "commit-day2" {
+		t.Errorf("expected FirstFailedCommit=commit-day2, got %s", reg.FirstFailedCommit)
+	}
+	if reg.ErrorMessage != "expected true, got false" {
+		t.Errorf("expected error message 'expected true, got false', got '%s'", reg.ErrorMessage)
+	}
+
+	// Test with no regressions
+	noRegressions, err := collector.GetRegressions("2026-01-25T00:00:00Z")
+	if err != nil {
+		t.Fatalf("GetRegressions with future date failed: %v", err)
+	}
+	if len(noRegressions) != 0 {
+		t.Errorf("expected 0 regressions for future date, got %d", len(noRegressions))
+	}
+}
+
+// TestTelemetry_GetTestSuiteStatus_ReturnsAllTestsWithLastPassed verifies suite status is complete.
+// ADR-014 AC-5: GetTestSuiteStatus returns all tests with last_passed info
+func TestTelemetry_GetTestSuiteStatus_ReturnsAllTestsWithLastPassed(t *testing.T) {
+	collector, cleanup := createTestCollector(t)
+	defer cleanup()
+
+	// Set up tests with various histories
+	runs := []TestRun{
+		// First run
+		{
+			AgentID:   "agent-1",
+			Timestamp: "2026-01-24T10:00:00Z",
+			CommitSHA: "commit1",
+			Command:   "go test",
+			Results: []TestResult{
+				{TestFile: "a_test.go", TestName: "TestA", Status: "passed", DurationMS: 100},
+				{TestFile: "b_test.go", TestName: "TestB", Status: "passed", DurationMS: 100},
+				{TestFile: "c_test.go", TestName: "TestC", Status: "failed", DurationMS: 100},
+			},
+		},
+		// Second run
+		{
+			AgentID:   "agent-1",
+			Timestamp: "2026-01-24T11:00:00Z",
+			CommitSHA: "commit2",
+			Command:   "go test",
+			Results: []TestResult{
+				{TestFile: "a_test.go", TestName: "TestA", Status: "passed", DurationMS: 100},
+				{TestFile: "b_test.go", TestName: "TestB", Status: "failed", DurationMS: 100},
+				{TestFile: "c_test.go", TestName: "TestC", Status: "failed", DurationMS: 100},
+			},
+		},
+		// Third run
+		{
+			AgentID:   "agent-1",
+			Timestamp: "2026-01-24T12:00:00Z",
+			CommitSHA: "commit3",
+			Command:   "go test",
+			Results: []TestResult{
+				{TestFile: "a_test.go", TestName: "TestA", Status: "passed", DurationMS: 100},
+				{TestFile: "b_test.go", TestName: "TestB", Status: "failed", DurationMS: 100},
+				{TestFile: "c_test.go", TestName: "TestC", Status: "passed", DurationMS: 100},
+			},
+		},
+	}
+
+	for _, run := range runs {
+		if err := collector.RecordTestRun(run); err != nil {
+			t.Fatalf("RecordTestRun failed: %v", err)
+		}
+	}
+
+	// Get test suite status
+	status, err := collector.GetTestSuiteStatus()
+	if err != nil {
+		t.Fatalf("GetTestSuiteStatus failed: %v", err)
+	}
+
+	// Should have 3 tests
+	if len(status) != 3 {
+		t.Fatalf("expected 3 tests in status, got %d", len(status))
+	}
+
+	// Create a map for easier lookup
+	statusMap := make(map[string]TestStatus)
+	for _, s := range status {
+		statusMap[s.TestName] = s
+	}
+
+	// Verify TestA: always passed, 0 consecutive failures
+	if a, ok := statusMap["TestA"]; !ok {
+		t.Error("TestA not found in status")
+	} else {
+		if a.CurrentStatus != "passed" {
+			t.Errorf("TestA: expected current status=passed, got %s", a.CurrentStatus)
+		}
+		if a.LastPassedCommit != "commit3" {
+			t.Errorf("TestA: expected last passed commit=commit3, got %s", a.LastPassedCommit)
+		}
+		if a.TotalRuns != 3 {
+			t.Errorf("TestA: expected 3 total runs, got %d", a.TotalRuns)
+		}
+		if a.FailCount != 0 {
+			t.Errorf("TestA: expected 0 fail count, got %d", a.FailCount)
+		}
+	}
+
+	// Verify TestB: passed once, then failed twice, 2 consecutive failures
+	if b, ok := statusMap["TestB"]; !ok {
+		t.Error("TestB not found in status")
+	} else {
+		if b.CurrentStatus != "failed" {
+			t.Errorf("TestB: expected current status=failed, got %s", b.CurrentStatus)
+		}
+		if b.LastPassedCommit != "commit1" {
+			t.Errorf("TestB: expected last passed commit=commit1, got %s", b.LastPassedCommit)
+		}
+		if b.TotalRuns != 3 {
+			t.Errorf("TestB: expected 3 total runs, got %d", b.TotalRuns)
+		}
+		if b.FailCount != 2 {
+			t.Errorf("TestB: expected 2 consecutive failures, got %d", b.FailCount)
+		}
+	}
+
+	// Verify TestC: failed twice, then passed, 0 consecutive failures
+	if c, ok := statusMap["TestC"]; !ok {
+		t.Error("TestC not found in status")
+	} else {
+		if c.CurrentStatus != "passed" {
+			t.Errorf("TestC: expected current status=passed, got %s", c.CurrentStatus)
+		}
+		if c.LastPassedCommit != "commit3" {
+			t.Errorf("TestC: expected last passed commit=commit3, got %s", c.LastPassedCommit)
+		}
+		if c.TotalRuns != 3 {
+			t.Errorf("TestC: expected 3 total runs, got %d", c.TotalRuns)
+		}
+		if c.FailCount != 0 {
+			t.Errorf("TestC: expected 0 consecutive failures (recovered), got %d", c.FailCount)
+		}
+	}
+}
+
+// TestTelemetry_GetTestSuiteStatus_EmptyDatabase returns empty slice.
+func TestTelemetry_GetTestSuiteStatus_EmptyDatabase(t *testing.T) {
+	collector, cleanup := createTestCollector(t)
+	defer cleanup()
+
+	status, err := collector.GetTestSuiteStatus()
+	if err != nil {
+		t.Fatalf("GetTestSuiteStatus on empty DB failed: %v", err)
+	}
+	if len(status) != 0 {
+		t.Errorf("expected 0 tests in empty DB, got %d", len(status))
+	}
+}
