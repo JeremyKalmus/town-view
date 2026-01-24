@@ -95,11 +95,12 @@ export function useActiveConvoys(
         throw new Error(`Failed to fetch convoys: ${response.statusText}`)
       }
 
-      const issues: Issue[] = await response.json()
+      const issues: Issue[] | null = await response.json()
 
       if (mountedRef.current) {
         // Filter to only issues with convoy data (they should all have it due to include=convoy)
-        const convoysWithProgress: ConvoyWithProgress[] = issues
+        // Handle null response from API (Go returns null for empty slices)
+        const convoysWithProgress: ConvoyWithProgress[] = (issues ?? [])
           .filter((issue): issue is Issue & { convoy: NonNullable<Issue['convoy']> } =>
             issue.convoy !== undefined && issue.convoy !== null
           )

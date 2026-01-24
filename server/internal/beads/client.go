@@ -65,6 +65,11 @@ func (c *Client) ListIssues(rigPath string, filters map[string]string) ([]types.
 		return nil, fmt.Errorf("failed to parse issues: %w", err)
 	}
 
+	// Ensure we return empty slice instead of nil (Go JSON encodes nil as null)
+	if issues == nil {
+		issues = []types.Issue{}
+	}
+
 	return issues, nil
 }
 

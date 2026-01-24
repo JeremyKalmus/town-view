@@ -108,7 +108,7 @@ func (h *Handlers) ListIssues(w http.ResponseWriter, r *http.Request) {
 		for _, t := range strings.Split(typeFilter, ",") {
 			typeSet[strings.TrimSpace(t)] = true
 		}
-		var filtered []types.Issue
+		filtered := make([]types.Issue, 0) // Initialize as empty slice, not nil
 		for _, issue := range issues {
 			if typeSet[issue.IssueType] {
 				filtered = append(filtered, issue)
