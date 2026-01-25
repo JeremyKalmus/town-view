@@ -5,25 +5,26 @@ import "time"
 
 // Issue represents a bead issue.
 type Issue struct {
-	ID              string      `json:"id"`
-	Title           string      `json:"title"`
-	Description     string      `json:"description"`
-	Status          string      `json:"status"`
-	Priority        int         `json:"priority"`
-	IssueType       string      `json:"issue_type"`
-	Owner           string      `json:"owner,omitempty"`
-	Assignee        string      `json:"assignee,omitempty"`
-	CreatedAt       time.Time   `json:"created_at"`
-	CreatedBy       string      `json:"created_by,omitempty"`
-	UpdatedAt       time.Time   `json:"updated_at"`
-	ClosedAt        *time.Time  `json:"closed_at,omitempty"`
-	CloseReason     string      `json:"close_reason,omitempty"`
-	Labels          []string    `json:"labels,omitempty"`
-	DependencyCount int         `json:"dependency_count"`
-	DependentCount  int         `json:"dependent_count"`
-	Parent          string      `json:"parent,omitempty"`
-	Convoy          *ConvoyInfo `json:"convoy,omitempty"`
-	RigID           string      `json:"rig_id,omitempty"` // Set by server for WebSocket grouping
+	ID              string             `json:"id"`
+	Title           string             `json:"title"`
+	Description     string             `json:"description"`
+	Status          string             `json:"status"`
+	Priority        int                `json:"priority"`
+	IssueType       string             `json:"issue_type"`
+	Owner           string             `json:"owner,omitempty"`
+	Assignee        string             `json:"assignee,omitempty"`
+	CreatedAt       time.Time          `json:"created_at"`
+	CreatedBy       string             `json:"created_by,omitempty"`
+	UpdatedAt       time.Time          `json:"updated_at"`
+	ClosedAt        *time.Time         `json:"closed_at,omitempty"`
+	CloseReason     string             `json:"close_reason,omitempty"`
+	Labels          []string           `json:"labels,omitempty"`
+	DependencyCount int                `json:"dependency_count"`
+	DependentCount  int                `json:"dependent_count"`
+	Dependencies    []IssueDependency  `json:"dependencies,omitempty"` // Raw dependencies (for convoys)
+	Parent          string             `json:"parent,omitempty"`
+	Convoy          *ConvoyInfo        `json:"convoy,omitempty"`
+	RigID           string             `json:"rig_id,omitempty"` // Set by server for WebSocket grouping
 }
 
 // Dependency represents a dependency relationship between issues.
@@ -31,6 +32,15 @@ type Dependency struct {
 	FromID   string `json:"from_id"`
 	ToID     string `json:"to_id"`
 	Type     string `json:"type"` // "blocks", "parent-child"
+}
+
+// IssueDependency represents a raw dependency entry from beads.
+type IssueDependency struct {
+	IssueID     string `json:"issue_id"`
+	DependsOnID string `json:"depends_on_id"`
+	Type        string `json:"type"` // "blocks", "tracks", "parent-child"
+	CreatedAt   string `json:"created_at,omitempty"`
+	CreatedBy   string `json:"created_by,omitempty"`
 }
 
 // IssueDependencies contains blockers and blocked-by for an issue.

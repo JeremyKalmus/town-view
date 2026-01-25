@@ -570,6 +570,52 @@ func (s *Service) buildDependencyNode(issueID string, visited map[string]bool, d
 	return node
 }
 
+// GetRawDependencies returns the raw dependency entries for an issue.
+// This is used for convoy-type issues to get their "tracks" dependencies.
+func (s *Service) GetRawDependencies(issueID string) ([]types.IssueDependency, error) {
+	query := `
+		SELECT issue_id, depends_on_id, type, created_at, created_by
+		FROM dependencies
+		WHERE issue_id = ?
+	`
+
+	rows, err := s.db.Query(query, issueID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query dependencies: %w", err)
+	}
+	defer rows.Close()
+
+	var deps []types.IssueDependency
+	for rows.Next() {
+		var dep types.IssueDependency
+		var createdAt sql.NullString
+		var createdBy sql.NullString
+
+		if err := rows.Scan(&dep.IssueID, &dep.DependsOnID, &dep.Type, &createdAt, &createdBy); err != nil {
+			return nil, fmt.Errorf("failed to scan dependency: %w", err)
+		}
+
+		if createdAt.Valid {
+			dep.CreatedAt = createdAt.String
+		}
+		if createdBy.Valid {
+			dep.CreatedBy = createdBy.String
+		}
+
+		deps = append(deps, dep)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating dependencies: %w", err)
+	}
+
+	if deps == nil {
+		deps = []types.IssueDependency{}
+	}
+
+	return deps, nil
+}
+
 // GetConvoyProgress returns progress statistics for a convoy.
 func (s *Service) GetConvoyProgress(convoyID string) (*types.ConvoyProgress, error) {
 	// Check cache

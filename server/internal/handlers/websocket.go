@@ -94,9 +94,10 @@ func (h *WebSocketHandler) buildSnapshot() ([]byte, error) {
 	// Get all issues from all rigs
 	issues := h.rigManager.ListAllIssues(query.IssueFilter{})
 
-	// Enrich convoy-type issues with progress data
+	// Enrich convoy-type issues with progress data and dependencies
 	for i, issue := range issues {
 		if issue.IssueType == types.TypeConvoy && issue.RigID != "" {
+			// Get convoy progress
 			progress, err := h.rigManager.GetConvoyProgress(issue.RigID, issue.ID)
 			if err == nil && progress != nil {
 				issues[i].Convoy = &types.ConvoyInfo{
@@ -104,6 +105,12 @@ func (h *WebSocketHandler) buildSnapshot() ([]byte, error) {
 					Title:    issue.Title,
 					Progress: *progress,
 				}
+			}
+
+			// Get raw dependencies for convoy children resolution
+			deps, err := h.rigManager.GetRawDependencies(issue.RigID, issue.ID)
+			if err == nil && len(deps) > 0 {
+				issues[i].Dependencies = deps
 			}
 		}
 	}

@@ -63,6 +63,7 @@ export interface Issue {
   labels?: string[];
   dependency_count: number;
   dependent_count: number;
+  dependencies?: IssueDependency[];  // Raw dependencies (included for convoys)
   convoy?: ConvoyInfo;
 }
 
@@ -152,6 +153,15 @@ export interface Dependency {
   from_id: string;
   to_id: string;
   type: 'blocks' | 'parent-child';
+}
+
+// IssueDependency entry from beads (raw format)
+export interface IssueDependency {
+  issue_id: string;
+  depends_on_id: string;
+  type: 'blocks' | 'tracks' | 'parent-child';
+  created_at?: string;
+  created_by?: string;
 }
 
 // Comment on an issue

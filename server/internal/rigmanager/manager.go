@@ -361,6 +361,18 @@ func (m *Manager) GetConvoyProgress(rigID, issueID string) (*types.ConvoyProgres
 	return rig.QueryService.GetConvoyProgress(issueID)
 }
 
+// GetRawDependencies returns raw dependency entries for an issue.
+func (m *Manager) GetRawDependencies(rigID, issueID string) ([]types.IssueDependency, error) {
+	rig, err := m.GetRig(rigID)
+	if err != nil {
+		return nil, err
+	}
+	if rig.QueryService == nil {
+		return nil, fmt.Errorf("rig %s has no query service", rigID)
+	}
+	return rig.QueryService.GetRawDependencies(issueID)
+}
+
 // RefreshRig forces a refresh of rig data (clears cache).
 func (m *Manager) RefreshRig(rigID string) error {
 	rig, err := m.GetRig(rigID)
