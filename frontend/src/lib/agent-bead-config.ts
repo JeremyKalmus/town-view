@@ -28,6 +28,28 @@ export const WORK_BEAD_TYPES: IssueType[] = [
 ]
 
 /**
+ * Town-level work types - active work for the Town Operations Center view
+ *
+ * Differs from WORK_BEAD_TYPES:
+ * - WORK_BEAD_TYPES: Individual agent work items (task, bug, feature, chore, merge-request, molecule)
+ * - TOWN_WORK_TYPES: Includes coordination beads (epic, convoy) visible at town level
+ *
+ * Use TOWN_WORK_TYPES when showing town-wide active work including:
+ * - Epics being coordinated by Mayor/Crew
+ * - Convoys in progress
+ * - All individual work items
+ */
+export const TOWN_WORK_TYPES: IssueType[] = [
+  'epic',
+  'task',
+  'bug',
+  'feature',
+  'chore',
+  'convoy',
+  'molecule',
+]
+
+/**
  * Event bead types - what HAPPENED (lifecycle events)
  * Used for Tab 3 in AgentPeekPanel (Events/Lifecycle)
  * Includes: session start/end, wisp, patrol complete, merge events
@@ -49,6 +71,13 @@ export function isEventBeadType(type: IssueType): boolean {
 }
 
 /**
+ * Check if a bead type is a town-level work type (includes coordination beads)
+ */
+export function isTownWorkType(type: IssueType): boolean {
+  return TOWN_WORK_TYPES.includes(type)
+}
+
+/**
  * Filter issues to only work beads (excludes events)
  */
 export function filterToWorkBeads(issues: Issue[]): Issue[] {
@@ -60,6 +89,13 @@ export function filterToWorkBeads(issues: Issue[]): Issue[] {
  */
 export function filterToEventBeads(issues: Issue[]): Issue[] {
   return issues.filter(issue => isEventBeadType(issue.issue_type))
+}
+
+/**
+ * Filter issues to town-level work (includes coordination beads like epic/convoy)
+ */
+export function filterToTownWork(issues: Issue[]): Issue[] {
+  return issues.filter(issue => isTownWorkType(issue.issue_type))
 }
 
 // ============================================================================
