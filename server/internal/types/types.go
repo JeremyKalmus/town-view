@@ -23,6 +23,7 @@ type Issue struct {
 	DependentCount  int         `json:"dependent_count"`
 	Parent          string      `json:"parent,omitempty"`
 	Convoy          *ConvoyInfo `json:"convoy,omitempty"`
+	RigID           string      `json:"rig_id,omitempty"` // Set by server for WebSocket grouping
 }
 
 // Dependency represents a dependency relationship between issues.

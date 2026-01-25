@@ -282,7 +282,7 @@ func (m *Manager) GetRig(rigID string) (*Rig, error) {
 	return rig, nil
 }
 
-// ListIssues returns issues from a specific rig.
+// ListIssues returns issues from a specific rig with RigID set.
 func (m *Manager) ListIssues(rigID string, filter query.IssueFilter) ([]types.Issue, error) {
 	rig, err := m.GetRig(rigID)
 	if err != nil {
@@ -291,7 +291,15 @@ func (m *Manager) ListIssues(rigID string, filter query.IssueFilter) ([]types.Is
 	if rig.QueryService == nil {
 		return nil, fmt.Errorf("rig %s has no query service", rigID)
 	}
-	return rig.QueryService.ListIssues(filter)
+	issues, err := rig.QueryService.ListIssues(filter)
+	if err != nil {
+		return nil, err
+	}
+	// Set RigID on each issue for frontend grouping
+	for i := range issues {
+		issues[i].RigID = rigID
+	}
+	return issues, nil
 }
 
 // GetIssue returns a specific issue from a rig.
@@ -306,7 +314,7 @@ func (m *Manager) GetIssue(rigID, issueID string) (*types.Issue, error) {
 	return rig.QueryService.GetIssue(issueID)
 }
 
-// ListAllIssues returns issues from all rigs.
+// ListAllIssues returns issues from all rigs with RigID set for each.
 func (m *Manager) ListAllIssues(filter query.IssueFilter) []types.Issue {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -318,6 +326,10 @@ func (m *Manager) ListAllIssues(filter query.IssueFilter) []types.Issue {
 			if err != nil {
 				slog.Debug("Failed to list issues for rig", "rig", rig.ID, "error", err)
 				continue
+			}
+			// Set RigID on each issue for frontend grouping
+			for i := range issues {
+				issues[i].RigID = rig.ID
 			}
 			result = append(result, issues...)
 		}
