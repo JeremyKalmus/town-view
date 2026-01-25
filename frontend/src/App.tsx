@@ -4,6 +4,7 @@ import { PlanningView } from '@/components/features/PlanningView'
 import { MonitoringView } from '@/components/features/MonitoringView'
 import { AuditView } from '@/components/features/AuditView'
 import { TownDashboard, isHQRig } from '@/components/features/TownDashboard'
+import { TownDashboardV2 } from '@/components/features/TownDashboardV2'
 import { OfflineBanner } from '@/components/layout/OfflineBanner'
 import { Toast, ToastProvider, ToastViewport } from '@/components/ui/Toast'
 import { ViewSwitcher } from '@/components/ui/ViewSwitcher'
@@ -22,7 +23,7 @@ function App() {
   const { selectedRig, setSelectedRig } = useRigStore()
   const { toast, hideToast } = useToastStore()
   const { status: connectivityStatus } = useConnectivityStore()
-  const { viewMode } = useUIStore()
+  const { viewMode, dashboardVersion, setDashboardVersion } = useUIStore()
 
   // WebSocket connection for real-time updates
   useWebSocket({ debug: process.env.NODE_ENV === 'development' })
@@ -118,7 +119,18 @@ function App() {
             <h1 className="font-display text-lg font-semibold tracking-wide">
               {selectedRig?.name.toUpperCase() || 'TOWN VIEW'}
             </h1>
-            <ViewSwitcher />
+            <div className="flex items-center gap-4">
+              {selectedRig && isHQRig(selectedRig) && (
+                <button
+                  onClick={() => setDashboardVersion(dashboardVersion === 'v1' ? 'v2' : 'v1')}
+                  className="text-xs px-2 py-1 rounded border border-border hover:bg-bg-tertiary transition-colors text-text-secondary"
+                  title={`Switch to dashboard ${dashboardVersion === 'v1' ? 'V2' : 'V1'}`}
+                >
+                  {dashboardVersion === 'v1' ? 'Try V2' : 'Use V1'}
+                </button>
+              )}
+              <ViewSwitcher />
+            </div>
           </div>
 
           {/* Main content area */}
@@ -140,7 +152,11 @@ function App() {
                 <p className="text-text-muted">Select a rig from the sidebar</p>
               </div>
             ) : isHQRig(selectedRig) ? (
-              <TownDashboard refreshKey={refreshKey} />
+              dashboardVersion === 'v2' ? (
+                <TownDashboardV2 refreshKey={refreshKey} />
+              ) : (
+                <TownDashboard refreshKey={refreshKey} />
+              )
             ) : (
               <SimpleViewTransition viewKey={viewMode}>
                 {viewMode === 'planning' ? (
