@@ -1,12 +1,13 @@
 /**
  * AgentPeekPanel - Slide-out panel showing agent details.
+ * Uses Service Layer data from WebSocket-powered data store.
  * Tabs: Work History (beads worked on), Mail (sent/received), Activity (event history)
  */
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useMemo } from 'react'
 import { RefreshCw, Mail, Activity, FileText, Terminal, Users, GitMerge } from 'lucide-react'
 import { SlideOutPanel } from '@/components/layout/SlideOutPanel'
-import { cachedFetch } from '@/services/cache'
+import { useDataStore, selectIssuesByRig, selectMail, selectActivity } from '@/stores/data-store'
 import { cn } from '@/lib/class-utils'
 import { formatRelativeTime } from '@/lib/status-utils'
 import type { Agent, Issue, Mail as MailType } from '@/types'
@@ -39,13 +40,15 @@ export function AgentPeekPanel({
 }: AgentPeekPanelProps) {
   const [activeTab, setActiveTab] = useState<PanelTab>('beads')
 
-  // Role-specific beads state
-  const [roleBeads, setRoleBeads] = useState<Issue[]>([])
-  const [beadsLoading, setBeadsLoading] = useState(false)
+  // Get data from WebSocket-powered Service Layer store
+  const allIssues = useDataStore(selectIssuesByRig(rigId))
+  const allMail = useDataStore(selectMail)
+  const allActivity = useDataStore(selectActivity)
+  const connected = useDataStore((state) => state.connected)
+  const lastUpdated = useDataStore((state) => state.lastUpdated)
 
-  // Mail state
-  const [mailMessages, setMailMessages] = useState<MailType[]>([])
-  const [mailLoading, setMailLoading] = useState(false)
+  // Loading state: true until we have data
+  const loading = !lastUpdated
 
   // Get role config for display
   const roleConfig = agent ? getAgentViewConfig(agent.role_type) : null
@@ -60,6 +63,24 @@ export function AgentPeekPanel({
       fieldLower.includes(pattern)
     )
   }
+
+  // Filter issues to role-relevant beads
+  const roleBeads = useMemo(() => {
+    if (!agent || !roleConfig) return []
+
+    // Build type filter from role config (worksWith + monitors + produces)
+    const allTypes = new Set([
+      ...roleConfig.worksWith,
+      ...roleConfig.monitors,
+      ...roleConfig.produces,
+    ])
+
+    // Filter to relevant types and sort by updated_at
+    return allIssues
+      .filter(issue => allTypes.has(issue.issue_type))
+      .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+      .slice(0, 100)
+  }, [allIssues, agent, roleConfig])
 
   // Separate work beads from event beads (ADR-004)
   // Apply role-specific filtering for refinery (merge tasks) and witness (patrol beads)
@@ -118,75 +139,31 @@ export function AgentPeekPanel({
     })
   }, [roleBeads, agent])
 
-  // Fetch role-specific beads (molecules for witness, MRs for refinery, etc.)
-  const fetchRoleBeads = useCallback(async () => {
-    if (!agent || !roleConfig) return
+  // Filter mail to/from this agent
+  const mailMessages = useMemo(() => {
+    if (!agent) return []
 
-    setBeadsLoading(true)
-    try {
-      // Build type filter from role config (worksWith + monitors + produces)
-      const allTypes = new Set([
-        ...roleConfig.worksWith,
-        ...roleConfig.monitors,
-        ...roleConfig.produces,
-      ])
-      const typeFilter = Array.from(allTypes).join(',')
+    const agentPatterns = [
+      agent.id.toLowerCase(),
+      agent.name.toLowerCase(),
+      `${rigId}/${agent.name}`.toLowerCase(),
+      `${rigId}/${agent.role_type}`.toLowerCase(),
+    ]
 
-      const url = `/api/rigs/${rigId}/issues?all=true&types=${typeFilter}`
-
-      const result = await cachedFetch<Issue[]>(url, {
-        cacheTTL: 60 * 1000,
-        returnStaleOnError: true,
+    return allMail
+      .filter(mail => {
+        const from = (mail.from || '').toLowerCase()
+        const to = (mail.to || '').toLowerCase()
+        return agentPatterns.some(pattern =>
+          from.includes(pattern) || to.includes(pattern)
+        )
       })
+      .slice(0, 20)
+  }, [allMail, agent, rigId])
 
-      if (result.data) {
-        // Sort by updated_at descending - take more items to ensure we capture
-        // work beads that might be older than recent events
-        const sorted = result.data
-          .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
-          .slice(0, 100) // Increased limit to capture patrol/merge beads
-        setRoleBeads(sorted)
-      }
-    } catch (err) {
-      console.error('Failed to fetch role beads:', err)
-    } finally {
-      setBeadsLoading(false)
-    }
-  }, [rigId, agent, roleConfig])
-
-  // Fetch mail for this agent
-  const fetchMail = useCallback(async () => {
-    if (!agent) return
-
-    setMailLoading(true)
-    try {
-      const url = `/api/rigs/${rigId}/agents/${agent.name}/mail?limit=10`
-
-      const result = await cachedFetch<MailType[]>(url, {
-        cacheTTL: 30 * 1000,
-        returnStaleOnError: true,
-      })
-
-      if (result.data) {
-        setMailMessages(result.data)
-      }
-    } catch (err) {
-      console.error('Failed to fetch mail:', err)
-    } finally {
-      setMailLoading(false)
-    }
-  }, [rigId, agent])
-
-  // Fetch data when panel opens
-  useEffect(() => {
-    if (isOpen && agent) {
-      fetchRoleBeads()
-      fetchMail()
-    } else if (!isOpen) {
-      setRoleBeads([])
-      setMailMessages([])
-    }
-  }, [isOpen, agent, fetchRoleBeads, fetchMail])
+  // Activity events from EventStore (for future use - could merge with eventBeads)
+  // Currently using eventBeads (issues with type='event') for lifecycle display
+  void allActivity // Acknowledge but don't use yet - eventBeads handles lifecycle
 
   const title = agent?.name ? `Agent: ${agent.name}` : 'Agent Details'
 
@@ -232,6 +209,17 @@ export function AgentPeekPanel({
               <code className="px-1.5 py-0.5 rounded bg-bg-secondary text-text-secondary font-mono text-[11px]">
                 {terminalCommand}
               </code>
+            </div>
+
+            {/* Connection status */}
+            <div className="mt-2 flex items-center gap-2 text-xs">
+              <span className={cn(
+                'w-2 h-2 rounded-full',
+                connected ? 'bg-green-500 animate-pulse' : 'bg-red-500'
+              )} />
+              <span className="text-text-muted">
+                {connected ? 'Live data from Service Layer' : 'Reconnecting...'}
+              </span>
             </div>
           </div>
         )}
@@ -297,7 +285,7 @@ export function AgentPeekPanel({
         {/* Work Beads tab (excludes events) */}
         {activeTab === 'beads' && (
           <div className="flex-1 overflow-auto p-4">
-            {beadsLoading ? (
+            {loading ? (
               <div className="flex items-center justify-center h-32 text-text-muted">
                 <RefreshCw className="w-5 h-5 animate-spin mr-2" />
                 Loading {getRoleTabLabel(agent?.role_type).toLowerCase()}...
@@ -335,7 +323,7 @@ export function AgentPeekPanel({
         {/* Mail tab */}
         {activeTab === 'mail' && (
           <div className="flex-1 overflow-auto p-4">
-            {mailLoading ? (
+            {loading ? (
               <div className="flex items-center justify-center h-32 text-text-muted">
                 <RefreshCw className="w-5 h-5 animate-spin mr-2" />
                 Loading mail...
@@ -361,7 +349,7 @@ export function AgentPeekPanel({
         {/* Lifecycle Events tab (event type beads only) */}
         {activeTab === 'activity' && (
           <div className="flex-1 overflow-auto p-4">
-            {beadsLoading ? (
+            {loading ? (
               <div className="flex items-center justify-center h-32 text-text-muted">
                 <RefreshCw className="w-5 h-5 animate-spin mr-2" />
                 Loading lifecycle events...
