@@ -407,10 +407,21 @@ function AgentBeadMatrix() {
         <h2 className="section-header mb-2">AGENT ↔ BEAD TYPE MATRIX</h2>
         <p className="text-sm text-text-muted">
           Cross-reference showing which agents interact with which bead types.
-          <span className="text-status-in-progress"> ●</span> = works with,
-          <span className="text-status-closed"> ●</span> = produces,
-          <span className="text-accent-primary"> ●</span> = monitors
         </p>
+        <div className="flex gap-6 mt-2 text-sm">
+          <span className="flex items-center gap-1.5">
+            <span className="text-amber-400 font-bold">●</span>
+            <span className="text-text-secondary">Works with</span>
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="text-emerald-400 font-bold">●</span>
+            <span className="text-text-secondary">Produces</span>
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="text-sky-400 font-bold">●</span>
+            <span className="text-text-secondary">Monitors</span>
+          </span>
+        </div>
       </div>
 
       <div className="overflow-x-auto">
@@ -420,7 +431,10 @@ function AgentBeadMatrix() {
               <th className="text-left py-2 px-3 font-medium text-text-muted">Agent</th>
               {allBeadTypes.map(type => (
                 <th key={type.type} className="text-center py-2 px-2 font-normal">
-                  <span className={type.colorClass} title={type.label}>{type.icon}</span>
+                  <div className="flex flex-col items-center gap-0.5">
+                    <span className={type.colorClass}>{type.icon}</span>
+                    <span className="text-[10px] text-text-secondary font-normal">{type.label}</span>
+                  </div>
                 </th>
               ))}
             </tr>
@@ -439,11 +453,11 @@ function AgentBeadMatrix() {
 
                   return (
                     <td key={type.type} className="text-center py-2 px-2">
-                      <div className="flex justify-center gap-0.5">
-                        {works && <span className="text-status-in-progress text-xs">●</span>}
-                        {produces && <span className="text-status-closed text-xs">●</span>}
-                        {monitors && <span className="text-accent-primary text-xs">●</span>}
-                        {!works && !produces && !monitors && <span className="text-text-muted/30">·</span>}
+                      <div className="flex justify-center gap-1">
+                        {works && <span className="text-amber-400 text-sm font-bold" title="Works with">●</span>}
+                        {produces && <span className="text-emerald-400 text-sm font-bold" title="Produces">●</span>}
+                        {monitors && <span className="text-sky-400 text-sm font-bold" title="Monitors">●</span>}
+                        {!works && !produces && !monitors && <span className="text-neutral-600">·</span>}
                       </div>
                     </td>
                   )

@@ -1,6 +1,45 @@
 import type { Meta, StoryObj } from '@storybook/react'
 import { useState } from 'react'
 import { AgentPeekPanel } from './AgentPeekPanel'
+import type { Agent } from '@/types'
+
+// Mock agent data for stories
+const mockAgents: Agent[] = [
+  {
+    id: 'townview/witness',
+    name: 'witness',
+    rig: 'townview',
+    role_type: 'witness',
+    state: 'working',
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: 'townview/refinery',
+    name: 'refinery',
+    rig: 'townview',
+    role_type: 'refinery',
+    state: 'idle',
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: 'townview/polecats/dementus',
+    name: 'dementus',
+    rig: 'townview',
+    role_type: 'polecat',
+    state: 'working',
+    hook_bead: 'to-task-123',
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: 'townview/crew/jeremy',
+    name: 'jeremy',
+    rig: 'townview',
+    role_type: 'crew',
+    state: 'working',
+    hook_bead: 'to-epic-456',
+    updated_at: new Date().toISOString(),
+  },
+]
 
 // Since AgentPeekPanel uses hooks internally, we create a wrapper
 // that lets us control the panel state in stories
@@ -18,7 +57,7 @@ function AgentPeekPanelWrapper({
         onClick={() => setIsOpen(true)}
         className="px-4 py-2 bg-accent-chrome text-bg-primary rounded-md hover:bg-accent-chrome/90 transition-colors"
       >
-        Open Terminal: {props.agentName || props.agentId}
+        Open Terminal: {props.agent?.name || 'Unknown'}
       </button>
       <AgentPeekPanel
         {...props}
@@ -53,8 +92,7 @@ export const Default: Story = {
     <AgentPeekPanelWrapper
       initialOpen={true}
       rigId="townview"
-      agentId="to-polecat-dementus"
-      agentName="dementus"
+      agent={mockAgents[2]} // dementus polecat
     />
   ),
 }
@@ -64,8 +102,7 @@ export const Closed: Story = {
     <AgentPeekPanelWrapper
       initialOpen={false}
       rigId="townview"
-      agentId="to-polecat-dementus"
-      agentName="dementus"
+      agent={mockAgents[2]}
     />
   ),
 }
@@ -74,9 +111,8 @@ export const WitnessAgent: Story = {
   render: () => (
     <AgentPeekPanelWrapper
       initialOpen={true}
-      rigId="gas-town"
-      agentId="gt-witness"
-      agentName="witness"
+      rigId="townview"
+      agent={mockAgents[0]} // witness
     />
   ),
 }
@@ -85,19 +121,28 @@ export const RefineryAgent: Story = {
   render: () => (
     <AgentPeekPanelWrapper
       initialOpen={true}
-      rigId="bullet-farm"
-      agentId="bf-refinery"
-      agentName="refinery"
+      rigId="townview"
+      agent={mockAgents[1]} // refinery
     />
   ),
 }
 
-export const WithoutAgentName: Story = {
+export const CrewAgent: Story = {
   render: () => (
     <AgentPeekPanelWrapper
       initialOpen={true}
-      rigId="citadel"
-      agentId="ct-polecat-1"
+      rigId="townview"
+      agent={mockAgents[3]} // crew/jeremy
+    />
+  ),
+}
+
+export const NoAgent: Story = {
+  render: () => (
+    <AgentPeekPanelWrapper
+      initialOpen={true}
+      rigId="townview"
+      agent={null}
     />
   ),
 }
@@ -105,13 +150,6 @@ export const WithoutAgentName: Story = {
 // Interactive story showing all controls
 export const Interactive: Story = {
   render: () => {
-    const agents = [
-      { rigId: 'townview', agentId: 'to-witness', name: 'witness' },
-      { rigId: 'townview', agentId: 'to-refinery', name: 'refinery' },
-      { rigId: 'townview', agentId: 'to-polecat-dementus', name: 'dementus' },
-      { rigId: 'gas-town', agentId: 'gt-polecat-1', name: 'runner-1' },
-    ]
-
     return (
       <div className="p-6 space-y-4">
         <h2 className="section-header mb-4">AGENT TERMINAL PANELS</h2>
@@ -119,13 +157,12 @@ export const Interactive: Story = {
           Click any button to open the terminal panel for that agent.
         </p>
         <div className="flex flex-wrap gap-3">
-          {agents.map((agent) => (
+          {mockAgents.map((agent) => (
             <AgentPeekPanelWrapper
-              key={agent.agentId}
+              key={agent.id}
               initialOpen={false}
-              rigId={agent.rigId}
-              agentId={agent.agentId}
-              agentName={agent.name}
+              rigId={agent.rig}
+              agent={agent}
             />
           ))}
         </div>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { PlanningView } from '@/components/features/PlanningView'
 import { MonitoringView } from '@/components/features/MonitoringView'
@@ -39,7 +39,20 @@ function App() {
   const [updatedIssueIds] = useState<Set<string>>(new Set())
 
   // Use WebSocket rigs when connected and available, otherwise HTTP fallback
-  const rigs = wsConnected && wsRigs.length > 0 ? wsRigs : httpRigs
+  const rawRigs = wsConnected && wsRigs.length > 0 ? wsRigs : httpRigs
+
+  // Sort rigs: HQ (Town) first, then alphabetically by name
+  const rigs = useMemo(() => {
+    return [...rawRigs].sort((a, b) => {
+      // HQ always first
+      const aIsHQ = isHQRig(a)
+      const bIsHQ = isHQRig(b)
+      if (aIsHQ && !bIsHQ) return -1
+      if (!aIsHQ && bIsHQ) return 1
+      // Then alphabetically by name
+      return a.name.localeCompare(b.name)
+    })
+  }, [rawRigs])
 
   // Offline detection and connectivity management
   const { tryReconnect } = useOffline({

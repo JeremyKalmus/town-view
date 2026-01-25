@@ -192,16 +192,28 @@ export function PlanningView({ refreshKey = 0, updatedIssueIds }: PlanningViewPr
     fetchHistory()
   }, [selectedRig, selectedIssue, activeTab])
 
+  // Filter out operational/automated tasks (witness patrol, etc.)
+  // Planning view is for feature work, not operational monitoring
+  const planningIssues = useMemo(() => {
+    return issues.filter((issue) => {
+      // Exclude witness patrol tasks (to-wisp-*, hq-wisp-*, etc.)
+      if (issue.id.includes('-wisp-')) return false
+      // Exclude automated tasks with no creator (unless they're epics which may be created programmatically)
+      if (!issue.created_by && issue.issue_type !== 'epic') return false
+      return true
+    })
+  }, [issues])
+
   // Build parent lookup for filtering
   const parentLookup = new Map<string, string | undefined>()
-  for (const issue of issues) {
+  for (const issue of planningIssues) {
     parentLookup.set(issue.id, getParentId(issue.id) ?? undefined)
   }
 
   // Build blocker lookup from dependencies (from_id blocks to_id, so to_id is blocked by from_id)
   const blockerLookup = useMemo(() => {
     const lookup = new Map<string, Array<{ id: string; title?: string }>>()
-    const issueMap = new Map(issues.map((i) => [i.id, i]))
+    const issueMap = new Map(planningIssues.map((i) => [i.id, i]))
 
     for (const dep of dependencies) {
       if (dep.type === 'blocks') {
@@ -217,13 +229,13 @@ export function PlanningView({ refreshKey = 0, updatedIssueIds }: PlanningViewPr
     }
 
     return lookup
-  }, [dependencies, issues])
+  }, [dependencies, planningIssues])
 
   // Get visible node IDs based on filters
-  const visibleIds = getVisibleNodeIds(issues, treeFilters, parentLookup)
+  const visibleIds = getVisibleNodeIds(planningIssues, treeFilters, parentLookup)
 
   // Filter issues and build tree (pass dependencies for parent-child hierarchy)
-  const filteredIssues = issues.filter((issue) => visibleIds.has(issue.id))
+  const filteredIssues = planningIssues.filter((issue) => visibleIds.has(issue.id))
   const treeData = buildTree(filteredIssues)
 
   // Convert tree to TreeNodeData format with blocker info
@@ -242,7 +254,7 @@ export function PlanningView({ refreshKey = 0, updatedIssueIds }: PlanningViewPr
   const useVirtualization = totalNodeCount > 100
 
   // Get unique assignees for filter dropdown
-  const assignees = [...new Set(issues.map((i) => i.assignee).filter(Boolean))] as string[]
+  const assignees = [...new Set(planningIssues.map((i) => i.assignee).filter(Boolean))] as string[]
 
   // Handle node click - open panel
   const handleNodeClick = useCallback((issue: Issue) => {
@@ -414,7 +426,7 @@ export function PlanningView({ refreshKey = 0, updatedIssueIds }: PlanningViewPr
       {/* KPI Summary */}
       <div className="px-6 pt-4 pb-2 bg-bg-secondary">
         <KPISummary
-          issues={issues}
+          issues={planningIssues}
           activeFilter={activeKPIFilter}
           onFilterChange={handleKPIFilterChange}
         />

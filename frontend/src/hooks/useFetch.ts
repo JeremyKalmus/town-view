@@ -89,6 +89,19 @@ export function useFetch<T>(
   // Track if component is mounted to prevent state updates after unmount
   const mountedRef = useRef(true)
 
+  // Use refs for callback/data options to prevent infinite loops
+  // when these are defined inline (new reference each render)
+  const onSuccessRef = useRef(onSuccess)
+  const onErrorRef = useRef(onError)
+  const initialDataRef = useRef(initialData)
+
+  // Update refs when values change
+  useEffect(() => {
+    onSuccessRef.current = onSuccess
+    onErrorRef.current = onError
+    initialDataRef.current = initialData
+  }, [onSuccess, onError, initialData])
+
   useEffect(() => {
     mountedRef.current = true
     return () => {
@@ -115,15 +128,15 @@ export function useFetch<T>(
 
       if (mountedRef.current) {
         setData(result)
-        onSuccess?.(result)
+        onSuccessRef.current?.(result)
       }
     } catch (err) {
       if (mountedRef.current) {
         const message = extractErrorMessage(err, errorPrefix)
         setError(message)
-        onError?.(message)
+        onErrorRef.current?.(message)
         if (clearOnError) {
-          setData(initialData ?? null)
+          setData(initialDataRef.current ?? null)
         }
       }
     } finally {
@@ -131,7 +144,7 @@ export function useFetch<T>(
         setLoading(false)
       }
     }
-  }, [url, errorPrefix, onSuccess, onError, clearOnError, initialData])
+  }, [url, errorPrefix, clearOnError]) // Removed unstable dependencies
 
   // Fetch on mount and when url changes (if enabled)
   useEffect(() => {
@@ -143,10 +156,10 @@ export function useFetch<T>(
   // Reset data when url becomes null/undefined
   useEffect(() => {
     if (!url) {
-      setData(initialData ?? null)
+      setData(initialDataRef.current ?? null)
       setError(null)
     }
-  }, [url, initialData])
+  }, [url])
 
   return {
     data,

@@ -7,6 +7,9 @@ import { useCallback } from 'react'
 import type { Agent, AgentRoleType, AgentState } from '@/types'
 import { useFetch } from './useFetch'
 
+// Stable empty array reference to prevent infinite re-renders
+const EMPTY_AGENTS: Agent[] = []
+
 export interface UseAgentsResult {
   /** List of agents for the rig */
   agents: Agent[]
@@ -40,7 +43,7 @@ export function useAgents(rigId: string | undefined): UseAgentsResult {
   const { data, loading, error, refetch } = useFetch<Agent[]>(
     rigId ? `/api/rigs/${rigId}/agents` : null,
     {
-      initialData: [],
+      initialData: EMPTY_AGENTS, // Use stable reference to prevent infinite re-renders
       errorPrefix: 'Failed to fetch agents',
       clearOnError: true,
     }

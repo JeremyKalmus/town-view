@@ -46,18 +46,22 @@ const statusColorClasses = {
 
 /**
  * Map agent state to health dot color.
- * - idle: green (status-closed)
- * - working: blue (status-open)
- * - stuck: red (status-blocked)
- * - paused: yellow (status-in-progress)
- * - undefined: gray (status-deferred)
+ * - starting/running/idle: green (healthy states)
+ * - working: blue (active)
+ * - stuck: red (needs attention)
+ * - paused/stopping: yellow (transitional)
+ * - stopped/none: gray (inactive)
  */
 const healthDotColorClasses: Record<AgentState | 'none', string> = {
-  idle: 'bg-status-closed',
-  working: 'bg-status-open',
-  stuck: 'bg-status-blocked',
-  paused: 'bg-status-in-progress',
-  none: 'bg-status-deferred',
+  starting: 'bg-yellow-500',
+  running: 'bg-green-500',
+  idle: 'bg-blue-500',
+  working: 'bg-amber-500',
+  stuck: 'bg-red-500',
+  stopping: 'bg-orange-500',
+  stopped: 'bg-gray-500',
+  paused: 'bg-purple-500',
+  none: 'bg-gray-400',
 }
 
 /**

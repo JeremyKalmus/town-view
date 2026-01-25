@@ -7,6 +7,9 @@ import { useMemo } from 'react'
 import { useFetch } from './useFetch'
 import type { TestStatus } from '@/types'
 
+// Stable empty array reference to prevent infinite re-renders
+const EMPTY_TESTS: TestStatus[] = []
+
 export type TestStatusFilter = 'all' | 'passing' | 'failing' | 'regression' | 'skipped';
 export type TestSortField = 'name' | 'last_run' | 'status';
 export type SortDirection = 'asc' | 'desc';
@@ -120,7 +123,7 @@ export function useTestSuiteStatus(
     '/api/telemetry/tests',
     {
       enabled,
-      initialData: [],
+      initialData: EMPTY_TESTS, // Use stable reference to prevent infinite re-renders
       errorPrefix: 'Failed to fetch test suite status',
     }
   )

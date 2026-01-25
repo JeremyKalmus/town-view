@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gastown/townview/internal/events"
 	"github.com/gastown/townview/internal/query"
@@ -64,6 +66,12 @@ func New(config Config, eventStore *events.Store, agentRegistry *registry.Regist
 	if err := m.discoverRigs(); err != nil {
 		return nil, fmt.Errorf("failed to discover rigs: %w", err)
 	}
+
+	// Discover agents from tmux sessions
+	m.discoverAgents()
+
+	// Start background agent discovery (refresh every 30 seconds)
+	go m.agentDiscoveryLoop()
 
 	return m, nil
 }
@@ -363,4 +371,148 @@ func (m *Manager) RefreshAll() {
 			rig.QueryService.InvalidateCache()
 		}
 	}
+}
+
+// agentDiscoveryLoop periodically discovers agents from tmux sessions.
+func (m *Manager) agentDiscoveryLoop() {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		m.discoverAgents()
+	}
+}
+
+// discoverAgents discovers agents from tmux sessions and registers them.
+// Sessions are expected to follow the pattern: gt-{rig}-{role} or gt-{rig}-{role}-{name}
+func (m *Manager) discoverAgents() {
+	if m.agentRegistry == nil {
+		return
+	}
+
+	// Run tmux list-sessions to get all sessions
+	cmd := exec.Command("tmux", "list-sessions", "-F", "#{session_name}")
+	output, err := cmd.Output()
+	if err != nil {
+		slog.Debug("Failed to list tmux sessions", "error", err)
+		return
+	}
+
+	// Known singleton roles that don't have additional names
+	singletonRoles := map[string]bool{
+		"witness":  true,
+		"refinery": true,
+		"mayor":    true,
+		"deacon":   true,
+	}
+
+	// Parse sessions and register agents
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	discovered := 0
+
+	for _, session := range lines {
+		session = strings.TrimSpace(session)
+		if session == "" || !strings.HasPrefix(session, "gt-") {
+			continue
+		}
+
+		// Also handle hq-mayor pattern
+		if strings.HasPrefix(session, "hq-mayor") {
+			m.registerAgent("hq", "mayor", "mayor", &session)
+			discovered++
+			continue
+		}
+
+		// Parse gt-{rig}-{rest} pattern
+		parts := strings.SplitN(session[3:], "-", 2) // Skip "gt-"
+		if len(parts) < 2 {
+			continue
+		}
+
+		rigName := parts[0]
+		rest := parts[1]
+
+		// Check if this rig exists
+		m.mu.RLock()
+		_, rigExists := m.rigs[rigName]
+		m.mu.RUnlock()
+
+		if !rigExists {
+			slog.Debug("Skipping agent from unknown rig", "session", session, "rig", rigName)
+			continue
+		}
+
+		// Parse the role and name
+		var role, name string
+		restParts := strings.SplitN(rest, "-", 2)
+		rolePart := restParts[0]
+
+		if singletonRoles[rolePart] {
+			// Singleton role: gt-townview-witness
+			role = rolePart
+			name = rolePart
+		} else if rolePart == "crew" && len(restParts) > 1 {
+			// Crew: gt-townview-crew-jeremy
+			role = "crew"
+			name = restParts[1]
+		} else if rolePart == "polecats" && len(restParts) > 1 {
+			// Polecat: gt-townview-polecats-obsidian (less common pattern)
+			role = "polecat"
+			name = restParts[1]
+		} else {
+			// Polecat with direct name: gt-townview-obsidian
+			role = "polecat"
+			name = rest
+		}
+
+		m.registerAgent(rigName, role, name, &session)
+		discovered++
+	}
+
+	if discovered > 0 {
+		slog.Debug("Discovered agents from tmux", "count", discovered)
+	}
+}
+
+// registerAgent registers an agent with the registry.
+func (m *Manager) registerAgent(rig, role, name string, sessionID *string) {
+	// Build agent ID
+	var id string
+	switch role {
+	case "witness", "refinery", "mayor", "deacon":
+		id = fmt.Sprintf("%s/%s", rig, role)
+	case "crew":
+		id = fmt.Sprintf("%s/crew/%s", rig, name)
+	default:
+		id = fmt.Sprintf("%s/polecats/%s", rig, name)
+	}
+
+	// Map role string to AgentRole
+	var agentRole registry.AgentRole
+	switch role {
+	case "witness":
+		agentRole = registry.RoleWitness
+	case "refinery":
+		agentRole = registry.RoleRefinery
+	case "crew":
+		agentRole = registry.RoleCrew
+	case "mayor":
+		agentRole = registry.RoleMayor
+	case "deacon":
+		agentRole = registry.RoleDeacon
+	default:
+		agentRole = registry.RolePolecat
+	}
+
+	reg := registry.AgentRegistration{
+		ID:                  id,
+		Rig:                 rig,
+		Role:                agentRole,
+		Name:                name,
+		SessionID:           sessionID,
+		HeartbeatIntervalMs: 30000, // 30 second heartbeat expected
+		Status:              registry.StatusRunning,
+	}
+
+	m.agentRegistry.Register(reg)
 }

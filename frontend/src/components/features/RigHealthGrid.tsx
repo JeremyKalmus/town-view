@@ -40,9 +40,13 @@ function HealthDot({ state }: { state: AgentState | null }) {
   }
 
   const stateClass = {
+    starting: 'health-dot-starting',
+    running: 'health-dot-running',
     idle: 'health-dot-idle',
     working: 'health-dot-working',
     stuck: 'health-dot-stuck',
+    stopping: 'health-dot-stopping',
+    stopped: 'health-dot-stopped',
     paused: 'health-dot-paused',
   }[state] || 'health-dot-idle'
 

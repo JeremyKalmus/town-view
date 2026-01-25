@@ -7,6 +7,9 @@ import { useMemo } from 'react'
 import { useDataStore, selectIssuesByRig } from '@/stores/data-store'
 import type { Issue, ConvoyProgress } from '@/types'
 
+// Stable empty array selector to prevent infinite re-renders
+const EMPTY_SELECTOR = () => [] as Issue[]
+
 /**
  * Convoy with required progress information.
  * Extends Issue but guarantees convoy data is present.
@@ -63,7 +66,12 @@ export function useActiveConvoys(
   const { enabled = true } = options
 
   // Get issues for this rig from data store
-  const allIssues = useDataStore(rigId ? selectIssuesByRig(rigId) : () => [])
+  // Use stable EMPTY_SELECTOR to prevent infinite re-renders when rigId is undefined
+  const selector = useMemo(
+    () => (rigId ? selectIssuesByRig(rigId) : EMPTY_SELECTOR),
+    [rigId]
+  )
+  const allIssues = useDataStore(selector)
   const connected = useDataStore((state) => state.connected)
 
   // Filter to active convoys with progress data

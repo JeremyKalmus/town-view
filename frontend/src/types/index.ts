@@ -34,11 +34,15 @@ export type AgentRoleType =
   | 'deacon'
   | 'mayor';
 
-// Agent state enum
+// Agent state enum (matches state machine: starting → running ↔ idle/working → stuck/stopping → stopped)
 export type AgentState =
+  | 'starting'
+  | 'running'
   | 'idle'
   | 'working'
   | 'stuck'
+  | 'stopping'
+  | 'stopped'
   | 'paused';
 
 // Issue interface
@@ -91,6 +95,8 @@ export interface Agent {
   rig: string;
   state: AgentState;
   hook_bead?: string;
+  session_id?: string;
+  created_at?: string;
   updated_at: string;
   last_activity_at?: string;
 }

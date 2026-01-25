@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
-import type { Rig, Agent, Issue } from '@/types'
-import { useDataStore, selectAgentsByRig, selectIssuesByRig, selectConnected, selectLastUpdated } from '@/stores/data-store'
+import type { Rig, Agent } from '@/types'
+import { useDataStore, selectAgentsByRig, selectConnected, selectLastUpdated } from '@/stores/data-store'
 import { cachedFetch } from '@/services/cache'
 import { cn } from '@/lib/class-utils'
 import { formatRelativeTime } from '@/lib/status-utils'
 import { SkeletonAgentGrid, ErrorState } from '@/components/ui/Skeleton'
 import { AgentPeekPanel, ActiveConvoysPanel } from './monitoring'
+import { AgentCard } from './AgentCard'
 import { TestSuiteList } from './TestSuiteList'
 import { useTestSuiteStatus, isRegression } from '@/hooks/useTestSuiteStatus'
 
@@ -54,24 +55,16 @@ function isAgentStuck(agent: Agent): boolean {
 export function MonitoringView({ rig, refreshKey = 0 }: MonitoringViewProps) {
   // Data store (WebSocket-fed)
   const wsAgents = useDataStore(selectAgentsByRig(rig.id))
-  const wsIssues = useDataStore(selectIssuesByRig(rig.id))
   const wsConnected = useDataStore(selectConnected)
   const wsLastUpdated = useDataStore(selectLastUpdated)
 
   // HTTP fallback state
   const [httpAgents, setHttpAgents] = useState<Agent[]>([])
-  const [httpIssues, setHttpIssues] = useState<Issue[]>([])
   const [httpLoading, setHttpLoading] = useState(true)
   const [httpLastUpdated, setHttpLastUpdated] = useState<Date | null>(null)
 
   // Use WebSocket data when connected and available, otherwise HTTP fallback
   const agents = wsConnected && wsAgents.length > 0 ? wsAgents : httpAgents
-  const allIssues = wsConnected && wsIssues.length > 0 ? wsIssues : httpIssues
-  // Filter to in_progress issues for monitoring view
-  const issues = useMemo(() =>
-    allIssues.filter(issue => issue.status === 'in_progress'),
-    [allIssues]
-  )
   const loading = !wsConnected && httpLoading
   const lastUpdated = wsConnected && wsLastUpdated
     ? new Date(wsLastUpdated)
@@ -140,42 +133,10 @@ export function MonitoringView({ rig, refreshKey = 0 }: MonitoringViewProps) {
     fetchAgents()
   }, [rig.id, refreshKey, retryCount, wsConnected, wsAgents.length])
 
-  // Fetch issues via HTTP as fallback
-  useEffect(() => {
-    // Skip HTTP fetch if WebSocket is connected and has data
-    if (wsConnected && wsIssues.length > 0) {
-      return
-    }
-
-    const fetchIssues = async () => {
-      // Fetch all issues, filter client-side
-      const url = `/api/rigs/${rig.id}/issues?all=true`
-      const skipCache = isInitialLoadRef.current
-      const result = await cachedFetch<Issue[]>(url, {
-        cacheTTL: 2 * 60 * 1000,
-        returnStaleOnError: true,
-        skipCache, // Skip cache on initial load
-      })
-
-      if (result.data) {
-        setHttpIssues(result.data)
-      }
-    }
-
-    fetchIssues()
-  }, [rig.id, refreshKey, retryCount, wsConnected, wsIssues.length])
-
   // Handle retry
   const handleRetry = useCallback(() => {
     setRetryCount((c) => c + 1)
   }, [])
-
-  // Create issue lookup for hooked beads
-  const issueMap = useMemo(() => {
-    const map = new Map<string, Issue>()
-    issues.forEach(issue => map.set(issue.id, issue))
-    return map
-  }, [issues])
 
   // Group agents by role type
   const agentsByRole = useMemo(() => {
@@ -326,7 +287,6 @@ export function MonitoringView({ rig, refreshKey = 0 }: MonitoringViewProps) {
                       label={roleConfig.label}
                       icon={roleConfig.icon}
                       agents={roleAgents}
-                      issueMap={issueMap}
                       workingCount={workingInRole}
                       onAgentClick={handleAgentClick}
                     />
@@ -347,7 +307,6 @@ export function MonitoringView({ rig, refreshKey = 0 }: MonitoringViewProps) {
                     label={roleConfig.label}
                     icon={roleConfig.icon}
                     agents={polecatAgents}
-                    issueMap={issueMap}
                     workingCount={workingInRole}
                     onAgentClick={handleAgentClick}
                   />
@@ -378,7 +337,6 @@ interface RoleSectionProps {
   label: string
   icon: string
   agents: Agent[]
-  issueMap: Map<string, Issue>
   workingCount: number
   onAgentClick: (agent: Agent) => void
 }
@@ -390,7 +348,6 @@ function CompactRoleSection({
   label,
   icon,
   agents,
-  issueMap,
   workingCount,
   onAgentClick,
 }: RoleSectionProps) {
@@ -403,23 +360,22 @@ function CompactRoleSection({
   })
 
   return (
-    <div>
+    <div className="min-w-[280px] flex-1">
       {/* Role header */}
-      <div className="flex items-center gap-2 mb-2">
-        <span className="text-base">{icon}</span>
-        <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wide">{label}</h2>
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-lg">{icon}</span>
+        <h2 className="text-sm font-semibold text-text-secondary uppercase tracking-wide">{label}</h2>
         <span className="text-xs text-text-muted">
           {workingCount}/{agents.length}
         </span>
       </div>
 
-      {/* Agent cards */}
-      <div className="flex flex-wrap gap-2">
+      {/* Agent cards - responsive grid */}
+      <div className="grid grid-cols-1 gap-3">
         {sortedAgents.map(agent => (
-          <CompactAgentCard
+          <AgentCard
             key={agent.id}
             agent={agent}
-            hookedIssue={agent.hook_bead ? issueMap.get(agent.hook_bead) : undefined}
             onClick={() => onAgentClick(agent)}
           />
         ))}
@@ -429,13 +385,12 @@ function CompactRoleSection({
 }
 
 /**
- * Section component for a role type showing all agents of that role in a compact grid
+ * Section component for a role type showing all agents of that role in a grid
  */
 function RoleSection({
   label,
   icon,
   agents,
-  issueMap,
   workingCount,
   onAgentClick,
 }: RoleSectionProps) {
@@ -449,7 +404,7 @@ function RoleSection({
 
   return (
     <div>
-      <div className="flex items-center gap-2 mb-2">
+      <div className="flex items-center gap-2 mb-3">
         <span className="text-base">{icon}</span>
         <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wide">{label}</h2>
         <span className="text-xs text-text-muted">
@@ -457,72 +412,15 @@ function RoleSection({
         </span>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      {/* Agent cards - use bigger AgentCard in grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
         {sortedAgents.map(agent => (
-          <CompactAgentCard
+          <AgentCard
             key={agent.id}
             agent={agent}
-            hookedIssue={agent.hook_bead ? issueMap.get(agent.hook_bead) : undefined}
             onClick={() => onAgentClick(agent)}
           />
         ))}
-      </div>
-    </div>
-  )
-}
-
-interface CompactAgentCardProps {
-  agent: Agent
-  hookedIssue?: Issue
-  onClick: () => void
-}
-
-/**
- * Compact card showing agent status at a glance
- */
-function CompactAgentCard({ agent, hookedIssue, onClick }: CompactAgentCardProps) {
-  const isStuck = isAgentStuck(agent)
-  const effectiveState = isStuck ? 'stuck' : (agent.hook_bead ? 'working' : agent.state || 'idle')
-
-  const stateConfig: Record<string, { bg: string; border: string; dot: string }> = {
-    stuck: { bg: 'bg-status-blocked/10', border: 'border-status-blocked/30', dot: 'bg-status-blocked' },
-    working: { bg: 'bg-status-in-progress/10', border: 'border-status-in-progress/30', dot: 'bg-status-in-progress' },
-    idle: { bg: 'bg-bg-secondary', border: 'border-border', dot: 'bg-text-muted' },
-    paused: { bg: 'bg-status-deferred/10', border: 'border-status-deferred/30', dot: 'bg-status-deferred' },
-  }
-
-  const config = stateConfig[effectiveState] || stateConfig.idle
-
-  return (
-    <div
-      className={cn(
-        'w-[160px] px-3 py-2 rounded-md border cursor-pointer transition-all',
-        config.bg,
-        config.border,
-        'hover:brightness-110 hover:shadow-sm'
-      )}
-      onClick={onClick}
-    >
-      {/* Top row: status dot + name */}
-      <div className="flex items-center gap-2">
-        <span className={cn('w-2 h-2 rounded-full flex-shrink-0', config.dot)} />
-        <span className="text-sm font-medium text-text-primary truncate">{agent.name}</span>
-      </div>
-
-      {/* Bottom row: work info or status + time */}
-      <div className="flex items-center justify-between mt-1">
-        {hookedIssue ? (
-          <span className="text-[10px] text-text-secondary truncate max-w-[80%]" title={hookedIssue.title}>
-            {hookedIssue.issue_type}: {hookedIssue.title}
-          </span>
-        ) : agent.hook_bead ? (
-          <span className="text-[10px] text-status-in-progress mono truncate">{agent.hook_bead}</span>
-        ) : (
-          <span className="text-[10px] text-text-muted capitalize">{effectiveState}</span>
-        )}
-        <span className="text-[10px] text-text-muted flex-shrink-0 ml-1">
-          {formatRelativeTime(agent.last_activity_at || agent.updated_at)}
-        </span>
       </div>
     </div>
   )
