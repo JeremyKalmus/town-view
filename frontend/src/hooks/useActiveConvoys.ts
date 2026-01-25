@@ -7,8 +7,11 @@ import { useMemo } from 'react'
 import { useDataStore, selectIssuesByRig } from '@/stores/data-store'
 import type { Issue, ConvoyProgress } from '@/types'
 
-// Stable empty array selector to prevent infinite re-renders
-const EMPTY_SELECTOR = () => [] as Issue[]
+// Convoys live in HQ (town-level beads), not in individual rigs
+const HQ_RIG_ID = 'hq'
+
+// Stable selector for HQ issues where convoys live
+const selectHQIssues = selectIssuesByRig(HQ_RIG_ID)
 
 /**
  * Convoy with required progress information.
@@ -60,27 +63,24 @@ export interface UseActiveConvoysResult {
  * ```
  */
 export function useActiveConvoys(
-  rigId: string | undefined,
+  _rigId: string | undefined, // Kept for API compatibility; convoys are fetched from HQ
   options: UseActiveConvoysOptions = {}
 ): UseActiveConvoysResult {
   const { enabled = true } = options
 
-  // Get issues for this rig from data store
-  // Use stable EMPTY_SELECTOR to prevent infinite re-renders when rigId is undefined
-  const selector = useMemo(
-    () => (rigId ? selectIssuesByRig(rigId) : EMPTY_SELECTOR),
-    [rigId]
-  )
-  const allIssues = useDataStore(selector)
+  // Get issues from HQ where convoys live (town-level, not rig-level)
+  // Convoys coordinate work across the town, so they're stored in HQ beads
+  const hqIssues = useDataStore(selectHQIssues)
   const connected = useDataStore((state) => state.connected)
 
   // Filter to active convoys with progress data
+  // Note: rigId is kept for potential future filtering (e.g., convoys targeting a specific rig)
   const convoys = useMemo(() => {
-    if (!enabled || !rigId) {
+    if (!enabled) {
       return []
     }
 
-    return allIssues
+    return hqIssues
       .filter((issue): issue is Issue & { convoy: NonNullable<Issue['convoy']> } =>
         // Must be a convoy type
         issue.issue_type === 'convoy' &&
@@ -95,7 +95,7 @@ export function useActiveConvoys(
         ...issue,
         convoy: issue.convoy,
       }))
-  }, [allIssues, enabled, rigId])
+  }, [hqIssues, enabled])
 
   // Refresh is a no-op - data comes from WebSocket automatically
   const refresh = () => {
