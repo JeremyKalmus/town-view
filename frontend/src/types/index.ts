@@ -63,7 +63,6 @@ export interface Issue {
   labels?: string[];
   dependency_count: number;
   dependent_count: number;
-  dependencies?: IssueDependency[];  // Raw dependencies (included for convoys)
   convoy?: ConvoyInfo;
 }
 
@@ -153,15 +152,6 @@ export interface Dependency {
   from_id: string;
   to_id: string;
   type: 'blocks' | 'parent-child';
-}
-
-// IssueDependency entry from beads (raw format)
-export interface IssueDependency {
-  issue_id: string;
-  depends_on_id: string;
-  type: 'blocks' | 'tracks' | 'parent-child';
-  created_at?: string;
-  created_by?: string;
 }
 
 // Comment on an issue
@@ -277,17 +267,6 @@ export interface TestHistoryEntry {
   error_message?: string;
 }
 
-// Test regression - a test that was passing but now fails
-export interface TestRegression {
-  test_name: string;
-  test_file: string;
-  last_passed_at: string;
-  last_passed_commit?: string;
-  first_failed_at: string;
-  first_failed_commit?: string;
-  error_message?: string;
-}
-
 // Work item health status based on duration
 export type WorkItemHealthStatus = 'healthy' | 'concerning' | 'stuck';
 
@@ -297,7 +276,66 @@ export interface WorkItemHealth {
   started_at: string;
 }
 
-// Token usage summary per model or agent
+// =============================================================================
+// Telemetry Types (ADR-015)
+// =============================================================================
+
+// Token usage for a single API request
+export interface TokenUsage {
+  agent_id: string;
+  bead_id?: string;
+  timestamp: string;
+  input_tokens: number;
+  output_tokens: number;
+  model: string;
+  request_type: string; // chat, tool_use, completion
+}
+
+// Git commit made by an agent
+export interface GitChange {
+  agent_id: string;
+  bead_id?: string;
+  timestamp: string;
+  commit_sha: string;
+  branch: string;
+  files_changed: number;
+  insertions: number;
+  deletions: number;
+  message: string;
+  diff_summary?: string;
+}
+
+// Single test outcome
+export interface TestResult {
+  agent_id: string;
+  bead_id?: string;
+  timestamp: string;
+  commit_sha?: string;
+  test_file: string;
+  test_name: string;
+  status: string; // passed, failed, skipped, error
+  duration_ms: number;
+  error_message?: string;
+  stack_trace?: string;
+}
+
+// Aggregated test execution
+export interface TestRun {
+  agent_id: string;
+  bead_id?: string;
+  timestamp: string;
+  commit_sha?: string;
+  branch?: string;
+  command: string;
+  total: number;
+  passed: number;
+  failed: number;
+  skipped: number;
+  duration_ms: number;
+  results: TestResult[];
+}
+
+// Token usage summary per model
 export interface TokenModelSummary {
   input: number;
   output: number;
@@ -310,4 +348,34 @@ export interface TokenSummary {
   total_cost_usd?: number;
   by_model: Record<string, TokenModelSummary>;
   by_agent: Record<string, TokenModelSummary>;
+}
+
+// Aggregated git change statistics
+export interface GitSummary {
+  total_commits: number;
+  total_files_changed: number;
+  total_insertions: number;
+  total_deletions: number;
+  by_agent: Record<string, number>; // commit count per agent
+}
+
+// Aggregated test result statistics
+export interface TestSummary {
+  total_runs: number;
+  total_tests: number;
+  total_passed: number;
+  total_failed: number;
+  total_skipped: number;
+  by_agent: Record<string, number>; // run count per agent
+}
+
+// All telemetry data for a single agent
+export interface AgentTelemetry {
+  agent_id: string;
+  token_usage: TokenUsage[];
+  git_changes: GitChange[];
+  test_runs: TestRun[];
+  token_summary: TokenSummary;
+  git_summary: GitSummary;
+  test_summary: TestSummary;
 }
