@@ -8,6 +8,8 @@ import type { TestRegression } from '@/types'
 export interface TestRegressionsPanelProps {
   defaultExpanded?: boolean
   className?: string
+  /** If true, hides the entire panel when there are no regressions (default: true) */
+  hideWhenEmpty?: boolean
 }
 
 /**
@@ -18,6 +20,7 @@ export interface TestRegressionsPanelProps {
 export function TestRegressionsPanel({
   defaultExpanded = true,
   className,
+  hideWhenEmpty = true,
 }: TestRegressionsPanelProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded)
   const [contentHeight, setContentHeight] = useState<number | undefined>(undefined)
@@ -41,6 +44,12 @@ export function TestRegressionsPanel({
       e.preventDefault()
       handleToggle()
     }
+  }
+
+  // Hide the panel entirely when empty (no regressions, not loading, no error)
+  // This must be AFTER all hooks are called to satisfy React's rules of hooks
+  if (hideWhenEmpty && !loading && !error && regressions.length === 0) {
+    return null
   }
 
   return (

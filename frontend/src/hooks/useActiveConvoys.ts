@@ -89,7 +89,10 @@ export function useActiveConvoys(
         // Must have convoy data with progress
         issue.convoy !== undefined &&
         issue.convoy !== null &&
-        issue.convoy.progress !== undefined
+        issue.convoy.progress !== undefined &&
+        // Exclude completed convoys (100% done should not be in "active" list)
+        (issue.convoy.progress.total === 0 ||
+         issue.convoy.progress.completed < issue.convoy.progress.total)
       )
       .map((issue) => ({
         ...issue,

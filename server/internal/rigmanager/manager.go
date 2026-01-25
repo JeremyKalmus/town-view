@@ -349,7 +349,8 @@ func (m *Manager) GetDependencies(rigID, issueID string) (*types.IssueDependenci
 	return rig.QueryService.GetDependencies(issueID)
 }
 
-// GetConvoyProgress returns progress for a convoy/molecule.
+// GetConvoyProgress returns progress for a convoy/molecule with cross-rig resolution.
+// This handles external references (external:rig:issue-id) by querying the target rig.
 func (m *Manager) GetConvoyProgress(rigID, issueID string) (*types.ConvoyProgress, error) {
 	rig, err := m.GetRig(rigID)
 	if err != nil {
@@ -358,7 +359,75 @@ func (m *Manager) GetConvoyProgress(rigID, issueID string) (*types.ConvoyProgres
 	if rig.QueryService == nil {
 		return nil, fmt.Errorf("rig %s has no query service", rigID)
 	}
-	return rig.QueryService.GetConvoyProgress(issueID)
+
+	// Get raw dependencies to find all tracked issues
+	deps, err := rig.QueryService.GetRawDependencies(issueID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get dependencies: %w", err)
+	}
+
+	total := 0
+	completed := 0
+
+	for _, dep := range deps {
+		if dep.Type != "tracks" {
+			continue
+		}
+		total++
+
+		// Check if this is an external reference
+		if strings.HasPrefix(dep.DependsOnID, "external:") {
+			// Parse external:rig:issue-id format
+			parts := strings.SplitN(dep.DependsOnID, ":", 3)
+			if len(parts) != 3 {
+				// Can't parse, count as open
+				continue
+			}
+			targetRig := parts[1]
+			targetIssueID := parts[2]
+
+			// Resolve via target rig's QueryService
+			status := m.resolveIssueStatus(targetRig, targetIssueID)
+			if status == "closed" || status == "tombstone" {
+				completed++
+			}
+		} else {
+			// Local reference - resolve in same rig
+			status := m.resolveIssueStatus(rigID, dep.DependsOnID)
+			if status == "closed" || status == "tombstone" {
+				completed++
+			}
+		}
+	}
+
+	var percentage float64
+	if total > 0 {
+		percentage = float64(completed) / float64(total) * 100
+	}
+
+	return &types.ConvoyProgress{
+		Completed:  completed,
+		Total:      total,
+		Percentage: percentage,
+	}, nil
+}
+
+// resolveIssueStatus gets the status of an issue from a specific rig.
+func (m *Manager) resolveIssueStatus(rigID, issueID string) string {
+	m.mu.RLock()
+	rig, ok := m.rigs[rigID]
+	m.mu.RUnlock()
+
+	if !ok || rig.QueryService == nil {
+		return "" // Unknown
+	}
+
+	issue, err := rig.QueryService.GetIssue(issueID)
+	if err != nil || issue == nil {
+		return "" // Not found
+	}
+
+	return issue.Status
 }
 
 // GetRawDependencies returns raw dependency entries for an issue.
