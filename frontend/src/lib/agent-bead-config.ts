@@ -35,6 +35,44 @@ export const WORK_BEAD_TYPES: IssueType[] = [
 export const EVENT_BEAD_TYPES: IssueType[] = ['event']
 
 /**
+ * Town-level work types - work items visible in Town dashboard
+ *
+ * Unlike WORK_BEAD_TYPES (which tracks what individual agents DO),
+ * TOWN_WORK_TYPES includes coordination beads (epic, convoy) that
+ * represent work at the town orchestration level.
+ *
+ * Key differences from WORK_BEAD_TYPES:
+ * - Includes 'epic' (multi-task coordination)
+ * - Includes 'convoy' (multi-agent workflows)
+ * - Excludes 'merge-request' (operational, not coordination)
+ *
+ * Used for: Town dashboard active work display
+ */
+export const TOWN_WORK_TYPES: IssueType[] = [
+  'epic',
+  'task',
+  'bug',
+  'feature',
+  'chore',
+  'convoy',
+  'molecule',
+]
+
+/**
+ * Check if a bead type is a town-level work type
+ */
+export function isTownWorkType(type: IssueType): boolean {
+  return TOWN_WORK_TYPES.includes(type)
+}
+
+/**
+ * Filter issues to only town-level work beads (includes epics and convoys)
+ */
+export function filterToTownWork(issues: Issue[]): Issue[] {
+  return issues.filter(issue => isTownWorkType(issue.issue_type))
+}
+
+/**
  * Check if a bead type is a work type
  */
 export function isWorkBeadType(type: IssueType): boolean {
