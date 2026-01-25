@@ -10,3 +10,4 @@ export { ConvoyGroupHeader, type ConvoyGroupHeaderProps } from './ConvoyGroupHea
 export { ConvoyChildList, type ConvoyChildListProps } from './ConvoyChildList'
 export { ActiveConvoysPanel, type ActiveConvoysPanelProps } from './ActiveConvoysPanel'
 export { TestRegressionsPanel, type TestRegressionsPanelProps } from './TestRegressionsPanel'
+export { TokenBurnRateWidget, type TokenBurnRateWidgetProps } from './TokenBurnRateWidget'

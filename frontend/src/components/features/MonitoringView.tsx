@@ -5,7 +5,7 @@ import { getAgents } from '@/services'
 import { cn } from '@/lib/class-utils'
 import { formatRelativeTime } from '@/lib/status-utils'
 import { SkeletonAgentGrid, ErrorState } from '@/components/ui/Skeleton'
-import { AgentPeekPanel, ActiveConvoysPanel } from './monitoring'
+import { AgentPeekPanel, ActiveConvoysPanel, TestRegressionsPanel, TokenBurnRateWidget } from './monitoring'
 import { AgentCard } from './AgentCard'
 import { TestSuiteList } from './TestSuiteList'
 import { useTestSuiteStatus, isRegression } from '@/hooks/useTestSuiteStatus'
@@ -182,6 +182,9 @@ export function MonitoringView({ rig, refreshKey = 0 }: MonitoringViewProps) {
           </p>
         </div>
         <div className="flex items-center gap-4 text-sm">
+          {/* Token usage widget - compact in header */}
+          <TokenBurnRateWidget className="hidden lg:block" />
+
           {/* Tab switcher */}
           <div className="flex items-center gap-1 p-1 bg-bg-tertiary rounded-lg">
             <button
@@ -245,6 +248,9 @@ export function MonitoringView({ rig, refreshKey = 0 }: MonitoringViewProps) {
       {/* Content based on active tab */}
       {activeTab === 'agents' ? (
         <>
+          {/* Test Regressions Panel - prominent alert at top if regressions exist */}
+          <TestRegressionsPanel className="mb-4" />
+
           {/* Active Convoys Panel - positioned above agent sections */}
           <ActiveConvoysPanel rigId={rig.id} className="mb-6" />
 
@@ -310,8 +316,13 @@ export function MonitoringView({ rig, refreshKey = 0 }: MonitoringViewProps) {
         </>
       ) : (
         /* Tests tab content */
-        <div className="card h-[calc(100vh-200px)]">
-          <TestSuiteList />
+        <div className="space-y-4">
+          {/* Test Regressions Panel - prominent in tests tab */}
+          <TestRegressionsPanel defaultExpanded={true} />
+
+          <div className="card h-[calc(100vh-260px)]">
+            <TestSuiteList />
+          </div>
         </div>
       )}
 
