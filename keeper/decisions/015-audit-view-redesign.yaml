@@ -1,0 +1,156 @@
+keeper_decision:
+  id: ADR-015
+  date: 2026-01-25
+  spec: "Audit View redesign - agent telemetry, git changes timeline, test history, bead telemetry"
+  mode: growth
+  status: approved
+
+  reuse:
+    frontend:
+      - Card component (src/components/ui/card.tsx) - container
+      - Badge component (src/components/ui/badge.tsx) - status indicators
+      - VirtualList (src/components/ui/VirtualList.tsx) - large list rendering
+      - useDataStore selectors - agent/issue data
+      - AgentCard pattern - for agent selection
+      - Tabs pattern (if exists) or create simple tab component
+      - formatRelativeTime (src/lib/status-utils.ts) - time formatting
+    backend:
+      - telemetry.Collector interface (GetAgentTelemetry, GetBeadTelemetry, GetGitChanges, GetTestHistory)
+      - handlers.Handlers struct
+      - Existing route pattern: /api/telemetry/*
+    data:
+      - telemetry.AgentTelemetry type
+      - telemetry.BeadTelemetry type
+      - telemetry.GitChange type
+      - telemetry.TestHistoryEntry type
+      - telemetry.GitSummary type
+      - telemetry.TestSummary type
+      - telemetry.TokenSummary type
+
+  extensions:
+    backend:
+      handlers.go:
+        add_handler: "GetAgentTelemetry - expose telemetry for specific agent"
+        add_handler: "GetBeadTelemetry - expose telemetry for specific bead"
+        add_handler: "GetGitChanges - expose git commit history"
+        add_handler: "GetTestHistory - expose test history for specific test"
+        add_handler: "GetGitSummary - expose git statistics"
+
+  new_seeds:
+    - type: route
+      name: GET /api/telemetry/agents/:agentId
+      scope: telemetry
+      justification: "Exposes GetAgentTelemetry() - all data for an agent"
+
+    - type: route
+      name: GET /api/telemetry/beads/:beadId
+      scope: telemetry
+      justification: "Exposes GetBeadTelemetry() - all data for a bead"
+
+    - type: route
+      name: GET /api/telemetry/git
+      scope: telemetry
+      justification: "Exposes GetGitChanges() - commit history"
+
+    - type: route
+      name: GET /api/telemetry/git/summary
+      scope: telemetry
+      justification: "Exposes GetGitSummary() - git statistics"
+
+    - type: route
+      name: GET /api/telemetry/tests/:testName/history
+      scope: telemetry
+      justification: "Exposes GetTestHistory() - history for specific test"
+
+    - type: component
+      name: AuditView (redesigned)
+      scope: views
+      justification: "Complete redesign of audit page with telemetry integration"
+
+    - type: component
+      name: AgentTelemetryPanel
+      scope: audit
+      justification: "Shows all telemetry data for selected agent"
+
+    - type: component
+      name: GitChangesTimeline
+      scope: audit
+      justification: "Timeline view of git commits with agent attribution"
+
+    - type: component
+      name: TestHistoryPanel
+      scope: audit
+      justification: "Drill-down view for individual test history"
+
+  forbidden:
+    - Do not keep the old AuditView implementation - it will be replaced
+    - Do not create new database tables - use existing telemetry SQLite
+    - Do not add WebSocket channels - use on-demand fetch for audit data
+    - Do not duplicate type definitions - import from telemetry package
+
+  constraints:
+    - Remove old AuditView and create new implementation
+    - Use VirtualList for long commit/test histories
+    - Agent selection should use existing agent data from useDataStore
+    - Bead selection can use search/autocomplete pattern
+    - All telemetry API routes use query params for filtering (agent_id, bead_id, since, until, limit)
+    - Timeline components should support time-range filtering
+    - Use existing Card/Badge components for consistent styling
+
+  verification:
+    test_files:
+      - file: server/internal/handlers/handlers_test.go
+        action: extend
+      - file: frontend/src/components/features/AuditView.test.tsx
+        action: create
+      - file: frontend/src/components/features/audit/AgentTelemetryPanel.test.tsx
+        action: create
+      - file: frontend/src/components/features/audit/GitChangesTimeline.test.tsx
+        action: create
+      - file: frontend/src/hooks/useTelemetry.test.ts
+        action: create
+    criteria:
+      - id: AC-1
+        criterion: "GET /api/telemetry/agents/:agentId returns agent telemetry"
+        test_name: "should return full telemetry for agent including tokens, git, tests"
+      - id: AC-2
+        criterion: "GET /api/telemetry/beads/:beadId returns bead telemetry"
+        test_name: "should return full telemetry for bead"
+      - id: AC-3
+        criterion: "GET /api/telemetry/git returns git changes"
+        test_name: "should return git commits with agent and bead attribution"
+      - id: AC-4
+        criterion: "GET /api/telemetry/tests/:testName/history returns test history"
+        test_name: "should return chronological test results for specific test"
+      - id: AC-5
+        criterion: "AuditView displays agent selector and telemetry"
+        test_name: "should show agent list and telemetry when agent selected"
+      - id: AC-6
+        criterion: "GitChangesTimeline shows commit history"
+        test_name: "should render commits with diff stats and timestamps"
+      - id: AC-7
+        criterion: "TestHistoryPanel shows test run history"
+        test_name: "should render test results with pass/fail indicators"
+    fixtures:
+      - mockAgentTelemetry
+      - mockBeadTelemetry
+      - mockGitChanges
+      - mockTestHistory
+    run_command: "cd frontend && npm test"
+
+  rationale: |
+    The current AuditView is basic and doesn't leverage the rich telemetry data
+    available in the collector. This decision approves a complete redesign:
+
+    1. Five new API routes exposing existing collector methods
+    2. Three new UI components for the redesigned audit experience
+    3. Complete replacement of old AuditView
+
+    The audit view will provide:
+    - Agent-centric telemetry view (select agent, see all their activity)
+    - Git changes timeline (who committed what, when)
+    - Test history drill-down (when did this test start failing?)
+    - Bead telemetry (all activity related to a specific bead)
+
+    This is "growth" mode - we're exposing existing backend capabilities
+    with a redesigned frontend. No new data collection, just better visualization.

@@ -1,0 +1,113 @@
+keeper_decision:
+  id: ADR-014
+  date: 2026-01-25
+  spec: "Monitoring telemetry enhancements - test regressions panel, token burn rate widget"
+  mode: growth
+  status: approved
+
+  reuse:
+    frontend:
+      - Card component (src/components/ui/card.tsx) - container for widgets
+      - Badge component (src/components/ui/badge.tsx) - status indicators
+      - TestSuiteList (src/components/features/TestSuiteList.tsx) - reference pattern
+      - useDataStore (src/stores/data-store.ts) - WebSocket data access
+      - cn utility (src/lib/class-utils.ts) - className merging
+      - formatRelativeTime (src/lib/status-utils.ts) - time formatting
+    backend:
+      - telemetry.Collector interface (internal/telemetry/collector.go)
+      - handlers.Handlers struct (internal/handlers/handlers.go)
+      - Existing route pattern: /api/telemetry/*
+    data:
+      - telemetry.TestRegression type
+      - telemetry.TokenSummary type
+      - telemetry.TestStatus type
+
+  extensions:
+    backend:
+      handlers.go:
+        add_handler: "GetRegressions - expose telemetry.GetRegressions()"
+        add_handler: "GetTokenSummary - expose telemetry.GetTokenSummary()"
+    frontend:
+      data-store.ts:
+        add_selector: "selectTelemetry - for token/regression data if added to snapshot"
+
+  new_seeds:
+    - type: route
+      name: GET /api/telemetry/regressions
+      scope: telemetry
+      justification: "Exposes existing GetRegressions() method from collector"
+
+    - type: route
+      name: GET /api/telemetry/tokens/summary
+      scope: telemetry
+      justification: "Exposes existing GetTokenSummary() method from collector"
+
+    - type: component
+      name: TestRegressionsPanel
+      scope: monitoring
+      justification: "Dedicated view for test regressions - critical for quality monitoring"
+
+    - type: component
+      name: TokenBurnRateWidget
+      scope: monitoring
+      justification: "Cost visibility widget - essential for operational awareness"
+
+  forbidden:
+    - Do not create new state stores - use existing useDataStore or hooks
+    - Do not add polling - prefer WebSocket snapshot extension or on-demand fetch
+    - Do not duplicate telemetry types - import from telemetry package
+    - Do not create new design tokens - use existing status colors
+
+  constraints:
+    - Use existing Card/Badge components for widget display
+    - Follow TestSuiteList pattern for regression display
+    - API routes must follow /api/telemetry/* pattern
+    - Frontend types must mirror backend telemetry types
+    - Use hooks pattern (useRegressions, useTokenSummary) for data fetching
+    - Widgets should be collapsible like ActiveConvoysPanel
+
+  verification:
+    test_files:
+      - file: server/internal/handlers/handlers_test.go
+        action: extend
+      - file: frontend/src/components/features/monitoring/TestRegressionsPanel.test.tsx
+        action: create
+      - file: frontend/src/components/features/monitoring/TokenBurnRateWidget.test.tsx
+        action: create
+      - file: frontend/src/hooks/useRegressions.test.ts
+        action: create
+    criteria:
+      - id: AC-1
+        criterion: "GET /api/telemetry/regressions returns regression data"
+        test_name: "should return regressions when tests have regressed"
+      - id: AC-2
+        criterion: "GET /api/telemetry/tokens/summary returns token usage"
+        test_name: "should return token summary with by-model breakdown"
+      - id: AC-3
+        criterion: "TestRegressionsPanel displays regressed tests"
+        test_name: "should render regression list with last passed info"
+      - id: AC-4
+        criterion: "TokenBurnRateWidget displays token consumption"
+        test_name: "should render token totals and cost estimate"
+      - id: AC-5
+        criterion: "Widgets integrate with MonitoringView"
+        test_name: "should appear in monitoring view when data available"
+    fixtures:
+      - mockRegressions
+      - mockTokenSummary
+    run_command: "cd frontend && npm test"
+
+  rationale: |
+    The telemetry collector already implements GetRegressions() and GetTokenSummary()
+    but these are not exposed via API. This decision approves:
+
+    1. Two new API routes following existing /api/telemetry/* pattern
+    2. Two new UI components following Card/collapsible patterns
+
+    The implementation reuses:
+    - Existing telemetry types (no new data structures)
+    - Existing UI components (Card, Badge)
+    - Existing hook patterns (similar to useTestSuiteStatus)
+
+    This is a "growth" mode approval - we prefer extending the existing
+    telemetry API surface rather than creating new services.
