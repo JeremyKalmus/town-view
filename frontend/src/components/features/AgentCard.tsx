@@ -9,6 +9,19 @@ interface AgentCardProps {
   variant?: 'default' | 'compact'
 }
 
+// Singleton roles don't work on beads - they have specific jobs
+const SINGLETON_ROLES = new Set(['witness', 'refinery', 'mayor', 'deacon'])
+
+// Role descriptions for display
+const ROLE_DESCRIPTIONS: Record<string, string> = {
+  witness: 'Monitors polecat health',
+  refinery: 'Processes merge queue',
+  mayor: 'Town coordinator',
+  deacon: 'Session lifecycle',
+  crew: 'Human-managed worker',
+  polecat: 'Transient worker',
+}
+
 /**
  * Infer effective agent state.
  * If agent has hooked work but no explicit state (or idle), treat as working.
@@ -65,12 +78,18 @@ export function AgentCard({ agent, onClick, variant = 'default' }: AgentCardProp
           </div>
         </div>
 
-        {/* Hooked bead (if working) */}
-        {agent.hook_bead && (
+        {/* Secondary info - role-specific */}
+        {SINGLETON_ROLES.has(agent.role_type) ? (
+          // Singleton roles: show last activity
+          <div className="mt-2 text-xs text-text-muted">
+            Active {formatRelativeTime(agent.last_activity_at || agent.updated_at)}
+          </div>
+        ) : agent.hook_bead ? (
+          // Workers with hooked bead
           <div className="mt-2 mono text-xs text-amber-400 truncate">
             {agent.hook_bead}
           </div>
-        )}
+        ) : null}
       </div>
     )
   }
@@ -114,23 +133,42 @@ export function AgentCard({ agent, onClick, variant = 'default' }: AgentCardProp
         </span>
       </div>
 
-      {/* Hooked bead - grows to fill space */}
+      {/* Content section - role-specific */}
       <div className="mt-auto pt-3 border-t border-border">
-        {agent.hook_bead ? (
+        {SINGLETON_ROLES.has(agent.role_type) ? (
+          // Singleton roles: show their job description and last activity
           <>
-            <div className="text-xs text-text-muted mb-1">Hooked bead</div>
+            <div className="text-xs text-text-muted mb-1">
+              {ROLE_DESCRIPTIONS[agent.role_type] || 'System agent'}
+            </div>
+            <div className="text-sm text-text-secondary">
+              Active {formatRelativeTime(agent.last_activity_at || agent.updated_at)}
+            </div>
+          </>
+        ) : agent.hook_bead ? (
+          // Workers with hooked bead
+          <>
+            <div className="text-xs text-text-muted mb-1">Working on</div>
             <div className="mono text-sm text-amber-400 truncate">
               {agent.hook_bead}
             </div>
           </>
         ) : (
-          <div className="text-xs text-text-muted italic">No hooked bead</div>
+          // Workers without hooked bead (crew/polecat idle)
+          <>
+            <div className="text-xs text-text-muted mb-1">
+              {ROLE_DESCRIPTIONS[agent.role_type] || 'Worker'}
+            </div>
+            <div className="text-sm text-text-secondary italic">
+              Idle — no work assigned
+            </div>
+          </>
         )}
       </div>
 
       {/* Footer: Updated time */}
-      <div className="mt-3 text-xs text-text-muted text-right">
-        Updated {formatRelativeTime(agent.updated_at)}
+      <div className="mt-2 text-xs text-text-muted text-right">
+        {formatRelativeTime(agent.updated_at)}
       </div>
     </div>
   )
