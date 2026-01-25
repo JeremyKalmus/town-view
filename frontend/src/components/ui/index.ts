@@ -24,3 +24,4 @@ export {
 } from './Skeleton'
 export { ViewSwitcher, type ViewSwitcherProps } from './ViewSwitcher'
 export { Badge, type BadgeProps, type BadgeVariant } from './Badge'
+export { StatusDot, type StatusDotProps, type StatusDotSize } from './StatusDot'

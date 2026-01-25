@@ -3,8 +3,8 @@ import type { Rig, Agent, AgentState } from '@/types'
 import { getRigs, getAgents } from '@/services'
 import { useRigStore } from '@/stores/rig-store'
 import { useUIStore } from '@/stores/ui-store'
-import { getAgentStateIcon } from '@/lib/agent-utils'
 import { cn } from '@/lib/class-utils'
+import { StatusDot } from '@/components/ui'
 
 interface RigHealthGridProps {
   /** Key to trigger refresh */
@@ -29,35 +29,6 @@ interface RigHealthSummary {
   workerCount: number
   stuckCount: number
   openIssues: number
-}
-
-/**
- * HealthDot component - small colored dot indicator for agent health
- */
-function HealthDot({ state }: { state: AgentState | null }) {
-  if (!state) {
-    return <span className="health-dot health-dot-none" title="No agent" />
-  }
-
-  const stateClass = {
-    starting: 'health-dot-starting',
-    running: 'health-dot-running',
-    idle: 'health-dot-idle',
-    working: 'health-dot-working',
-    stuck: 'health-dot-stuck',
-    stopping: 'health-dot-stopping',
-    stopped: 'health-dot-stopped',
-    paused: 'health-dot-paused',
-  }[state] || 'health-dot-idle'
-
-  return (
-    <span
-      className={cn('health-dot', stateClass)}
-      title={state}
-    >
-      {getAgentStateIcon(state)}
-    </span>
-  )
 }
 
 /**
@@ -257,10 +228,10 @@ export function RigHealthGrid({
                       <div className="text-xs text-text-muted mono">{rig.prefix}</div>
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <HealthDot state={health?.witnessStatus ?? null} />
+                      <StatusDot state={health?.witnessStatus ?? null} />
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <HealthDot state={health?.refineryStatus ?? null} />
+                      <StatusDot state={health?.refineryStatus ?? null} />
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className="text-sm">
@@ -327,11 +298,11 @@ export function RigHealthGrid({
                 <div className="flex items-center gap-4 text-sm">
                   <div className="flex items-center gap-1">
                     <span className="text-text-muted">W:</span>
-                    <HealthDot state={health?.witnessStatus ?? null} />
+                    <StatusDot state={health?.witnessStatus ?? null} />
                   </div>
                   <div className="flex items-center gap-1">
                     <span className="text-text-muted">R:</span>
-                    <HealthDot state={health?.refineryStatus ?? null} />
+                    <StatusDot state={health?.refineryStatus ?? null} />
                   </div>
                   <div className="flex items-center gap-1">
                     <span className="text-text-muted">Workers:</span>
@@ -389,6 +360,4 @@ function computeHealthSummary(rig: Rig, agents: Agent[]): RigHealthSummary {
   }
 }
 
-// Export HealthDot for use in stories
-export { HealthDot }
 export type { RigHealthSummary }

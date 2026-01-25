@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react'
-import { RigHealthGrid, HealthDot } from './RigHealthGrid'
+import { RigHealthGrid } from './RigHealthGrid'
+import { StatusDot } from '@/components/ui'
 import type { Rig, Agent } from '@/types'
 
 // Mock data for stories
@@ -213,31 +214,63 @@ export const ManyRigs: Story = {
   },
 }
 
-// Separate story for HealthDot component
-export const HealthDotStates: Story = {
+// Separate story for StatusDot component (all states and sizes)
+export const StatusDotStates: Story = {
   render: () => (
-    <div className="p-6 space-y-4">
-      <h2 className="section-header mb-4">HEALTH DOT STATES</h2>
-      <div className="flex items-center gap-8">
+    <div className="p-6 space-y-6">
+      <h2 className="section-header mb-4">STATUS DOT STATES</h2>
+      <div className="flex items-center gap-8 flex-wrap">
         <div className="flex items-center gap-2">
-          <HealthDot state={null} />
+          <StatusDot state={null} />
           <span className="text-sm text-text-secondary">No agent</span>
         </div>
         <div className="flex items-center gap-2">
-          <HealthDot state="idle" />
+          <StatusDot state="starting" />
+          <span className="text-sm text-text-secondary">Starting</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <StatusDot state="running" />
+          <span className="text-sm text-text-secondary">Running</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <StatusDot state="idle" />
           <span className="text-sm text-text-secondary">Idle</span>
         </div>
         <div className="flex items-center gap-2">
-          <HealthDot state="working" />
+          <StatusDot state="working" />
           <span className="text-sm text-text-secondary">Working</span>
         </div>
         <div className="flex items-center gap-2">
-          <HealthDot state="stuck" />
+          <StatusDot state="stuck" />
           <span className="text-sm text-text-secondary">Stuck</span>
         </div>
         <div className="flex items-center gap-2">
-          <HealthDot state="paused" />
+          <StatusDot state="stopping" />
+          <span className="text-sm text-text-secondary">Stopping</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <StatusDot state="stopped" />
+          <span className="text-sm text-text-secondary">Stopped</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <StatusDot state="paused" />
           <span className="text-sm text-text-secondary">Paused</span>
+        </div>
+      </div>
+
+      <h2 className="section-header mb-4 mt-8">STATUS DOT SIZES</h2>
+      <div className="flex items-center gap-8">
+        <div className="flex items-center gap-2">
+          <StatusDot state="working" size="sm" />
+          <span className="text-sm text-text-secondary">Small</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <StatusDot state="working" size="md" />
+          <span className="text-sm text-text-secondary">Medium (default)</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <StatusDot state="working" size="lg" />
+          <span className="text-sm text-text-secondary">Large</span>
         </div>
       </div>
     </div>
