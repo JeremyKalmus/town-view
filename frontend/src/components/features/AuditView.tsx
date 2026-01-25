@@ -7,7 +7,6 @@ import { useFetch } from '@/hooks/useFetch'
 import { cn } from '@/lib/class-utils'
 import { getAgentRoleIcon, getAgentStateClass, getAgentStateBgClass } from '@/lib/agent-utils'
 import { formatRelativeTime } from '@/lib/status-utils'
-import { SkeletonAgentGrid, ErrorState } from '@/components/ui/Skeleton'
 import { Search, User, GitCommit, TestTube, Coins, LayoutDashboard, CheckCircle, XCircle, AlertTriangle, FileText } from 'lucide-react'
 import type { Agent, Issue, TestStatus } from '@/types'
 
@@ -60,28 +59,21 @@ export function AuditView(_props: AuditViewProps) {
   // HTTP fallback state for agents
   const [httpAgents, setHttpAgents] = useState<Agent[]>([])
   const [httpLoading, setHttpLoading] = useState(true)
-  const [httpError, setHttpError] = useState<string | null>(null)
 
   // Use WebSocket data when connected and available, otherwise HTTP fallback
   const agents = wsConnected && wsAgents.length > 0 ? wsAgents : httpAgents
   const issues = wsIssues
-  const loading = !wsConnected && httpLoading
 
-  // Selection state
-  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null)
+  // UI state
   const [activeTab, setActiveTab] = useState<AuditTab>('overview')
   const [beadSearch, setBeadSearch] = useState('')
-
-  // Retry counter
-  const [retryCount, setRetryCount] = useState(0)
 
   // Test suite data
   const { tests: testSuiteTests, loading: testsLoading } = useTestSuiteStatus({ enabled: true })
 
-  // Token summary data (filtered by agent if selected)
-  const tokenQueryParams = selectedAgentId ? `?agent_id=${selectedAgentId}` : ''
+  // Token summary data
   const { data: tokenSummary, loading: tokensLoading } = useFetch<TokenSummary>(
-    `/api/telemetry/tokens/summary${tokenQueryParams}`,
+    '/api/telemetry/tokens/summary',
     { enabled: !!selectedRig }
   )
 
@@ -100,34 +92,22 @@ export function AuditView(_props: AuditViewProps) {
     }
 
     setHttpLoading(true)
-    setHttpError(null)
 
     const fetchAgents = async () => {
       const result = await getAgents(selectedRig.id)
       if (result.data) {
         setHttpAgents(result.data)
       } else {
-        setHttpError(result.error || 'Failed to load agents')
         setHttpAgents([])
       }
       setHttpLoading(false)
     }
 
     fetchAgents()
-  }, [selectedRig?.id, retryCount, wsConnected, wsAgents.length])
+  }, [selectedRig?.id, wsConnected, wsAgents.length])
 
-  // Get selected agent
-  const selectedAgent = useMemo(() => {
-    if (!selectedAgentId) return null
-    return agents.find(a => a.id === selectedAgentId) || null
-  }, [agents, selectedAgentId])
-
-  // Filter tests by agent if selected
-  const filteredTests = useMemo(() => {
-    if (!selectedAgentId) return testSuiteTests
-    // For now, show all tests - agent filtering would need test-agent mapping
-    return testSuiteTests
-  }, [testSuiteTests, selectedAgentId])
+  // All tests (no agent filtering since sidebar removed)
+  const filteredTests = testSuiteTests
 
   // Test metrics
   const testMetrics = useMemo(() => {
@@ -146,16 +126,6 @@ export function AuditView(_props: AuditViewProps) {
       issue.title.toLowerCase().includes(search)
     ).slice(0, 10)
   }, [issues, beadSearch])
-
-  // Handle retry
-  const handleRetry = useCallback(() => {
-    setRetryCount(c => c + 1)
-  }, [])
-
-  // Handle agent selection
-  const handleAgentSelect = useCallback((agentId: string | null) => {
-    setSelectedAgentId(agentId)
-  }, [])
 
   // Handle bead selection
   const handleBeadSelect = useCallback((bead: Issue) => {
@@ -215,59 +185,8 @@ export function AuditView(_props: AuditViewProps) {
         </div>
       </div>
 
-      {/* Main content area with sidebar */}
+      {/* Main content area */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Agent sidebar */}
-        <div className="w-64 border-r border-border bg-bg-secondary overflow-auto">
-          <div className="p-3 border-b border-border">
-            <h2 className="text-xs uppercase tracking-wider text-text-muted font-medium">Agents</h2>
-          </div>
-
-          {loading ? (
-            <div className="p-4">
-              <SkeletonAgentGrid count={4} />
-            </div>
-          ) : httpError && !loading ? (
-            <div className="p-4">
-              <ErrorState
-                title="Failed to load agents"
-                message={httpError}
-                onRetry={handleRetry}
-              />
-            </div>
-          ) : agents.length === 0 ? (
-            <div className="p-4 text-center text-text-muted text-sm">
-              No agents found
-            </div>
-          ) : (
-            <div className="py-1">
-              {/* All agents option */}
-              <button
-                onClick={() => handleAgentSelect(null)}
-                className={cn(
-                  'w-full px-3 py-2 text-left flex items-center gap-2 text-sm transition-colors',
-                  selectedAgentId === null
-                    ? 'bg-accent-rust/10 text-accent-rust border-r-2 border-accent-rust'
-                    : 'hover:bg-bg-tertiary text-text-secondary'
-                )}
-              >
-                <User className="h-4 w-4" />
-                <span>All Agents</span>
-              </button>
-
-              {/* Individual agents */}
-              {agents.map(agent => (
-                <AgentSidebarItem
-                  key={agent.id}
-                  agent={agent}
-                  isSelected={selectedAgentId === agent.id}
-                  onSelect={() => handleAgentSelect(agent.id)}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-
         {/* Main content with tabs */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Tab navigation */}
@@ -305,14 +224,13 @@ export function AuditView(_props: AuditViewProps) {
           <div className="flex-1 overflow-auto p-6">
             {activeTab === 'overview' && (
               <OverviewTab
-                selectedAgent={selectedAgent}
                 agents={agents}
                 testMetrics={testMetrics}
                 tokenSummary={tokenSummary}
               />
             )}
             {activeTab === 'git' && (
-              <GitTab selectedAgent={selectedAgent} />
+              <GitTab />
             )}
             {activeTab === 'tests' && (
               <TestsTab
@@ -325,7 +243,6 @@ export function AuditView(_props: AuditViewProps) {
               <TokensTab
                 summary={tokenSummary}
                 loading={tokensLoading}
-                selectedAgent={selectedAgent}
               />
             )}
           </div>
@@ -338,36 +255,6 @@ export function AuditView(_props: AuditViewProps) {
 // ============================================================================
 // Sub-components
 // ============================================================================
-
-interface AgentSidebarItemProps {
-  agent: Agent
-  isSelected: boolean
-  onSelect: () => void
-}
-
-function AgentSidebarItem({ agent, isSelected, onSelect }: AgentSidebarItemProps) {
-  const stateClass = getAgentStateClass(agent.state)
-  const roleIcon = getAgentRoleIcon(agent.role_type)
-
-  return (
-    <button
-      onClick={onSelect}
-      className={cn(
-        'w-full px-3 py-2 text-left flex items-center gap-2 text-sm transition-colors',
-        isSelected
-          ? 'bg-accent-rust/10 text-accent-rust border-r-2 border-accent-rust'
-          : 'hover:bg-bg-tertiary text-text-secondary'
-      )}
-    >
-      <span className="text-lg">{roleIcon}</span>
-      <div className="flex-1 min-w-0">
-        <div className="font-medium truncate">{agent.name}</div>
-        <div className="text-xs text-text-muted capitalize">{agent.role_type}</div>
-      </div>
-      <span className={cn('h-2 w-2 rounded-full', stateClass.replace('text-', 'bg-'))} />
-    </button>
-  )
-}
 
 interface TabButtonProps {
   active: boolean
@@ -404,27 +291,24 @@ function TabButton({ active, onClick, icon, label, badge }: TabButtonProps) {
 // ============================================================================
 
 interface OverviewTabProps {
-  selectedAgent: Agent | null
   agents: Agent[]
   testMetrics: { passing: number; failing: number; regressions: number; total: number }
   tokenSummary: TokenSummary | null | undefined
 }
 
-function OverviewTab({ selectedAgent, agents, testMetrics, tokenSummary }: OverviewTabProps) {
+function OverviewTab({ agents, testMetrics, tokenSummary }: OverviewTabProps) {
   return (
     <div className="space-y-6">
       {/* Summary header */}
       <div>
-        <h2 className="section-header mb-4">
-          {selectedAgent ? `${selectedAgent.name} OVERVIEW` : 'OVERVIEW'}
-        </h2>
+        <h2 className="section-header mb-4">OVERVIEW</h2>
       </div>
 
       {/* Stats grid */}
       <div className="grid grid-cols-4 gap-4">
         <StatCard
           label="Agents"
-          value={selectedAgent ? '1' : agents.length.toString()}
+          value={agents.length.toString()}
           icon={<User className="h-5 w-5" />}
         />
         <StatCard
@@ -445,8 +329,8 @@ function OverviewTab({ selectedAgent, agents, testMetrics, tokenSummary }: Overv
         />
       </div>
 
-      {/* Agent status (when all agents selected) */}
-      {!selectedAgent && agents.length > 0 && (
+      {/* Agent status */}
+      {agents.length > 0 && (
         <div className="card">
           <h3 className="text-sm font-medium text-text-secondary mb-3">Agent Status</h3>
           <div className="space-y-2">
@@ -471,58 +355,20 @@ function OverviewTab({ selectedAgent, agents, testMetrics, tokenSummary }: Overv
           </div>
         </div>
       )}
-
-      {/* Selected agent details */}
-      {selectedAgent && (
-        <div className="card">
-          <h3 className="text-sm font-medium text-text-secondary mb-3">Agent Details</h3>
-          <dl className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <dt className="text-text-muted">Role</dt>
-              <dd className="text-text-primary capitalize">{selectedAgent.role_type}</dd>
-            </div>
-            <div>
-              <dt className="text-text-muted">State</dt>
-              <dd className={cn('capitalize', getAgentStateClass(selectedAgent.state))}>
-                {selectedAgent.state}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-text-muted">Current Work</dt>
-              <dd className="text-text-primary font-mono">
-                {selectedAgent.hook_bead || 'None'}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-text-muted">Last Activity</dt>
-              <dd className="text-text-primary">
-                {formatRelativeTime(selectedAgent.updated_at)}
-              </dd>
-            </div>
-          </dl>
-        </div>
-      )}
     </div>
   )
 }
 
-interface GitTabProps {
-  selectedAgent: Agent | null
-}
-
-function GitTab({ selectedAgent }: GitTabProps) {
+function GitTab() {
   // Fetch git changes
-  const agentFilter = selectedAgent ? `?agent_id=${selectedAgent.id}` : ''
   const { data: gitChanges, loading } = useFetch<GitChange[]>(
-    `/api/telemetry/git${agentFilter}`,
+    '/api/telemetry/git',
     { enabled: true }
   )
 
   return (
     <div className="space-y-4">
-      <h2 className="section-header">
-        {selectedAgent ? `${selectedAgent.name} GIT ACTIVITY` : 'GIT ACTIVITY'}
-      </h2>
+      <h2 className="section-header">GIT ACTIVITY</h2>
 
       {loading ? (
         <div className="py-8 text-center text-text-muted">Loading git activity...</div>
@@ -666,15 +512,12 @@ function TestRow({ test }: { test: TestStatus }) {
 interface TokensTabProps {
   summary: TokenSummary | null | undefined
   loading: boolean
-  selectedAgent: Agent | null
 }
 
-function TokensTab({ summary, loading, selectedAgent }: TokensTabProps) {
+function TokensTab({ summary, loading }: TokensTabProps) {
   return (
     <div className="space-y-6">
-      <h2 className="section-header">
-        {selectedAgent ? `${selectedAgent.name} TOKEN USAGE` : 'TOKEN USAGE'}
-      </h2>
+      <h2 className="section-header">TOKEN USAGE</h2>
 
       {loading ? (
         <div className="py-8 text-center text-text-muted">Loading token data...</div>
@@ -720,8 +563,8 @@ function TokensTab({ summary, loading, selectedAgent }: TokensTabProps) {
             </div>
           )}
 
-          {/* By agent breakdown (when viewing all) */}
-          {!selectedAgent && Object.keys(summary.by_agent).length > 0 && (
+          {/* By agent breakdown */}
+          {Object.keys(summary.by_agent).length > 0 && (
             <div className="card">
               <h3 className="text-sm font-medium text-text-secondary mb-3">By Agent</h3>
               <div className="space-y-2">
