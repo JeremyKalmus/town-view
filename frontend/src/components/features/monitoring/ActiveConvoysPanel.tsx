@@ -1,28 +1,31 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import { cn } from '@/lib/class-utils'
 import { useActiveConvoys } from '@/hooks/useActiveConvoys'
 import { ConvoyGroupHeader } from './ConvoyGroupHeader'
 import { ConvoyChildList } from './ConvoyChildList'
+import type { ConvoyChild } from '@/hooks/useConvoyChildren'
 
 export interface ActiveConvoysPanelProps {
   rigId: string
   defaultExpanded?: boolean
   className?: string
+  /** Callback when a child task is clicked */
+  onTaskClick?: (child: ConvoyChild) => void
 }
 
 /**
  * ActiveConvoysPanel - Collapsible panel showing active convoys with progress.
  * Uses polling to keep convoy data fresh and displays each convoy
  * with its progress badge using ConvoyGroupHeader.
+ * Uses CSS Grid animation for smooth expand/collapse without JS measurement.
  */
 export function ActiveConvoysPanel({
   rigId,
   defaultExpanded = true,
   className,
+  onTaskClick,
 }: ActiveConvoysPanelProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded)
-  const [contentHeight, setContentHeight] = useState<number | undefined>(undefined)
-  const contentRef = useRef<HTMLDivElement>(null)
   // Track which convoys are expanded (for lazy loading children)
   const [expandedConvoys, setExpandedConvoys] = useState<Set<string>>(new Set())
 
@@ -40,13 +43,6 @@ export function ActiveConvoysPanel({
       return next
     })
   }, [])
-
-  // Measure content height for smooth animation
-  useEffect(() => {
-    if (contentRef.current) {
-      setContentHeight(contentRef.current.scrollHeight)
-    }
-  }, [convoys, loading, error])
 
   const handleToggle = () => {
     setIsExpanded(!isExpanded)
@@ -125,20 +121,17 @@ export function ActiveConvoysPanel({
         )}
       </div>
 
-      {/* Collapsible content */}
+      {/* Collapsible content - uses CSS Grid for smooth animation without JS measurement */}
       <div
         id="active-convoys-content"
-        ref={contentRef}
         className={cn(
-          'overflow-hidden transition-[max-height,opacity] duration-300 ease-out',
-          isExpanded ? 'opacity-100' : 'opacity-0'
+          'grid transition-[grid-template-rows,opacity] duration-200 ease-out',
+          isExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
         )}
-        style={{
-          maxHeight: isExpanded ? contentHeight : 0,
-        }}
         aria-hidden={!isExpanded}
       >
-        <div className="border-t border-border p-4 space-y-3">
+        <div className="overflow-hidden min-h-0">
+          <div className="border-t border-border p-4 space-y-3">
           {/* Error state */}
           {error && (
             <div className="text-sm text-status-blocked p-3 bg-status-blocked/10 rounded-md">
@@ -176,9 +169,11 @@ export function ActiveConvoysPanel({
                 rigId={rigId}
                 convoyId={convoy.convoy.id}
                 expanded={expandedConvoys.has(convoy.convoy.id)}
+                onTaskClick={onTaskClick}
               />
             </ConvoyGroupHeader>
           ))}
+          </div>
         </div>
       </div>
     </div>

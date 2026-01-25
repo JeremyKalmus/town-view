@@ -3,12 +3,14 @@ import type { Rig, Agent } from '@/types'
 import { useDataStore, selectAgentsByRig, selectConnected, selectLastUpdated } from '@/stores/data-store'
 import { getAgents } from '@/services'
 import { cn } from '@/lib/class-utils'
-import { formatRelativeTime } from '@/lib/status-utils'
+import { formatRelativeTime, getStatusIcon, getStatusColorClass } from '@/lib/status-utils'
 import { SkeletonAgentGrid, ErrorState } from '@/components/ui/Skeleton'
 import { AgentPeekPanel, ActiveConvoysPanel, TestRegressionsPanel, TokenBurnRateWidget } from './monitoring'
 import { AgentCard } from './AgentCard'
 import { TestSuiteList } from './TestSuiteList'
 import { useTestSuiteStatus, isRegression } from '@/hooks/useTestSuiteStatus'
+import { SlideOutPanel } from '@/components/layout/SlideOutPanel'
+import type { ConvoyChild } from '@/hooks/useConvoyChildren'
 
 interface MonitoringViewProps {
   rig: Rig
@@ -82,6 +84,10 @@ export function MonitoringView({ rig, refreshKey = 0 }: MonitoringViewProps) {
 
   // Tab state
   const [activeTab, setActiveTab] = useState<MonitoringTab>('agents')
+
+  // Task panel state (for viewing tasks from convoys)
+  const [taskPanelOpen, setTaskPanelOpen] = useState(false)
+  const [selectedTask, setSelectedTask] = useState<ConvoyChild | null>(null)
 
   // Test suite data for regression count
   const { tests: testSuiteTests } = useTestSuiteStatus({ enabled: true })
@@ -169,6 +175,18 @@ export function MonitoringView({ rig, refreshKey = 0 }: MonitoringViewProps) {
     setSelectedAgent(null)
   }, [])
 
+  // Handle task click from convoy list - open task panel
+  const handleTaskClick = useCallback((task: ConvoyChild) => {
+    setSelectedTask(task)
+    setTaskPanelOpen(true)
+  }, [])
+
+  // Handle task panel close
+  const handleTaskPanelClose = useCallback(() => {
+    setTaskPanelOpen(false)
+    setSelectedTask(null)
+  }, [])
+
   return (
     <div className="p-6">
       {/* Header */}
@@ -252,7 +270,7 @@ export function MonitoringView({ rig, refreshKey = 0 }: MonitoringViewProps) {
           <TestRegressionsPanel className="mb-4" />
 
           {/* Active Convoys Panel - positioned above agent sections */}
-          <ActiveConvoysPanel rigId={rig.id} className="mb-6" />
+          <ActiveConvoysPanel rigId={rig.id} className="mb-6" onTaskClick={handleTaskClick} />
 
           {/* Error state */}
           {agentsError && !loading && (
@@ -333,6 +351,55 @@ export function MonitoringView({ rig, refreshKey = 0 }: MonitoringViewProps) {
         rigId={rig.id}
         agent={selectedAgent}
       />
+
+      {/* Task Detail Panel */}
+      <SlideOutPanel
+        isOpen={taskPanelOpen}
+        onClose={handleTaskPanelClose}
+        title={selectedTask?.id}
+        className="w-[400px]"
+      >
+        {selectedTask && (
+          <div className="p-4 space-y-4">
+            {/* Status */}
+            <div className="flex items-center gap-2">
+              <span className={cn('text-lg', getStatusColorClass(selectedTask.status))}>
+                {getStatusIcon(selectedTask.status)}
+              </span>
+              <span className="text-sm font-medium capitalize">{selectedTask.status.replace('_', ' ')}</span>
+            </div>
+
+            {/* Title */}
+            <div>
+              <label className="text-xs text-text-muted uppercase tracking-wide">Title</label>
+              <p className="text-text-primary mt-1">{selectedTask.title}</p>
+            </div>
+
+            {/* Assignee */}
+            {selectedTask.assignee && (
+              <div>
+                <label className="text-xs text-text-muted uppercase tracking-wide">Assignee</label>
+                <p className="text-text-primary mt-1 mono text-sm">{selectedTask.assignee}</p>
+              </div>
+            )}
+
+            {/* Updated */}
+            <div>
+              <label className="text-xs text-text-muted uppercase tracking-wide">Last Updated</label>
+              <p className="text-text-primary mt-1 text-sm">
+                {formatRelativeTime(selectedTask.updated_at)}
+              </p>
+            </div>
+
+            {/* Link to Planning View hint */}
+            <div className="pt-4 border-t border-border">
+              <p className="text-xs text-text-muted">
+                Switch to Planning view for full details and editing.
+              </p>
+            </div>
+          </div>
+        )}
+      </SlideOutPanel>
     </div>
   )
 }

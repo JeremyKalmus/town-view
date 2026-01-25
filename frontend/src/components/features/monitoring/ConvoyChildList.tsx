@@ -1,6 +1,6 @@
 import { cn } from '@/lib/class-utils'
 import { getStatusIcon, getStatusColorClass, formatRelativeTime } from '@/lib/status-utils'
-import { useConvoyChildren } from '@/hooks/useConvoyChildren'
+import { useConvoyChildren, type ConvoyChild } from '@/hooks/useConvoyChildren'
 
 export interface ConvoyChildListProps {
   /** The rig ID */
@@ -11,6 +11,8 @@ export interface ConvoyChildListProps {
   expanded?: boolean
   /** Optional class name */
   className?: string
+  /** Callback when a task is clicked */
+  onTaskClick?: (child: ConvoyChild) => void
 }
 
 /**
@@ -23,6 +25,7 @@ export function ConvoyChildList({
   convoyId,
   expanded = false,
   className,
+  onTaskClick,
 }: ConvoyChildListProps) {
   const { children, loading, error } = useConvoyChildren(rigId, convoyId, {
     enabled: expanded,
@@ -64,8 +67,18 @@ export function ConvoyChildList({
           key={child.id}
           className={cn(
             'flex items-center gap-3 px-3 py-2',
-            'hover:bg-bg-tertiary/50 transition-colors'
+            'hover:bg-bg-tertiary/50 transition-colors',
+            onTaskClick && 'cursor-pointer'
           )}
+          onClick={() => onTaskClick?.(child)}
+          role={onTaskClick ? 'button' : undefined}
+          tabIndex={onTaskClick ? 0 : undefined}
+          onKeyDown={onTaskClick ? (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              onTaskClick(child)
+            }
+          } : undefined}
         >
           {/* Status icon */}
           <span
