@@ -93,6 +93,20 @@ func (h *WebSocketHandler) buildSnapshot() ([]byte, error) {
 
 	// Get all issues from all rigs
 	issues := h.rigManager.ListAllIssues(query.IssueFilter{})
+
+	// Enrich convoy-type issues with progress data
+	for i, issue := range issues {
+		if issue.IssueType == types.TypeConvoy && issue.RigID != "" {
+			progress, err := h.rigManager.GetConvoyProgress(issue.RigID, issue.ID)
+			if err == nil && progress != nil {
+				issues[i].Convoy = &types.ConvoyInfo{
+					ID:       issue.ID,
+					Title:    issue.Title,
+					Progress: *progress,
+				}
+			}
+		}
+	}
 	snapshot.Issues = issues
 
 	// Get all agents from Agent Registry
