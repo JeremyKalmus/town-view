@@ -588,6 +588,50 @@ func (h *Handlers) GetTestSuiteStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status)
 }
 
+// CreateTestRun handles POST /api/telemetry/tests
+// Accepts TestRun JSON payload and records it via the telemetry collector.
+func (h *Handlers) CreateTestRun(w http.ResponseWriter, r *http.Request) {
+	if h.telemetryCollector == nil {
+		http.Error(w, "Telemetry collector not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	var run telemetry.TestRun
+	if err := json.NewDecoder(r.Body).Decode(&run); err != nil {
+		http.Error(w, "Invalid request body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Validate required fields
+	if run.AgentID == "" {
+		http.Error(w, "agent_id is required", http.StatusBadRequest)
+		return
+	}
+	if run.Command == "" {
+		http.Error(w, "command is required", http.StatusBadRequest)
+		return
+	}
+	if len(run.Results) == 0 {
+		http.Error(w, "results is required and must not be empty", http.StatusBadRequest)
+		return
+	}
+
+	// Set timestamp if not provided
+	if run.Timestamp == "" {
+		run.Timestamp = time.Now().UTC().Format(time.RFC3339)
+	}
+
+	// Record the test run
+	if err := h.telemetryCollector.RecordTestRun(run); err != nil {
+		slog.Error("Failed to record test run", "error", err)
+		http.Error(w, "Failed to record test run", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	writeJSON(w, map[string]string{"status": "created"})
+}
+
 // runBD executes a bd CLI command for write operations
 func (h *Handlers) runBD(rigID string, args ...string) error {
 	rig, err := h.rigManager.GetRig(rigID)
