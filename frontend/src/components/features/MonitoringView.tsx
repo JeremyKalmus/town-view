@@ -280,6 +280,7 @@ export function MonitoringView({ rig, refreshKey = 0 }: MonitoringViewProps) {
                       agents={roleAgents}
                       workingCount={workingInRole}
                       onAgentClick={handleAgentClick}
+                      allRigAgents={agents}
                     />
                   )
                 })}
@@ -300,6 +301,7 @@ export function MonitoringView({ rig, refreshKey = 0 }: MonitoringViewProps) {
                     agents={polecatAgents}
                     workingCount={workingInRole}
                     onAgentClick={handleAgentClick}
+                    allRigAgents={agents}
                   />
                 )
               })()}
@@ -330,6 +332,8 @@ interface RoleSectionProps {
   agents: Agent[]
   workingCount: number
   onAgentClick: (agent: Agent) => void
+  /** All agents in the rig (for contextual status) */
+  allRigAgents: Agent[]
 }
 
 /**
@@ -341,6 +345,7 @@ function CompactRoleSection({
   agents,
   workingCount,
   onAgentClick,
+  allRigAgents,
 }: RoleSectionProps) {
   // Sort: stuck first, then working, then idle
   const sortedAgents = [...agents].sort((a, b) => {
@@ -368,6 +373,7 @@ function CompactRoleSection({
             key={agent.id}
             agent={agent}
             onClick={() => onAgentClick(agent)}
+            rigAgents={allRigAgents}
           />
         ))}
       </div>
@@ -384,6 +390,7 @@ function RoleSection({
   agents,
   workingCount,
   onAgentClick,
+  allRigAgents,
 }: RoleSectionProps) {
   // Sort: stuck first, then working, then idle
   const sortedAgents = [...agents].sort((a, b) => {
@@ -410,6 +417,7 @@ function RoleSection({
             key={agent.id}
             agent={agent}
             onClick={() => onAgentClick(agent)}
+            rigAgents={allRigAgents}
           />
         ))}
       </div>

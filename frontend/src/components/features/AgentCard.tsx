@@ -7,6 +7,8 @@ interface AgentCardProps {
   agent: Agent
   onClick?: () => void
   variant?: 'default' | 'compact'
+  /** Other agents in the same rig, used for contextual status */
+  rigAgents?: Agent[]
 }
 
 // Singleton roles don't work on beads - they have specific jobs
@@ -20,6 +22,50 @@ const ROLE_DESCRIPTIONS: Record<string, string> = {
   deacon: 'Session lifecycle',
   crew: 'Human-managed worker',
   polecat: 'Transient worker',
+}
+
+/**
+ * Get contextual status message for singleton roles when stopped.
+ * Shows whether Deacon will restart them or if manual intervention is needed.
+ */
+function getStoppedContextMessage(agent: Agent, rigAgents?: Agent[]): string | null {
+  // Only applies to stopped singleton roles
+  if (agent.state !== 'stopped' || !SINGLETON_ROLES.has(agent.role_type)) {
+    return null
+  }
+
+  // Deacon doesn't need restart info - it IS the lifecycle manager
+  if (agent.role_type === 'deacon') {
+    return 'Needs manual start'
+  }
+
+  // Check if Deacon is running in this rig
+  const deacon = rigAgents?.find(a => a.role_type === 'deacon')
+  const deaconRunning = deacon && (deacon.state === 'running' || deacon.state === 'working' || deacon.session_id)
+
+  if (deaconRunning) {
+    return 'Deacon will restart'
+  }
+
+  return 'Deacon stopped — needs manual start'
+}
+
+/**
+ * Get activity description for running singleton roles.
+ */
+function getRunningActivityMessage(agent: Agent): string {
+  switch (agent.role_type) {
+    case 'witness':
+      return 'Patrolling'
+    case 'refinery':
+      return 'Processing merge queue'
+    case 'deacon':
+      return 'Managing sessions'
+    case 'mayor':
+      return 'Coordinating'
+    default:
+      return 'Active'
+  }
 }
 
 /**
@@ -42,11 +88,12 @@ function getEffectiveState(agent: Agent): AgentState {
   return 'idle'
 }
 
-export function AgentCard({ agent, onClick, variant = 'default' }: AgentCardProps) {
+export function AgentCard({ agent, onClick, variant = 'default', rigAgents }: AgentCardProps) {
   const effectiveState = getEffectiveState(agent)
   const stateClass = getAgentStateClass(effectiveState)
   const stateBgClass = getAgentStateBgClass(effectiveState)
   const stateBorderClass = getAgentStateBorderClass(effectiveState)
+  const stoppedContext = getStoppedContextMessage(agent, rigAgents)
 
   // Compact variant: minimal status-only display
   if (variant === 'compact') {
@@ -80,9 +127,13 @@ export function AgentCard({ agent, onClick, variant = 'default' }: AgentCardProp
 
         {/* Secondary info - role-specific */}
         {SINGLETON_ROLES.has(agent.role_type) ? (
-          // Singleton roles: show last activity
+          // Singleton roles: show contextual status
           <div className="mt-2 text-xs text-text-muted">
-            Active {formatRelativeTime(agent.last_activity_at || agent.updated_at)}
+            {stoppedContext ? (
+              <span className="text-yellow-500">{stoppedContext}</span>
+            ) : (
+              <>{getRunningActivityMessage(agent)} · {formatRelativeTime(agent.last_activity_at || agent.updated_at)}</>
+            )}
           </div>
         ) : agent.hook_bead ? (
           // Workers with hooked bead
@@ -136,15 +187,28 @@ export function AgentCard({ agent, onClick, variant = 'default' }: AgentCardProp
       {/* Content section - role-specific */}
       <div className="mt-auto pt-3 border-t border-border">
         {SINGLETON_ROLES.has(agent.role_type) ? (
-          // Singleton roles: show their job description and last activity
-          <>
-            <div className="text-xs text-text-muted mb-1">
-              {ROLE_DESCRIPTIONS[agent.role_type] || 'System agent'}
-            </div>
-            <div className="text-sm text-text-secondary">
-              Active {formatRelativeTime(agent.last_activity_at || agent.updated_at)}
-            </div>
-          </>
+          // Singleton roles: show contextual status
+          stoppedContext ? (
+            // Stopped: show restart info
+            <>
+              <div className="text-xs text-text-muted mb-1">
+                {ROLE_DESCRIPTIONS[agent.role_type] || 'System agent'}
+              </div>
+              <div className="text-sm text-yellow-500">
+                {stoppedContext}
+              </div>
+            </>
+          ) : (
+            // Running: show activity
+            <>
+              <div className="text-xs text-text-muted mb-1">
+                {getRunningActivityMessage(agent)}
+              </div>
+              <div className="text-sm text-text-secondary">
+                Last activity {formatRelativeTime(agent.last_activity_at || agent.updated_at)}
+              </div>
+            </>
+          )
         ) : agent.hook_bead ? (
           // Workers with hooked bead
           <>
