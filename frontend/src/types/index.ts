@@ -267,6 +267,17 @@ export interface TestHistoryEntry {
   error_message?: string;
 }
 
+// Test regression - a test that was passing but now fails
+export interface TestRegression {
+  test_name: string;
+  test_file: string;
+  last_passed_at: string;
+  last_passed_commit?: string;
+  first_failed_at: string;
+  first_failed_commit?: string;
+  error_message?: string;
+}
+
 // Work item health status based on duration
 export type WorkItemHealthStatus = 'healthy' | 'concerning' | 'stuck';
 
