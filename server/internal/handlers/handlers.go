@@ -588,6 +588,27 @@ func (h *Handlers) GetTestSuiteStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status)
 }
 
+// GetRegressions handles GET /api/telemetry/regressions
+// Returns tests that have regressed (were passing, now failing).
+func (h *Handlers) GetRegressions(w http.ResponseWriter, r *http.Request) {
+	if h.telemetryCollector == nil {
+		writeJSON(w, []telemetry.TestRegression{})
+		return
+	}
+
+	// Parse 'since' query param (timestamp filter)
+	since := r.URL.Query().Get("since")
+
+	regressions, err := h.telemetryCollector.GetRegressions(since)
+	if err != nil {
+		slog.Error("Failed to get regressions", "error", err)
+		http.Error(w, "Failed to get regressions", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, regressions)
+}
+
 // CreateTestRun handles POST /api/telemetry/tests
 // Accepts TestRun JSON payload and records it via the telemetry collector.
 func (h *Handlers) CreateTestRun(w http.ResponseWriter, r *http.Request) {
