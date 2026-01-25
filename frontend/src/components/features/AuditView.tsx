@@ -1,18 +1,44 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRigStore } from '@/stores/rig-store'
-import { useDataStore, selectIssuesByRig, selectConnected } from '@/stores/data-store'
-import { getIssues } from '@/services'
-import { ConvoySelector, type ConvoySortBy } from './ConvoySelector'
-import { ConvoyTreeView } from './ConvoyTreeView'
-import { DateRangePicker, type DateRange } from '@/components/ui/DateRangePicker'
-import { AgentFilter } from './AgentFilter'
-import { MetricsDisplay } from './MetricsDisplay'
-import { CompletedWorkTable } from './CompletedWorkTable'
-import { getDescendants } from '@/lib/tree'
-import type { Issue, AuditMetrics, TestStatus } from '@/types'
-import { SkeletonCompletedWorkList, ErrorState } from '@/components/ui/Skeleton'
+import { useDataStore, selectAgentsByRig, selectIssuesByRig, selectConnected } from '@/stores/data-store'
+import { getAgents } from '@/services'
 import { useTestSuiteStatus, getDisplayStatus, isRegression } from '@/hooks/useTestSuiteStatus'
-import { CheckCircle, XCircle, AlertTriangle, MinusCircle, GitCommit } from 'lucide-react'
+import { useFetch } from '@/hooks/useFetch'
+import { cn } from '@/lib/class-utils'
+import { getAgentRoleIcon, getAgentStateClass, getAgentStateBgClass } from '@/lib/agent-utils'
+import { formatRelativeTime } from '@/lib/status-utils'
+import { SkeletonAgentGrid, ErrorState } from '@/components/ui/Skeleton'
+import { Search, User, GitCommit, TestTube, Coins, LayoutDashboard, CheckCircle, XCircle, AlertTriangle, FileText } from 'lucide-react'
+import type { Agent, Issue, TestStatus } from '@/types'
+
+// Tab types for the audit view
+type AuditTab = 'overview' | 'git' | 'tests' | 'tokens'
+
+// Token summary types from API
+interface TokenModelSummary {
+  input: number
+  output: number
+  cost_usd?: number
+}
+
+interface TokenSummary {
+  total_input: number
+  total_output: number
+  total_cost_usd?: number
+  by_model: Record<string, TokenModelSummary>
+  by_agent: Record<string, TokenModelSummary>
+}
+
+// Git change from API
+interface GitChange {
+  timestamp: string
+  commit_sha: string
+  files_changed: number
+  insertions: number
+  deletions: number
+  agent_id?: string
+  bead_id?: string
+}
 
 interface AuditViewProps {
   /** Set of issue IDs that were recently updated (for flash animation) */
@@ -20,129 +46,55 @@ interface AuditViewProps {
 }
 
 /**
- * AuditView - Audit completed work and compare assignments
- * Part of the three-view architecture: Planning | Monitoring | Audit
+ * AuditView - Redesigned view for auditing agent work and telemetry
+ * Features: Agent selector sidebar, tab navigation, bead search
  */
-export function AuditView({ updatedIssueIds = new Set() }: AuditViewProps) {
+export function AuditView(_props: AuditViewProps) {
   const { selectedRig } = useRigStore()
 
   // Data store (WebSocket-fed)
+  const wsAgents = useDataStore(selectAgentsByRig(selectedRig?.id || ''))
   const wsIssues = useDataStore(selectIssuesByRig(selectedRig?.id || ''))
   const wsConnected = useDataStore(selectConnected)
 
-  // HTTP fallback state
-  const [httpIssues, setHttpIssues] = useState<Issue[]>([])
+  // HTTP fallback state for agents
+  const [httpAgents, setHttpAgents] = useState<Agent[]>([])
   const [httpLoading, setHttpLoading] = useState(true)
   const [httpError, setHttpError] = useState<string | null>(null)
 
   // Use WebSocket data when connected and available, otherwise HTTP fallback
-  const allIssues = wsConnected && wsIssues.length > 0 ? wsIssues : httpIssues
-  const convoysLoading = !wsConnected && httpLoading
-  const convoysError = !wsConnected ? httpError : null
+  const agents = wsConnected && wsAgents.length > 0 ? wsAgents : httpAgents
+  const issues = wsIssues
+  const loading = !wsConnected && httpLoading
 
-  // Convoy selection state (derived from allIssues)
-  const convoys = useMemo(() =>
-    allIssues.filter((issue) => issue.issue_type === 'convoy'),
-    [allIssues]
-  )
-  const [selectedConvoy, setSelectedConvoy] = useState<Issue | null>(null)
-  const [convoySortBy, setConvoySortBy] = useState<ConvoySortBy>('date')
+  // Selection state
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<AuditTab>('overview')
+  const [beadSearch, setBeadSearch] = useState('')
 
-  // Date range filter
-  const [dateRange, setDateRange] = useState<DateRange>({
-    startDate: null,
-    endDate: null,
-  })
-
-  // Agent filter
-  const [selectedAgentFilter, setSelectedAgentFilter] = useState<string | null>(null)
-
-  // Completed work (derived from allIssues with filters)
-  const completedWork = useMemo(() => {
-    // Filter to closed issues
-    let filtered = allIssues.filter((issue) => issue.status === 'closed')
-
-    // Filter by date range if set
-    if (dateRange.startDate) {
-      const start = new Date(dateRange.startDate)
-      filtered = filtered.filter((issue) => {
-        const closedAt = issue.closed_at ? new Date(issue.closed_at) : null
-        return closedAt && closedAt >= start
-      })
-    }
-    if (dateRange.endDate) {
-      const end = new Date(dateRange.endDate)
-      end.setHours(23, 59, 59, 999)
-      filtered = filtered.filter((issue) => {
-        const closedAt = issue.closed_at ? new Date(issue.closed_at) : null
-        return closedAt && closedAt <= end
-      })
-    }
-
-    // Filter by convoy - show only descendants of the selected convoy
-    if (selectedConvoy) {
-      const convoyDescendants = getDescendants(allIssues, selectedConvoy.id)
-      const descendantIds = new Set(convoyDescendants.map((i) => i.id))
-      filtered = filtered.filter((issue) => descendantIds.has(issue.id))
-    }
-
-    return filtered
-  }, [allIssues, dateRange, selectedConvoy])
-
-  const completedWorkLoading = convoysLoading
-  const completedWorkError = convoysError
-
-  // Retry counter for manual retry
+  // Retry counter
   const [retryCount, setRetryCount] = useState(0)
 
-  // Test suite data for test history
+  // Test suite data
   const { tests: testSuiteTests, loading: testsLoading } = useTestSuiteStatus({ enabled: true })
 
-  // Filter tests by date range
-  const filteredTests = useMemo(() => {
-    let filtered = testSuiteTests
+  // Token summary data (filtered by agent if selected)
+  const tokenQueryParams = selectedAgentId ? `?agent_id=${selectedAgentId}` : ''
+  const { data: tokenSummary, loading: tokensLoading } = useFetch<TokenSummary>(
+    `/api/telemetry/tokens/summary${tokenQueryParams}`,
+    { enabled: !!selectedRig }
+  )
 
-    // Filter by date range if set (based on last_run_at)
-    if (dateRange.startDate) {
-      const start = new Date(dateRange.startDate)
-      filtered = filtered.filter((test) => {
-        const runAt = new Date(test.last_run_at)
-        return runAt >= start
-      })
-    }
-    if (dateRange.endDate) {
-      const end = new Date(dateRange.endDate)
-      end.setHours(23, 59, 59, 999)
-      filtered = filtered.filter((test) => {
-        const runAt = new Date(test.last_run_at)
-        return runAt <= end
-      })
-    }
-
-    // Sort by last run (most recent first)
-    return [...filtered].sort(
-      (a, b) => new Date(b.last_run_at).getTime() - new Date(a.last_run_at).getTime()
-    )
-  }, [testSuiteTests, dateRange])
-
-  // Test metrics
-  const testMetrics = useMemo(() => {
-    const passing = filteredTests.filter((t) => t.current_status === 'passed').length
-    const failing = filteredTests.filter((t) => t.current_status === 'failed').length
-    const regressions = filteredTests.filter((t) => isRegression(t)).length
-    return { passing, failing, regressions, total: filteredTests.length }
-  }, [filteredTests])
-
-  // Fetch issues via HTTP as fallback
+  // Fetch agents via HTTP as fallback
   useEffect(() => {
     if (!selectedRig) {
-      setHttpIssues([])
+      setHttpAgents([])
       setHttpLoading(false)
       return
     }
 
     // Skip HTTP fetch if WebSocket is connected and has data
-    if (wsConnected && wsIssues.length > 0) {
+    if (wsConnected && wsAgents.length > 0) {
       setHttpLoading(false)
       return
     }
@@ -150,96 +102,66 @@ export function AuditView({ updatedIssueIds = new Set() }: AuditViewProps) {
     setHttpLoading(true)
     setHttpError(null)
 
-    const fetchIssues = async () => {
-      const result = await getIssues(selectedRig.id, { all: true })
-
+    const fetchAgents = async () => {
+      const result = await getAgents(selectedRig.id)
       if (result.data) {
-        setHttpIssues(result.data)
+        setHttpAgents(result.data)
       } else {
-        setHttpError(result.error || 'Failed to load issues')
-        setHttpIssues([])
+        setHttpError(result.error || 'Failed to load agents')
+        setHttpAgents([])
       }
       setHttpLoading(false)
     }
 
-    fetchIssues()
-  }, [selectedRig?.id, retryCount, wsConnected, wsIssues.length])
+    fetchAgents()
+  }, [selectedRig?.id, retryCount, wsConnected, wsAgents.length])
+
+  // Get selected agent
+  const selectedAgent = useMemo(() => {
+    if (!selectedAgentId) return null
+    return agents.find(a => a.id === selectedAgentId) || null
+  }, [agents, selectedAgentId])
+
+  // Filter tests by agent if selected
+  const filteredTests = useMemo(() => {
+    if (!selectedAgentId) return testSuiteTests
+    // For now, show all tests - agent filtering would need test-agent mapping
+    return testSuiteTests
+  }, [testSuiteTests, selectedAgentId])
+
+  // Test metrics
+  const testMetrics = useMemo(() => {
+    const passing = filteredTests.filter(t => t.current_status === 'passed').length
+    const failing = filteredTests.filter(t => t.current_status === 'failed').length
+    const regressions = filteredTests.filter(t => isRegression(t)).length
+    return { passing, failing, regressions, total: filteredTests.length }
+  }, [filteredTests])
+
+  // Filter issues (beads) by search
+  const filteredBeads = useMemo(() => {
+    if (!beadSearch.trim()) return []
+    const search = beadSearch.toLowerCase()
+    return issues.filter(issue =>
+      issue.id.toLowerCase().includes(search) ||
+      issue.title.toLowerCase().includes(search)
+    ).slice(0, 10)
+  }, [issues, beadSearch])
 
   // Handle retry
   const handleRetry = useCallback(() => {
-    setRetryCount((c) => c + 1)
+    setRetryCount(c => c + 1)
   }, [])
 
-  // Handle convoy selection
-  const handleConvoySelect = useCallback((convoy: Issue | null) => {
-    setSelectedConvoy(convoy)
+  // Handle agent selection
+  const handleAgentSelect = useCallback((agentId: string | null) => {
+    setSelectedAgentId(agentId)
   }, [])
 
-  // Check if any filter is active
-  const hasActiveFilters = useMemo(() => {
-    return selectedConvoy !== null ||
-      dateRange.startDate !== null ||
-      dateRange.endDate !== null ||
-      selectedAgentFilter !== null
-  }, [selectedConvoy, dateRange, selectedAgentFilter])
-
-  // Clear all filters
-  const handleClearAllFilters = useCallback(() => {
-    setSelectedConvoy(null)
-    setDateRange({ startDate: null, endDate: null })
-    setSelectedAgentFilter(null)
+  // Handle bead selection
+  const handleBeadSelect = useCallback((bead: Issue) => {
+    setBeadSearch(bead.id)
+    // Could navigate to bead-specific view
   }, [])
-
-  // Filter completed work by selected agent
-  const filteredCompletedWork = useMemo(() => {
-    if (!selectedAgentFilter) {
-      return completedWork
-    }
-    return completedWork.filter((issue) => issue.assignee === selectedAgentFilter)
-  }, [completedWork, selectedAgentFilter])
-
-  // Calculate metrics from filtered completed work (includes all filters: date range, convoy, agent)
-  const metrics: AuditMetrics = useMemo(() => {
-    if (filteredCompletedWork.length === 0) {
-      return {
-        timeToComplete: { avg: 0, min: 0, max: 0 },
-        completionCount: 0,
-        typeBreakdown: { bugs: 0, tasks: 0, features: 0 },
-      }
-    }
-
-    // Calculate time to complete for each issue
-    const completionTimes = filteredCompletedWork
-      .filter((issue) => issue.closed_at && issue.created_at)
-      .map((issue) => {
-        const created = new Date(issue.created_at).getTime()
-        const closed = new Date(issue.closed_at!).getTime()
-        return closed - created
-      })
-      .filter((time) => time > 0)
-
-    const avg = completionTimes.length > 0
-      ? completionTimes.reduce((a, b) => a + b, 0) / completionTimes.length
-      : 0
-    const min = completionTimes.length > 0 ? Math.min(...completionTimes) : 0
-    const max = completionTimes.length > 0 ? Math.max(...completionTimes) : 0
-
-    // Calculate type breakdown
-    const typeBreakdown = {
-      bugs: filteredCompletedWork.filter((issue) => issue.issue_type === 'bug').length,
-      tasks: filteredCompletedWork.filter((issue) => issue.issue_type === 'task').length,
-      features: filteredCompletedWork.filter((issue) => issue.issue_type === 'feature').length,
-    }
-
-    return {
-      timeToComplete: { avg, min, max },
-      completionCount: filteredCompletedWork.length,
-      typeBreakdown,
-      anomalyThresholds: {
-        timeToComplete: 7 * 24 * 60 * 60 * 1000, // 7 days
-      },
-    }
-  }, [filteredCompletedWork])
 
   if (!selectedRig) {
     return (
@@ -252,203 +174,455 @@ export function AuditView({ updatedIssueIds = new Set() }: AuditViewProps) {
   }
 
   return (
-    <div className="p-6">
-      {/* Header */}
-      <div className="mb-6 flex items-start justify-between">
-        <div>
-          <h1 className="font-display text-2xl font-bold tracking-wide">AUDIT</h1>
-          <p className="text-text-muted text-sm mt-2">
-            Review completed work and historical data
-          </p>
+    <div className="h-full flex flex-col">
+      {/* Header with bead search */}
+      <div className="p-4 border-b border-border bg-bg-secondary">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h1 className="font-display text-2xl font-bold tracking-wide">AUDIT</h1>
+            <p className="text-text-muted text-sm mt-1">
+              Review agent telemetry and work history
+            </p>
+          </div>
         </div>
-        {hasActiveFilters && (
-          <button
-            onClick={handleClearAllFilters}
-            className="px-3 py-1.5 text-sm rounded-md border border-border hover:border-text-muted transition-colors text-text-secondary hover:text-text-primary"
-          >
-            Clear all filters
-          </button>
-        )}
-      </div>
 
-      {/* Error state */}
-      {convoysError && !convoysLoading && (
-        <ErrorState
-          title="Failed to load data"
-          message={convoysError}
-          onRetry={handleRetry}
-        />
-      )}
-
-      {/* Convoy Selector */}
-      {!convoysError && (
-        <div className="card mb-6">
-          <ConvoySelector
-            convoys={convoys}
-            selectedConvoyId={selectedConvoy?.id}
-            onSelect={handleConvoySelect}
-            sortBy={convoySortBy}
-            onSortChange={setConvoySortBy}
-            loading={convoysLoading}
-            className="max-w-md"
+        {/* Bead search */}
+        <div className="relative max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-text-muted" />
+          <input
+            type="text"
+            placeholder="Search beads by ID or title..."
+            value={beadSearch}
+            onChange={(e) => setBeadSearch(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 bg-bg-primary border border-border rounded-md text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-accent-rust focus:border-transparent"
           />
-        </div>
-      )}
-
-      {/* Date Range Picker */}
-      {!convoysError && (
-        <div className="card mb-6">
-          <div className="mb-3 flex items-center gap-2">
-            <span className="text-sm font-medium text-text-secondary">
-              Filter by Date Range
-            </span>
-            {(dateRange.startDate || dateRange.endDate) && (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-accent-rust/20 text-accent-rust">
-                Active
-              </span>
-            )}
-          </div>
-          <DateRangePicker value={dateRange} onChange={setDateRange} />
-        </div>
-      )}
-
-      {/* Agent Filter */}
-      {!convoysError && (
-        <div className="card mb-6">
-          <AgentFilter
-            closedIssues={completedWork}
-            selectedAgent={selectedAgentFilter}
-            onSelect={setSelectedAgentFilter}
-            className="max-w-md"
-          />
-        </div>
-      )}
-
-      {/* Metrics Display */}
-      {!convoysError && (
-        <div className="mb-6">
-          <div className="mb-3">
-            <span className="section-header">METRICS SUMMARY</span>
-          </div>
-          <MetricsDisplay metrics={metrics} />
-        </div>
-      )}
-
-      {/* Test History */}
-      {!convoysError && (
-        <div className="card mb-6">
-          <div className="border-b border-border pb-2 mb-4">
-            <h2 className="section-header">
-              TEST HISTORY
-              <span className="text-text-muted font-normal ml-2">
-                ({filteredTests.length} tests)
-              </span>
-            </h2>
-            {testMetrics.regressions > 0 && (
-              <p className="text-sm text-status-in-progress mt-1">
-                {testMetrics.regressions} regression{testMetrics.regressions !== 1 ? 's' : ''} detected
-              </p>
-            )}
-          </div>
-
-          {/* Test summary stats */}
-          <div className="flex gap-4 mb-4 text-sm">
-            <div className="flex items-center gap-2">
-              <CheckCircle className="h-4 w-4 text-status-closed" />
-              <span className="text-text-secondary">{testMetrics.passing} passing</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <XCircle className="h-4 w-4 text-status-blocked" />
-              <span className="text-text-secondary">{testMetrics.failing - testMetrics.regressions} failing</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-status-in-progress" />
-              <span className="text-text-secondary">{testMetrics.regressions} regressions</span>
-            </div>
-          </div>
-
-          {testsLoading ? (
-            <div className="py-8 text-center text-text-muted">
-              Loading test history...
-            </div>
-          ) : filteredTests.length === 0 ? (
-            <div className="py-8 text-center text-text-muted">
-              No test results found for the selected date range
-            </div>
-          ) : (
-            <div className="overflow-auto max-h-[400px]">
-              <table className="w-full text-sm">
-                <thead className="bg-bg-tertiary sticky top-0">
-                  <tr className="text-left text-xs uppercase tracking-wider text-text-muted">
-                    <th className="px-3 py-2">Status</th>
-                    <th className="px-3 py-2">Test Name</th>
-                    <th className="px-3 py-2">File</th>
-                    <th className="px-3 py-2">Last Run</th>
-                    <th className="px-3 py-2">Commit</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredTests.slice(0, 50).map((test) => (
-                    <TestHistoryRow key={test.test_name} test={test} />
-                  ))}
-                </tbody>
-              </table>
-              {filteredTests.length > 50 && (
-                <div className="py-2 text-center text-xs text-text-muted border-t border-border">
-                  Showing 50 of {filteredTests.length} tests
-                </div>
-              )}
+          {/* Bead search results dropdown */}
+          {beadSearch && filteredBeads.length > 0 && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-bg-secondary border border-border rounded-md shadow-lg z-10 max-h-60 overflow-auto">
+              {filteredBeads.map(bead => (
+                <button
+                  key={bead.id}
+                  onClick={() => handleBeadSelect(bead)}
+                  className="w-full px-3 py-2 text-left hover:bg-bg-tertiary flex items-center gap-2 text-sm"
+                >
+                  <FileText className="h-4 w-4 text-text-muted flex-shrink-0" />
+                  <span className="font-mono text-accent-rust">{bead.id}</span>
+                  <span className="text-text-secondary truncate">{bead.title}</span>
+                </button>
+              ))}
             </div>
           )}
         </div>
-      )}
+      </div>
 
-      {/* Completed Work - Hierarchical Tree View when convoy selected, Table View otherwise */}
-      {!convoysError && (
-        <div className="card">
-          <div className="border-b border-border pb-2 mb-4">
-            <h2 className="section-header">
-              {selectedConvoy ? 'CONVOY HIERARCHY' : 'COMPLETED WORK'}
-              <span className="text-text-muted font-normal ml-2">
-                {selectedAgentFilter
-                  ? `(${filteredCompletedWork.length} of ${completedWork.length} items)`
-                  : `(${completedWork.length} ${completedWork.length === 1 ? 'item' : 'items'})`}
-              </span>
-            </h2>
+      {/* Main content area with sidebar */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Agent sidebar */}
+        <div className="w-64 border-r border-border bg-bg-secondary overflow-auto">
+          <div className="p-3 border-b border-border">
+            <h2 className="text-xs uppercase tracking-wider text-text-muted font-medium">Agents</h2>
           </div>
 
-          {completedWorkLoading ? (
-            <SkeletonCompletedWorkList count={3} />
-          ) : completedWorkError ? (
-            <div className="py-8 text-center text-status-blocked text-sm">
-              {completedWorkError}
+          {loading ? (
+            <div className="p-4">
+              <SkeletonAgentGrid count={4} />
             </div>
-          ) : filteredCompletedWork.length === 0 ? (
-            <div className="py-12 text-center text-text-muted">
-              {(() => {
-                const filterParts: string[] = []
-                if (selectedAgentFilter) filterParts.push('this agent')
-                if (selectedConvoy) filterParts.push('this convoy')
-                if (dateRange.startDate || dateRange.endDate) filterParts.push('the selected date range')
-
-                if (filterParts.length === 0) return 'No completed work found'
-                if (filterParts.length === 1) return `No completed work found for ${filterParts[0]}`
-                if (filterParts.length === 2) return `No completed work found for ${filterParts[0]} in ${filterParts[1]}`
-                return `No completed work found matching the current filters`
-              })()}
+          ) : httpError && !loading ? (
+            <div className="p-4">
+              <ErrorState
+                title="Failed to load agents"
+                message={httpError}
+                onRetry={handleRetry}
+              />
             </div>
-          ) : selectedConvoy ? (
-            /* Hierarchical Tree View when convoy is selected */
-            <ConvoyTreeView
-              convoy={selectedConvoy}
-              allIssues={allIssues}
-              selectedAgentFilter={selectedAgentFilter}
-            />
+          ) : agents.length === 0 ? (
+            <div className="p-4 text-center text-text-muted text-sm">
+              No agents found
+            </div>
           ) : (
-            <CompletedWorkTable
-              issues={filteredCompletedWork}
-              updatedIssueIds={updatedIssueIds}
-            />
+            <div className="py-1">
+              {/* All agents option */}
+              <button
+                onClick={() => handleAgentSelect(null)}
+                className={cn(
+                  'w-full px-3 py-2 text-left flex items-center gap-2 text-sm transition-colors',
+                  selectedAgentId === null
+                    ? 'bg-accent-rust/10 text-accent-rust border-r-2 border-accent-rust'
+                    : 'hover:bg-bg-tertiary text-text-secondary'
+                )}
+              >
+                <User className="h-4 w-4" />
+                <span>All Agents</span>
+              </button>
+
+              {/* Individual agents */}
+              {agents.map(agent => (
+                <AgentSidebarItem
+                  key={agent.id}
+                  agent={agent}
+                  isSelected={selectedAgentId === agent.id}
+                  onSelect={() => handleAgentSelect(agent.id)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Main content with tabs */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Tab navigation */}
+          <div className="border-b border-border bg-bg-primary">
+            <div className="flex">
+              <TabButton
+                active={activeTab === 'overview'}
+                onClick={() => setActiveTab('overview')}
+                icon={<LayoutDashboard className="h-4 w-4" />}
+                label="Overview"
+              />
+              <TabButton
+                active={activeTab === 'git'}
+                onClick={() => setActiveTab('git')}
+                icon={<GitCommit className="h-4 w-4" />}
+                label="Git"
+              />
+              <TabButton
+                active={activeTab === 'tests'}
+                onClick={() => setActiveTab('tests')}
+                icon={<TestTube className="h-4 w-4" />}
+                label="Tests"
+                badge={testMetrics.regressions > 0 ? testMetrics.regressions : undefined}
+              />
+              <TabButton
+                active={activeTab === 'tokens'}
+                onClick={() => setActiveTab('tokens')}
+                icon={<Coins className="h-4 w-4" />}
+                label="Tokens"
+              />
+            </div>
+          </div>
+
+          {/* Tab content */}
+          <div className="flex-1 overflow-auto p-6">
+            {activeTab === 'overview' && (
+              <OverviewTab
+                selectedAgent={selectedAgent}
+                agents={agents}
+                testMetrics={testMetrics}
+                tokenSummary={tokenSummary}
+              />
+            )}
+            {activeTab === 'git' && (
+              <GitTab selectedAgent={selectedAgent} />
+            )}
+            {activeTab === 'tests' && (
+              <TestsTab
+                tests={filteredTests}
+                loading={testsLoading}
+                metrics={testMetrics}
+              />
+            )}
+            {activeTab === 'tokens' && (
+              <TokensTab
+                summary={tokenSummary}
+                loading={tokensLoading}
+                selectedAgent={selectedAgent}
+              />
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ============================================================================
+// Sub-components
+// ============================================================================
+
+interface AgentSidebarItemProps {
+  agent: Agent
+  isSelected: boolean
+  onSelect: () => void
+}
+
+function AgentSidebarItem({ agent, isSelected, onSelect }: AgentSidebarItemProps) {
+  const stateClass = getAgentStateClass(agent.state)
+  const roleIcon = getAgentRoleIcon(agent.role_type)
+
+  return (
+    <button
+      onClick={onSelect}
+      className={cn(
+        'w-full px-3 py-2 text-left flex items-center gap-2 text-sm transition-colors',
+        isSelected
+          ? 'bg-accent-rust/10 text-accent-rust border-r-2 border-accent-rust'
+          : 'hover:bg-bg-tertiary text-text-secondary'
+      )}
+    >
+      <span className="text-lg">{roleIcon}</span>
+      <div className="flex-1 min-w-0">
+        <div className="font-medium truncate">{agent.name}</div>
+        <div className="text-xs text-text-muted capitalize">{agent.role_type}</div>
+      </div>
+      <span className={cn('h-2 w-2 rounded-full', stateClass.replace('text-', 'bg-'))} />
+    </button>
+  )
+}
+
+interface TabButtonProps {
+  active: boolean
+  onClick: () => void
+  icon: React.ReactNode
+  label: string
+  badge?: number
+}
+
+function TabButton({ active, onClick, icon, label, badge }: TabButtonProps) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        'px-4 py-3 flex items-center gap-2 text-sm font-medium border-b-2 transition-colors',
+        active
+          ? 'border-accent-rust text-accent-rust'
+          : 'border-transparent text-text-muted hover:text-text-secondary hover:border-border'
+      )}
+    >
+      {icon}
+      {label}
+      {badge !== undefined && badge > 0 && (
+        <span className="ml-1 px-1.5 py-0.5 text-xs rounded-full bg-status-in-progress/20 text-status-in-progress">
+          {badge}
+        </span>
+      )}
+    </button>
+  )
+}
+
+// ============================================================================
+// Tab Content Components
+// ============================================================================
+
+interface OverviewTabProps {
+  selectedAgent: Agent | null
+  agents: Agent[]
+  testMetrics: { passing: number; failing: number; regressions: number; total: number }
+  tokenSummary: TokenSummary | null | undefined
+}
+
+function OverviewTab({ selectedAgent, agents, testMetrics, tokenSummary }: OverviewTabProps) {
+  return (
+    <div className="space-y-6">
+      {/* Summary header */}
+      <div>
+        <h2 className="section-header mb-4">
+          {selectedAgent ? `${selectedAgent.name} OVERVIEW` : 'OVERVIEW'}
+        </h2>
+      </div>
+
+      {/* Stats grid */}
+      <div className="grid grid-cols-4 gap-4">
+        <StatCard
+          label="Agents"
+          value={selectedAgent ? '1' : agents.length.toString()}
+          icon={<User className="h-5 w-5" />}
+        />
+        <StatCard
+          label="Tests Passing"
+          value={`${testMetrics.passing}/${testMetrics.total}`}
+          icon={<CheckCircle className="h-5 w-5 text-status-closed" />}
+        />
+        <StatCard
+          label="Regressions"
+          value={testMetrics.regressions.toString()}
+          icon={<AlertTriangle className="h-5 w-5 text-status-in-progress" />}
+          highlight={testMetrics.regressions > 0}
+        />
+        <StatCard
+          label="Tokens Used"
+          value={formatTokenCount(tokenSummary?.total_input ?? 0, tokenSummary?.total_output ?? 0)}
+          icon={<Coins className="h-5 w-5" />}
+        />
+      </div>
+
+      {/* Agent status (when all agents selected) */}
+      {!selectedAgent && agents.length > 0 && (
+        <div className="card">
+          <h3 className="text-sm font-medium text-text-secondary mb-3">Agent Status</h3>
+          <div className="space-y-2">
+            {agents.map(agent => (
+              <div key={agent.id} className="flex items-center gap-3 py-2 border-b border-border last:border-0">
+                <span className="text-lg">{getAgentRoleIcon(agent.role_type)}</span>
+                <div className="flex-1">
+                  <div className="font-medium text-text-primary">{agent.name}</div>
+                  <div className="text-xs text-text-muted">
+                    {agent.hook_bead ? `Working on ${agent.hook_bead}` : 'Idle'}
+                  </div>
+                </div>
+                <span className={cn(
+                  'px-2 py-0.5 text-xs rounded-full capitalize',
+                  getAgentStateBgClass(agent.state),
+                  getAgentStateClass(agent.state)
+                )}>
+                  {agent.state}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Selected agent details */}
+      {selectedAgent && (
+        <div className="card">
+          <h3 className="text-sm font-medium text-text-secondary mb-3">Agent Details</h3>
+          <dl className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <dt className="text-text-muted">Role</dt>
+              <dd className="text-text-primary capitalize">{selectedAgent.role_type}</dd>
+            </div>
+            <div>
+              <dt className="text-text-muted">State</dt>
+              <dd className={cn('capitalize', getAgentStateClass(selectedAgent.state))}>
+                {selectedAgent.state}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-text-muted">Current Work</dt>
+              <dd className="text-text-primary font-mono">
+                {selectedAgent.hook_bead || 'None'}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-text-muted">Last Activity</dt>
+              <dd className="text-text-primary">
+                {formatRelativeTime(selectedAgent.updated_at)}
+              </dd>
+            </div>
+          </dl>
+        </div>
+      )}
+    </div>
+  )
+}
+
+interface GitTabProps {
+  selectedAgent: Agent | null
+}
+
+function GitTab({ selectedAgent }: GitTabProps) {
+  // Fetch git changes
+  const agentFilter = selectedAgent ? `?agent_id=${selectedAgent.id}` : ''
+  const { data: gitChanges, loading } = useFetch<GitChange[]>(
+    `/api/telemetry/git${agentFilter}`,
+    { enabled: true }
+  )
+
+  return (
+    <div className="space-y-4">
+      <h2 className="section-header">
+        {selectedAgent ? `${selectedAgent.name} GIT ACTIVITY` : 'GIT ACTIVITY'}
+      </h2>
+
+      {loading ? (
+        <div className="py-8 text-center text-text-muted">Loading git activity...</div>
+      ) : !gitChanges || gitChanges.length === 0 ? (
+        <div className="py-8 text-center text-text-muted">No git activity found</div>
+      ) : (
+        <div className="overflow-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-bg-tertiary">
+              <tr className="text-left text-xs uppercase tracking-wider text-text-muted">
+                <th className="px-3 py-2">Commit</th>
+                <th className="px-3 py-2">Files</th>
+                <th className="px-3 py-2">Changes</th>
+                <th className="px-3 py-2">Bead</th>
+                <th className="px-3 py-2">Time</th>
+              </tr>
+            </thead>
+            <tbody>
+              {gitChanges.slice(0, 50).map((change, idx) => (
+                <tr key={idx} className="border-b border-border hover:bg-bg-tertiary/50">
+                  <td className="px-3 py-2 font-mono text-xs">
+                    {change.commit_sha.slice(0, 7)}
+                  </td>
+                  <td className="px-3 py-2">{change.files_changed}</td>
+                  <td className="px-3 py-2">
+                    <span className="text-status-closed">+{change.insertions}</span>
+                    {' / '}
+                    <span className="text-status-blocked">-{change.deletions}</span>
+                  </td>
+                  <td className="px-3 py-2 font-mono text-xs text-accent-rust">
+                    {change.bead_id || '-'}
+                  </td>
+                  <td className="px-3 py-2 text-text-muted">
+                    {formatRelativeTime(change.timestamp)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+interface TestsTabProps {
+  tests: TestStatus[]
+  loading: boolean
+  metrics: { passing: number; failing: number; regressions: number; total: number }
+}
+
+function TestsTab({ tests, loading, metrics }: TestsTabProps) {
+  return (
+    <div className="space-y-4">
+      <h2 className="section-header">
+        TEST SUITE
+        <span className="text-text-muted font-normal ml-2">({metrics.total} tests)</span>
+      </h2>
+
+      {/* Summary stats */}
+      <div className="flex gap-4 text-sm">
+        <div className="flex items-center gap-2">
+          <CheckCircle className="h-4 w-4 text-status-closed" />
+          <span className="text-text-secondary">{metrics.passing} passing</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <XCircle className="h-4 w-4 text-status-blocked" />
+          <span className="text-text-secondary">{metrics.failing - metrics.regressions} failing</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4 text-status-in-progress" />
+          <span className="text-text-secondary">{metrics.regressions} regressions</span>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="py-8 text-center text-text-muted">Loading tests...</div>
+      ) : tests.length === 0 ? (
+        <div className="py-8 text-center text-text-muted">No test results found</div>
+      ) : (
+        <div className="overflow-auto max-h-[500px]">
+          <table className="w-full text-sm">
+            <thead className="bg-bg-tertiary sticky top-0">
+              <tr className="text-left text-xs uppercase tracking-wider text-text-muted">
+                <th className="px-3 py-2">Status</th>
+                <th className="px-3 py-2">Test Name</th>
+                <th className="px-3 py-2">File</th>
+                <th className="px-3 py-2">Last Run</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tests.slice(0, 100).map(test => (
+                <TestRow key={test.test_name} test={test} />
+              ))}
+            </tbody>
+          </table>
+          {tests.length > 100 && (
+            <div className="py-2 text-center text-xs text-text-muted border-t border-border">
+              Showing 100 of {tests.length} tests
+            </div>
           )}
         </div>
       )}
@@ -456,88 +630,158 @@ export function AuditView({ updatedIssueIds = new Set() }: AuditViewProps) {
   )
 }
 
-/** Status icon component for test history */
-function TestStatusIcon({ status }: { status: 'passing' | 'failing' | 'regression' | 'skipped' }) {
-  switch (status) {
-    case 'passing':
-      return <CheckCircle className="h-4 w-4 text-status-closed" />
-    case 'failing':
-      return <XCircle className="h-4 w-4 text-status-blocked" />
-    case 'regression':
-      return <AlertTriangle className="h-4 w-4 text-status-in-progress" />
-    case 'skipped':
-      return <MinusCircle className="h-4 w-4 text-text-muted" />
-  }
-}
-
-/** Format timestamp for display */
-function formatTestTimestamp(timestamp: string): string {
-  if (!timestamp) return '-'
-  const date = new Date(timestamp)
-  const now = new Date()
-  const diff = now.getTime() - date.getTime()
-
-  // Show relative time for recent timestamps
-  if (diff < 60 * 1000) return 'just now'
-  if (diff < 60 * 60 * 1000) return `${Math.floor(diff / (60 * 1000))}m ago`
-  if (diff < 24 * 60 * 60 * 1000) return `${Math.floor(diff / (60 * 60 * 1000))}h ago`
-  if (diff < 7 * 24 * 60 * 60 * 1000) return `${Math.floor(diff / (24 * 60 * 60 * 1000))}d ago`
-
-  return date.toLocaleDateString()
-}
-
-/** Row component for test history table */
-function TestHistoryRow({ test }: { test: TestStatus }) {
+function TestRow({ test }: { test: TestStatus }) {
   const displayStatus = getDisplayStatus(test)
 
-  const rowBgClass =
-    displayStatus === 'passing'
-      ? 'bg-status-closed/5 hover:bg-status-closed/10'
-      : displayStatus === 'failing'
-        ? 'bg-status-blocked/5 hover:bg-status-blocked/10'
-        : displayStatus === 'regression'
-          ? 'bg-status-in-progress/5 hover:bg-status-in-progress/10'
-          : 'bg-bg-tertiary/30 hover:bg-bg-tertiary/50'
-
   return (
-    <tr className={`border-b border-border transition-colors ${rowBgClass}`}>
+    <tr className={cn(
+      'border-b border-border transition-colors',
+      displayStatus === 'passing' && 'bg-status-closed/5 hover:bg-status-closed/10',
+      displayStatus === 'failing' && 'bg-status-blocked/5 hover:bg-status-blocked/10',
+      displayStatus === 'regression' && 'bg-status-in-progress/5 hover:bg-status-in-progress/10'
+    )}>
       <td className="px-3 py-2">
-        <div className="flex items-center gap-2">
-          <TestStatusIcon status={displayStatus} />
-          <span
-            className={`text-xs px-1.5 py-0.5 rounded ${
-              displayStatus === 'passing'
-                ? 'bg-status-closed/20 text-status-closed'
-                : displayStatus === 'failing'
-                  ? 'bg-status-blocked/20 text-status-blocked'
-                  : displayStatus === 'regression'
-                    ? 'bg-status-in-progress/20 text-status-in-progress'
-                    : 'bg-bg-tertiary text-text-muted'
-            }`}
-          >
-            {displayStatus}
-          </span>
-        </div>
+        <span className={cn(
+          'text-xs px-1.5 py-0.5 rounded capitalize',
+          displayStatus === 'passing' && 'bg-status-closed/20 text-status-closed',
+          displayStatus === 'failing' && 'bg-status-blocked/20 text-status-blocked',
+          displayStatus === 'regression' && 'bg-status-in-progress/20 text-status-in-progress'
+        )}>
+          {displayStatus}
+        </span>
       </td>
-      <td className="px-3 py-2 font-mono text-text-primary truncate max-w-[200px]" title={test.test_name}>
+      <td className="px-3 py-2 font-mono truncate max-w-[200px]" title={test.test_name}>
         {test.test_name}
       </td>
       <td className="px-3 py-2 text-text-secondary font-mono truncate max-w-[200px]" title={test.test_file}>
         {test.test_file}
       </td>
-      <td className="px-3 py-2 text-text-secondary">
-        {formatTestTimestamp(test.last_run_at)}
-      </td>
-      <td className="px-3 py-2">
-        {test.last_passed_commit ? (
-          <div className="flex items-center gap-1.5 text-text-secondary">
-            <GitCommit className="h-3.5 w-3.5" />
-            <span className="font-mono text-xs">{test.last_passed_commit.slice(0, 7)}</span>
-          </div>
-        ) : (
-          <span className="text-text-muted">-</span>
-        )}
+      <td className="px-3 py-2 text-text-muted">
+        {formatRelativeTime(test.last_run_at)}
       </td>
     </tr>
   )
+}
+
+interface TokensTabProps {
+  summary: TokenSummary | null | undefined
+  loading: boolean
+  selectedAgent: Agent | null
+}
+
+function TokensTab({ summary, loading, selectedAgent }: TokensTabProps) {
+  return (
+    <div className="space-y-6">
+      <h2 className="section-header">
+        {selectedAgent ? `${selectedAgent.name} TOKEN USAGE` : 'TOKEN USAGE'}
+      </h2>
+
+      {loading ? (
+        <div className="py-8 text-center text-text-muted">Loading token data...</div>
+      ) : !summary ? (
+        <div className="py-8 text-center text-text-muted">No token data available</div>
+      ) : (
+        <>
+          {/* Total stats */}
+          <div className="grid grid-cols-3 gap-4">
+            <StatCard
+              label="Input Tokens"
+              value={formatNumber(summary.total_input)}
+              icon={<Coins className="h-5 w-5" />}
+            />
+            <StatCard
+              label="Output Tokens"
+              value={formatNumber(summary.total_output)}
+              icon={<Coins className="h-5 w-5" />}
+            />
+            <StatCard
+              label="Est. Cost"
+              value={summary.total_cost_usd ? `$${summary.total_cost_usd.toFixed(2)}` : '-'}
+              icon={<Coins className="h-5 w-5" />}
+            />
+          </div>
+
+          {/* By model breakdown */}
+          {Object.keys(summary.by_model).length > 0 && (
+            <div className="card">
+              <h3 className="text-sm font-medium text-text-secondary mb-3">By Model</h3>
+              <div className="space-y-2">
+                {Object.entries(summary.by_model).map(([model, data]) => (
+                  <div key={model} className="flex items-center justify-between py-2 border-b border-border last:border-0">
+                    <span className="font-mono text-sm">{model}</span>
+                    <div className="text-sm text-text-muted">
+                      <span className="text-text-primary">{formatNumber(data.input)}</span> in
+                      {' / '}
+                      <span className="text-text-primary">{formatNumber(data.output)}</span> out
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* By agent breakdown (when viewing all) */}
+          {!selectedAgent && Object.keys(summary.by_agent).length > 0 && (
+            <div className="card">
+              <h3 className="text-sm font-medium text-text-secondary mb-3">By Agent</h3>
+              <div className="space-y-2">
+                {Object.entries(summary.by_agent).map(([agent, data]) => (
+                  <div key={agent} className="flex items-center justify-between py-2 border-b border-border last:border-0">
+                    <span className="text-sm">{agent}</span>
+                    <div className="text-sm text-text-muted">
+                      <span className="text-text-primary">{formatNumber(data.input)}</span> in
+                      {' / '}
+                      <span className="text-text-primary">{formatNumber(data.output)}</span> out
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+interface StatCardProps {
+  label: string
+  value: string
+  icon: React.ReactNode
+  highlight?: boolean
+}
+
+function StatCard({ label, value, icon, highlight }: StatCardProps) {
+  return (
+    <div className={cn(
+      'card flex items-center gap-3',
+      highlight && 'border-status-in-progress'
+    )}>
+      <div className="text-text-muted">{icon}</div>
+      <div>
+        <div className="text-xs text-text-muted uppercase tracking-wider">{label}</div>
+        <div className={cn(
+          'text-xl font-bold',
+          highlight ? 'text-status-in-progress' : 'text-text-primary'
+        )}>
+          {value}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ============================================================================
+// Utility functions
+// ============================================================================
+
+function formatNumber(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
+  return n.toString()
+}
+
+function formatTokenCount(input: number, output: number): string {
+  const total = input + output
+  return formatNumber(total)
 }
