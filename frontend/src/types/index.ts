@@ -286,3 +286,18 @@ export interface WorkItemHealth {
   duration_ms: number;
   started_at: string;
 }
+
+// Token usage summary per model or agent
+export interface TokenModelSummary {
+  input: number;
+  output: number;
+}
+
+// Aggregated token usage statistics
+export interface TokenSummary {
+  total_input: number;
+  total_output: number;
+  total_cost_usd?: number;
+  by_model: Record<string, TokenModelSummary>;
+  by_agent: Record<string, TokenModelSummary>;
+}
