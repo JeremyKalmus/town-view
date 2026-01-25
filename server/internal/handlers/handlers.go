@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -753,6 +754,40 @@ func (h *Handlers) GetBeadTelemetry(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, telemetry)
+}
+
+// GetTestHistory handles GET /api/telemetry/tests/{testName}/history
+// Returns historical test runs for a specific test with optional limit.
+func (h *Handlers) GetTestHistory(w http.ResponseWriter, r *http.Request) {
+	if h.telemetryCollector == nil {
+		writeJSON(w, []telemetry.TestHistoryEntry{})
+		return
+	}
+
+	// Get test name from path and URL-decode it
+	testName := r.PathValue("testName")
+	decodedTestName, err := url.PathUnescape(testName)
+	if err != nil {
+		http.Error(w, "Invalid test name encoding", http.StatusBadRequest)
+		return
+	}
+
+	// Parse limit query param (default: 100)
+	limit := 100
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+
+	history, err := h.telemetryCollector.GetTestHistory(decodedTestName, limit)
+	if err != nil {
+		slog.Error("Failed to get test history", "testName", decodedTestName, "error", err)
+		http.Error(w, "Failed to get test history", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, history)
 }
 
 // CreateTestRun handles POST /api/telemetry/tests
