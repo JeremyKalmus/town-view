@@ -1,4 +1,4 @@
-.PHONY: all server frontend storybook install build clean dev help
+.PHONY: all server frontend storybook install build clean dev help record-tests
 
 # Town root - override with: make dev TOWN_ROOT=/path/to/gt
 # From crew/jeremy/ we need to go up 3 levels: jeremy → crew → townview → gt
@@ -34,6 +34,8 @@ storybook:
 build:
 	@echo "Building Go server..."
 	cd server && go build -o ../bin/townview ./cmd/townview
+	@echo "Building record-tests CLI..."
+	cd server && go build -o ../bin/record-tests ./cmd/record-tests
 	@echo "Building frontend..."
 	cd frontend && npm run build
 	@echo "Copying frontend build to server static..."
@@ -57,6 +59,14 @@ dev:
 	@trap 'kill 0' EXIT; \
 		(cd server && TOWN_ROOT="$(TOWN_ROOT)" go run ./cmd/townview) & \
 		(cd frontend && npm run dev)
+
+# Build and install record-tests CLI
+record-tests:
+	@echo "Building record-tests CLI..."
+	cd server && go build -o ../bin/record-tests ./cmd/record-tests
+	@echo "record-tests binary built at bin/record-tests"
+	@echo ""
+	@echo "Usage: go test -json ./... | ./bin/record-tests --agent <agent-id>"
 
 # Help
 help:
