@@ -628,3 +628,144 @@ func TestQueryService_Limit(t *testing.T) {
 		t.Errorf("expected 3 issues with offset, got %d", len(offset))
 	}
 }
+
+// TestQueryService_CacheStats tests cache statistics tracking.
+func TestQueryService_CacheStats(t *testing.T) {
+	dbPath, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	// Insert test issues
+	insertTestIssue(t, dbPath, "stats-001", "Issue 1", "open", "task", 1)
+	insertTestIssue(t, dbPath, "stats-002", "Issue 2", "open", "task", 1)
+	insertTestIssue(t, dbPath, "convoy-001", "Test Convoy", "open", "convoy", 1)
+	insertTestDependency(t, dbPath, "stats-001", "convoy-001", "tracks")
+
+	config := DefaultConfig()
+	config.DBPath = dbPath
+	config.CacheConfig.IssuesTTL = 1 * time.Minute
+	svc, err := New(config, nil, nil)
+	if err != nil {
+		t.Fatalf("failed to create service: %v", err)
+	}
+	defer svc.Close()
+
+	// Initial stats - should be zero
+	stats := svc.GetCacheStats()
+	if stats.HitCount != 0 || stats.MissCount != 0 {
+		t.Errorf("expected 0 hits/misses initially, got %d/%d", stats.HitCount, stats.MissCount)
+	}
+	if stats.IssueEntries != 0 {
+		t.Errorf("expected 0 cache entries initially, got %d", stats.IssueEntries)
+	}
+
+	// First GetIssue - should be a miss
+	_, err = svc.GetIssue("stats-001")
+	if err != nil {
+		t.Fatalf("GetIssue failed: %v", err)
+	}
+
+	stats = svc.GetCacheStats()
+	if stats.MissCount != 1 {
+		t.Errorf("expected 1 miss after first GetIssue, got %d", stats.MissCount)
+	}
+	if stats.HitCount != 0 {
+		t.Errorf("expected 0 hits after first GetIssue, got %d", stats.HitCount)
+	}
+	if stats.IssueEntries != 1 {
+		t.Errorf("expected 1 issue cache entry, got %d", stats.IssueEntries)
+	}
+
+	// Second GetIssue (same issue) - should be a hit
+	_, err = svc.GetIssue("stats-001")
+	if err != nil {
+		t.Fatalf("second GetIssue failed: %v", err)
+	}
+
+	stats = svc.GetCacheStats()
+	if stats.MissCount != 1 {
+		t.Errorf("expected 1 miss after cache hit, got %d", stats.MissCount)
+	}
+	if stats.HitCount != 1 {
+		t.Errorf("expected 1 hit after second GetIssue, got %d", stats.HitCount)
+	}
+
+	// ListIssues - should be a miss
+	_, err = svc.ListIssues(IssueFilter{})
+	if err != nil {
+		t.Fatalf("ListIssues failed: %v", err)
+	}
+
+	stats = svc.GetCacheStats()
+	if stats.MissCount != 2 {
+		t.Errorf("expected 2 misses after ListIssues, got %d", stats.MissCount)
+	}
+	if stats.IssueListEntries != 1 {
+		t.Errorf("expected 1 issue list cache entry, got %d", stats.IssueListEntries)
+	}
+
+	// Second ListIssues (same filter) - should be a hit
+	_, err = svc.ListIssues(IssueFilter{})
+	if err != nil {
+		t.Fatalf("second ListIssues failed: %v", err)
+	}
+
+	stats = svc.GetCacheStats()
+	if stats.HitCount != 2 {
+		t.Errorf("expected 2 hits after cached ListIssues, got %d", stats.HitCount)
+	}
+
+	// GetConvoyProgress - should be a miss
+	_, err = svc.GetConvoyProgress("convoy-001")
+	if err != nil {
+		t.Fatalf("GetConvoyProgress failed: %v", err)
+	}
+
+	stats = svc.GetCacheStats()
+	if stats.MissCount != 3 {
+		t.Errorf("expected 3 misses after GetConvoyProgress, got %d", stats.MissCount)
+	}
+	if stats.ConvoyProgressEntries != 1 {
+		t.Errorf("expected 1 convoy progress cache entry, got %d", stats.ConvoyProgressEntries)
+	}
+
+	// Second GetConvoyProgress - should be a hit
+	_, err = svc.GetConvoyProgress("convoy-001")
+	if err != nil {
+		t.Fatalf("second GetConvoyProgress failed: %v", err)
+	}
+
+	stats = svc.GetCacheStats()
+	if stats.HitCount != 3 {
+		t.Errorf("expected 3 hits after cached GetConvoyProgress, got %d", stats.HitCount)
+	}
+
+	// Verify TTL values in stats
+	if stats.IssuesTTL != 60 {
+		t.Errorf("expected IssuesTTL to be 60 seconds, got %d", stats.IssuesTTL)
+	}
+
+	// Test cache invalidation updates lastInvalidation
+	beforeInvalidate := time.Now()
+	time.Sleep(10 * time.Millisecond)
+	svc.InvalidateCache()
+	time.Sleep(10 * time.Millisecond)
+	afterInvalidate := time.Now()
+
+	stats = svc.GetCacheStats()
+	if stats.LastInvalidation.Before(beforeInvalidate) || stats.LastInvalidation.After(afterInvalidate) {
+		t.Errorf("expected lastInvalidation to be between %v and %v, got %v",
+			beforeInvalidate, afterInvalidate, stats.LastInvalidation)
+	}
+
+	// After invalidation, all cache entries should be empty
+	if stats.IssueEntries != 0 || stats.IssueListEntries != 0 || stats.ConvoyProgressEntries != 0 {
+		t.Errorf("expected 0 cache entries after invalidation, got %d/%d/%d",
+			stats.IssueEntries, stats.IssueListEntries, stats.ConvoyProgressEntries)
+	}
+
+	// Hit and miss counts should persist through invalidation
+	if stats.HitCount != 3 || stats.MissCount != 3 {
+		t.Errorf("expected 3/3 hits/misses after invalidation, got %d/%d",
+			stats.HitCount, stats.MissCount)
+	}
+}
