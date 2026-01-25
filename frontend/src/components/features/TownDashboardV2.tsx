@@ -78,14 +78,16 @@ function computeWorkerCounts(agents: Agent[]): WorkerCounts {
 }
 
 /**
- * Check if an issue is a workflow infrastructure bead (wisp, event, agent).
+ * Check if an issue is a workflow infrastructure bead (wisp, event, agent, patrol).
  * These are filtered out from "real work" counts in the Town Dashboard.
  *
- * Wisps are identified by:
+ * Infrastructure beads are identified by:
  * - ID containing '-wisp-' (workflow step beads)
  * - Issue type 'event' (session lifecycle events)
  * - Issue type 'agent' (agent lifecycle beads)
  * - Issue type 'molecule' (workflow containers)
+ * - Title containing 'Patrol' (patrol molecules like Deacon Patrol, Witness Patrol)
+ * - Title starting with 'mol-' (molecule definition beads)
  */
 function isWorkflowInfrastructure(issue: Issue): boolean {
   // Wisp beads (workflow steps)
@@ -102,6 +104,18 @@ function isWorkflowInfrastructure(issue: Issue): boolean {
   }
   // Molecule beads (workflow containers) - patrol molecules etc.
   if (issue.issue_type === 'molecule') {
+    return true
+  }
+  // Message beads (mail)
+  if (issue.issue_type === 'message') {
+    return true
+  }
+  // Patrol molecules (Deacon Patrol, Witness Patrol, Refinery Patrol, etc.)
+  if (issue.title.toLowerCase().includes('patrol')) {
+    return true
+  }
+  // Molecule definition beads (mol-*)
+  if (issue.title.toLowerCase().startsWith('mol-')) {
     return true
   }
   return false
