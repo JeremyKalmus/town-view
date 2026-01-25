@@ -129,6 +129,10 @@ func main() {
 	mux.HandleFunc("GET /api/telemetry/regressions", h.GetRegressions)
 	mux.HandleFunc("GET /api/telemetry/tokens/summary", h.GetTokenSummary)
 
+	// Telemetry (git changes)
+	mux.HandleFunc("GET /api/telemetry/git", h.GetGitChanges)
+	mux.HandleFunc("GET /api/telemetry/git/summary", h.GetGitSummary)
+
 	// WebSocket (real-time data streaming)
 	mux.Handle("GET /ws", wsHandler)
 

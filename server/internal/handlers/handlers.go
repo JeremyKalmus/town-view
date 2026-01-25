@@ -639,6 +639,72 @@ func (h *Handlers) GetTokenSummary(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, summary)
 }
 
+// GetGitChanges handles GET /api/telemetry/git
+// Returns git changes with optional filtering by agent_id, bead_id, since, until, limit.
+func (h *Handlers) GetGitChanges(w http.ResponseWriter, r *http.Request) {
+	if h.telemetryCollector == nil {
+		writeJSON(w, []telemetry.GitChange{})
+		return
+	}
+
+	// Build filter from query params
+	filter := telemetry.TelemetryFilter{
+		AgentID: r.URL.Query().Get("agent_id"),
+		BeadID:  r.URL.Query().Get("bead_id"),
+		Since:   r.URL.Query().Get("since"),
+		Until:   r.URL.Query().Get("until"),
+	}
+
+	// Parse limit
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 {
+			filter.Limit = parsed
+		}
+	}
+
+	changes, err := h.telemetryCollector.GetGitChanges(filter)
+	if err != nil {
+		slog.Error("Failed to get git changes", "error", err)
+		http.Error(w, "Failed to get git changes", http.StatusInternalServerError)
+		return
+	}
+
+	// Ensure we return empty array not null
+	if changes == nil {
+		changes = []telemetry.GitChange{}
+	}
+
+	writeJSON(w, changes)
+}
+
+// GetGitSummary handles GET /api/telemetry/git/summary
+// Returns aggregated git statistics with optional filtering.
+func (h *Handlers) GetGitSummary(w http.ResponseWriter, r *http.Request) {
+	if h.telemetryCollector == nil {
+		writeJSON(w, telemetry.GitSummary{
+			ByAgent: make(map[string]int),
+		})
+		return
+	}
+
+	// Build filter from query params
+	filter := telemetry.TelemetryFilter{
+		AgentID: r.URL.Query().Get("agent_id"),
+		BeadID:  r.URL.Query().Get("bead_id"),
+		Since:   r.URL.Query().Get("since"),
+		Until:   r.URL.Query().Get("until"),
+	}
+
+	summary, err := h.telemetryCollector.GetGitSummary(filter)
+	if err != nil {
+		slog.Error("Failed to get git summary", "error", err)
+		http.Error(w, "Failed to get git summary", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, summary)
+}
+
 // CreateTestRun handles POST /api/telemetry/tests
 // Accepts TestRun JSON payload and records it via the telemetry collector.
 func (h *Handlers) CreateTestRun(w http.ResponseWriter, r *http.Request) {
