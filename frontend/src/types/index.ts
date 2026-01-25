@@ -275,3 +275,17 @@ export interface WorkItemHealth {
   duration_ms: number;
   started_at: string;
 }
+
+// Git change from telemetry API
+export interface GitChange {
+  agent_id: string;
+  bead_id?: string;
+  timestamp: string;
+  commit_sha: string;
+  branch: string;
+  files_changed: number;
+  insertions: number;
+  deletions: number;
+  message: string;
+  diff_summary?: string;
+}
