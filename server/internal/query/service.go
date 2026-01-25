@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gastown/townview/internal/events"
@@ -119,6 +120,20 @@ type SystemHealth struct {
 	AgentsByRole map[string]int `json:"agents_by_role"`
 }
 
+// CacheStats provides cache performance statistics.
+type CacheStats struct {
+	IssueEntries           int       `json:"issue_entries"`
+	IssueListEntries       int       `json:"issue_list_entries"`
+	DependencyEntries      int       `json:"dependency_entries"`
+	ConvoyProgressEntries  int       `json:"convoy_progress_entries"`
+	HitCount               uint64    `json:"hit_count"`
+	MissCount              uint64    `json:"miss_count"`
+	LastInvalidation       time.Time `json:"last_invalidation"`
+	IssuesTTL              int       `json:"issues_ttl_seconds"`
+	ConvoyProgressTTL      int       `json:"convoy_progress_ttl_seconds"`
+	DependenciesTTL        int       `json:"dependencies_ttl_seconds"`
+}
+
 // Service provides fast, cached access to beads data via direct SQLite queries.
 type Service struct {
 	db            *sql.DB
@@ -134,6 +149,11 @@ type Service struct {
 
 	// Mutex for cache access
 	mu sync.RWMutex
+
+	// Cache statistics (atomic access)
+	hitCount         uint64
+	missCount        uint64
+	lastInvalidation time.Time
 
 	// Event subscription for cache invalidation
 	eventCh    <-chan events.Event
@@ -242,6 +262,26 @@ func (s *Service) InvalidateCache() {
 	s.issueListCache = make(map[string]cacheEntry[[]types.Issue])
 	s.dependencyCache = make(map[string]cacheEntry[[]types.Dependency])
 	s.convoyProgressCache = make(map[string]cacheEntry[types.ConvoyProgress])
+	s.lastInvalidation = time.Now()
+}
+
+// GetCacheStats returns current cache statistics.
+func (s *Service) GetCacheStats() CacheStats {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return CacheStats{
+		IssueEntries:          len(s.issueCache),
+		IssueListEntries:      len(s.issueListCache),
+		DependencyEntries:     len(s.dependencyCache),
+		ConvoyProgressEntries: len(s.convoyProgressCache),
+		HitCount:              atomic.LoadUint64(&s.hitCount),
+		MissCount:             atomic.LoadUint64(&s.missCount),
+		LastInvalidation:      s.lastInvalidation,
+		IssuesTTL:             int(s.config.CacheConfig.IssuesTTL.Seconds()),
+		ConvoyProgressTTL:     int(s.config.CacheConfig.ConvoyProgressTTL.Seconds()),
+		DependenciesTTL:       int(s.config.CacheConfig.DependenciesTTL.Seconds()),
+	}
 }
 
 // ListIssues returns issues matching the filter.
@@ -255,9 +295,13 @@ func (s *Service) ListIssues(filter IssueFilter) ([]types.Issue, error) {
 	s.mu.RLock()
 	if entry, ok := s.issueListCache[cacheKey]; ok && time.Now().Before(entry.expiresAt) {
 		s.mu.RUnlock()
+		atomic.AddUint64(&s.hitCount, 1)
 		return entry.value, nil
 	}
 	s.mu.RUnlock()
+
+	// Cache miss
+	atomic.AddUint64(&s.missCount, 1)
 
 	// Query database
 	issues, err := s.queryIssues(filter)
@@ -395,10 +439,14 @@ func (s *Service) GetIssue(issueID string) (*types.Issue, error) {
 	s.mu.RLock()
 	if entry, ok := s.issueCache[issueID]; ok && time.Now().Before(entry.expiresAt) {
 		s.mu.RUnlock()
+		atomic.AddUint64(&s.hitCount, 1)
 		result := entry.value
 		return &result, nil
 	}
 	s.mu.RUnlock()
+
+	// Cache miss
+	atomic.AddUint64(&s.missCount, 1)
 
 	// Query database
 	query := `
@@ -622,10 +670,14 @@ func (s *Service) GetConvoyProgress(convoyID string) (*types.ConvoyProgress, err
 	s.mu.RLock()
 	if entry, ok := s.convoyProgressCache[convoyID]; ok && time.Now().Before(entry.expiresAt) {
 		s.mu.RUnlock()
+		atomic.AddUint64(&s.hitCount, 1)
 		result := entry.value
 		return &result, nil
 	}
 	s.mu.RUnlock()
+
+	// Cache miss
+	atomic.AddUint64(&s.missCount, 1)
 
 	total := 0
 	completed := 0
