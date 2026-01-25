@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import type { Issue, IssueDependencies } from '@/types'
-import { cachedFetch } from '@/services/cache'
+import { getIssues, getIssueDependencies } from '@/services'
 import { cn } from '@/lib/class-utils'
 import { getPriorityBadgeClass, getPriorityLabel } from '@/lib/priority-utils'
 import { getStatusBadgeClass, getStatusIcon } from '@/lib/status-utils'
@@ -100,11 +100,7 @@ function AddDependencyModal({
 
   useEffect(() => {
     const fetchAllIssues = async () => {
-      const url = `/api/rigs/${rigId}/issues?all=true`
-      const result = await cachedFetch<Issue[]>(url, {
-        cacheTTL: 2 * 60 * 1000, // 2 minutes
-        returnStaleOnError: true,
-      })
+      const result = await getIssues(rigId, { all: true })
 
       if (result.data) {
         // Filter out current issue and existing blockers
@@ -253,20 +249,12 @@ export function DependenciesTab({ rigId, issueId, onIssueClick }: DependenciesTa
     setLoading(true)
     setError(null)
 
-    const url = `/api/rigs/${rigId}/issues/${issueId}/dependencies`
-    const result = await cachedFetch<IssueDependencies>(url, {
-      cacheTTL: 2 * 60 * 1000, // 2 minutes
-      returnStaleOnError: true,
-    })
+    const result = await getIssueDependencies(rigId, issueId)
 
     if (result.data) {
       setDependencies(result.data)
       setLoading(false)
-      if (result.fromCache && result.error) {
-        console.warn('[IssueDeps] Using cached data:', result.error)
-      } else {
-        setError(null)
-      }
+      setError(null)
     } else if (result.error) {
       setError(result.error)
       setLoading(false)

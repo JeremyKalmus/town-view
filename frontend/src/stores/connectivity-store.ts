@@ -10,8 +10,6 @@ export type ConnectivityStatus = 'online' | 'offline' | 'reconnecting'
 interface ConnectivityStore {
   // Current status
   status: ConnectivityStatus
-  // Whether we have cached data available
-  hasCachedData: boolean
   // Last successful connection time
   lastOnline: number | null
   // Number of consecutive failures
@@ -21,14 +19,12 @@ interface ConnectivityStore {
   setOnline: () => void
   setOffline: () => void
   setReconnecting: () => void
-  setHasCachedData: (has: boolean) => void
   incrementFailure: () => void
   resetFailures: () => void
 }
 
 export const useConnectivityStore = create<ConnectivityStore>((set) => ({
   status: 'online',
-  hasCachedData: false,
   lastOnline: Date.now(),
   failureCount: 0,
 
@@ -47,11 +43,6 @@ export const useConnectivityStore = create<ConnectivityStore>((set) => ({
   setReconnecting: () =>
     set({
       status: 'reconnecting',
-    }),
-
-  setHasCachedData: (has) =>
-    set({
-      hasCachedData: has,
     }),
 
   incrementFailure: () =>

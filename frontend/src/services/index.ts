@@ -1,18 +1,26 @@
 /**
  * Services barrel export.
+ * All API functions return fresh data - no caching.
  */
 
-export { updateIssue, getIssue } from './api'
-export type { ApiError, UpdateResult } from './api'
-
 export {
-  cachedFetch,
-  getCache,
-  setCache,
-  removeCache,
-  clearAllCache,
-  cleanupExpiredCache,
-  hasCachedData,
-  getCacheTimestamp,
-} from './cache'
-export type { CachedFetchOptions, CachedFetchResult } from './cache'
+  // Rig operations
+  getRigs,
+  // Agent operations
+  getAgents,
+  getAgentMail,
+  getAgentMailByName,
+  // Issue operations
+  getIssues,
+  getIssue,
+  updateIssue,
+  // Dependency operations
+  getDependencies,
+  getIssueDependencies,
+  // Comment operations
+  getComments,
+  // History operations
+  getHistory,
+} from './api'
+
+export type { ApiError, ApiResult, UpdateResult } from './api'

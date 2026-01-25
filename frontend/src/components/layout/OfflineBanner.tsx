@@ -1,9 +1,9 @@
 /**
  * Offline Banner Component
- * Shows a banner when the app is offline, with cached data indicator.
+ * Shows a banner when the app is offline.
  */
 
-import { WifiOff, RefreshCw, Database } from 'lucide-react'
+import { WifiOff, RefreshCw } from 'lucide-react'
 import { useConnectivityStore } from '@/stores/connectivity-store'
 import { cn } from '@/lib/class-utils'
 
@@ -12,7 +12,7 @@ interface OfflineBannerProps {
 }
 
 export function OfflineBanner({ onRetry }: OfflineBannerProps) {
-  const { status, hasCachedData, lastOnline } = useConnectivityStore()
+  const { status, lastOnline } = useConnectivityStore()
 
   if (status === 'online') {
     return null
@@ -39,12 +39,6 @@ export function OfflineBanner({ onRetry }: OfflineBannerProps) {
         <span className={cn(isReconnecting ? 'text-yellow-200' : 'text-red-200')}>
           {isReconnecting ? 'Reconnecting...' : 'You are offline'}
         </span>
-        {hasCachedData && (
-          <span className="flex items-center gap-1 text-text-muted">
-            <Database className="w-3 h-3" />
-            <span>Showing cached data</span>
-          </span>
-        )}
         {timeAgo && !isReconnecting && (
           <span className="text-text-muted">
             Last online: {timeAgo}

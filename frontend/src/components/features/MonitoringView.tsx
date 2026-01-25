@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import type { Rig, Agent } from '@/types'
 import { useDataStore, selectAgentsByRig, selectConnected, selectLastUpdated } from '@/stores/data-store'
-import { cachedFetch } from '@/services/cache'
+import { getAgents } from '@/services'
 import { cn } from '@/lib/class-utils'
 import { formatRelativeTime } from '@/lib/status-utils'
 import { SkeletonAgentGrid, ErrorState } from '@/components/ui/Skeleton'
@@ -105,21 +105,12 @@ export function MonitoringView({ rig, refreshKey = 0 }: MonitoringViewProps) {
     setHttpLoading(true)
     setAgentsError(null)
 
-    const fetchAgents = async () => {
-      const url = `/api/rigs/${rig.id}/agents`
-      const skipCache = isInitialLoadRef.current
-      const result = await cachedFetch<Agent[]>(url, {
-        cacheTTL: 2 * 60 * 1000, // 2 minutes
-        returnStaleOnError: true,
-        skipCache, // Skip cache on initial load
-      })
+    const fetchAgentsData = async () => {
+      const result = await getAgents(rig.id)
 
       if (result.data) {
         setHttpAgents(result.data)
         setHttpLastUpdated(new Date())
-        if (result.fromCache && result.error) {
-          console.warn('[Agents] Using cached data:', result.error)
-        }
       } else {
         console.error('Failed to fetch agents:', result.error)
         setAgentsError(result.error || 'Failed to load agents')
@@ -130,7 +121,7 @@ export function MonitoringView({ rig, refreshKey = 0 }: MonitoringViewProps) {
       isInitialLoadRef.current = false
     }
 
-    fetchAgents()
+    fetchAgentsData()
   }, [rig.id, refreshKey, retryCount, wsConnected, wsAgents.length])
 
   // Handle retry

@@ -24,8 +24,7 @@ import { CommentsTab } from './CommentsTab'
 import { HistoryTab } from './HistoryTab'
 import { ConfirmationModal } from '@/components/ui/ConfirmationModal'
 import { SkeletonTreeView, ErrorState } from '@/components/ui/Skeleton'
-import { cachedFetch } from '@/services/cache'
-import { updateIssue } from '@/services/api'
+import { getIssues, getDependencies, getComments, getHistory, updateIssue } from '@/services'
 import { buildTree, getParentId } from '@/lib/tree'
 import { cn } from '@/lib/class-utils'
 import type { IssueFormData } from './issue-editor/validation'
@@ -109,11 +108,7 @@ export function PlanningView({ refreshKey = 0, updatedIssueIds }: PlanningViewPr
       }
       setError(null)
 
-      const url = `/api/rigs/${selectedRig.id}/issues?all=true`
-      const result = await cachedFetch<Issue[]>(url, {
-        cacheTTL: 2 * 60 * 1000,
-        returnStaleOnError: true,
-      })
+      const result = await getIssues(selectedRig.id, { all: true })
 
       if (result.data) {
         setHttpIssues(result.data)
@@ -137,59 +132,47 @@ export function PlanningView({ refreshKey = 0, updatedIssueIds }: PlanningViewPr
   useEffect(() => {
     if (!selectedRig) return
 
-    const fetchDependencies = async () => {
-      const url = `/api/rigs/${selectedRig.id}/dependencies`
-      const result = await cachedFetch<Dependency[]>(url, {
-        cacheTTL: 2 * 60 * 1000,
-        returnStaleOnError: true,
-      })
+    const fetchDependenciesData = async () => {
+      const result = await getDependencies(selectedRig.id)
 
       if (result.data) {
         setDependencies(result.data)
       }
     }
 
-    fetchDependencies()
+    fetchDependenciesData()
   }, [selectedRig, refreshKey])
 
   // Fetch comments when dependencies tab is active
   useEffect(() => {
     if (!selectedRig || !selectedIssue || activeTab !== 'comments') return
 
-    const fetchComments = async () => {
+    const fetchCommentsData = async () => {
       setCommentsLoading(true)
-      const url = `/api/rigs/${selectedRig.id}/issues/${selectedIssue.id}/comments`
-      const result = await cachedFetch<Comment[]>(url, {
-        cacheTTL: 60 * 1000,
-        returnStaleOnError: true,
-      })
+      const result = await getComments(selectedRig.id, selectedIssue.id)
       if (result.data) {
         setComments(result.data)
       }
       setCommentsLoading(false)
     }
 
-    fetchComments()
+    fetchCommentsData()
   }, [selectedRig, selectedIssue, activeTab])
 
   // Fetch history when history tab is active
   useEffect(() => {
     if (!selectedRig || !selectedIssue || activeTab !== 'history') return
 
-    const fetchHistory = async () => {
+    const fetchHistoryData = async () => {
       setHistoryLoading(true)
-      const url = `/api/rigs/${selectedRig.id}/issues/${selectedIssue.id}/history`
-      const result = await cachedFetch<HistoryEntry[]>(url, {
-        cacheTTL: 60 * 1000,
-        returnStaleOnError: true,
-      })
+      const result = await getHistory(selectedRig.id, selectedIssue.id)
       if (result.data) {
         setHistory(result.data)
       }
       setHistoryLoading(false)
     }
 
-    fetchHistory()
+    fetchHistoryData()
   }, [selectedRig, selectedIssue, activeTab])
 
   // Filter out operational/automated tasks (witness patrol, etc.)

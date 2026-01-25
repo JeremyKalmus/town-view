@@ -4,7 +4,7 @@ import { IssueRow } from './IssueRow'
 import { AgentCard } from './AgentCard'
 import { DependencyArrows } from './DependencyArrows'
 import { SkeletonIssueList, SkeletonStatGrid, VirtualList } from "@/components/ui"
-import { cachedFetch } from "@/services/cache"
+import { getIssues, getAgents, getDependencies } from "@/services"
 import { cn } from '@/lib/class-utils'
 
 interface RigDashboardProps {
@@ -57,36 +57,26 @@ export function RigDashboard({ rig, refreshKey = 0, updatedIssueIds = new Set() 
   }, [])
 
   // Track if this is the initial load or a rig change (vs just a refresh or filter change)
-  const isInitialLoadRef = useRef(true)
   const prevRigIdRef = useRef(rig.id)
 
   // Fetch ALL issues for KPI stats (unfiltered)
   useEffect(() => {
     const rigChanged = prevRigIdRef.current !== rig.id
 
-    if (isInitialLoadRef.current || rigChanged) {
+    if (rigChanged) {
       setLoading(true)
-      isInitialLoadRef.current = false
     }
 
     prevRigIdRef.current = rig.id
     setError(null)
 
     const fetchAllIssues = async () => {
-      const url = `/api/rigs/${rig.id}/issues?all=true`
-      const result = await cachedFetch<Issue[]>(url, {
-        cacheTTL: 2 * 60 * 1000, // 2 minutes for issues
-        returnStaleOnError: true,
-      })
+      const result = await getIssues(rig.id, { all: true })
 
       if (result.data) {
         setAllIssues(result.data)
         setLoading(false)
-        if (result.fromCache && result.error) {
-          console.warn('[Issues] Using cached data:', result.error)
-        } else {
-          setError(null)
-        }
+        setError(null)
       } else if (result.error) {
         setError(result.error)
         setLoading(false)
@@ -114,18 +104,11 @@ export function RigDashboard({ rig, refreshKey = 0, updatedIssueIds = new Set() 
   useEffect(() => {
     setAgentsLoading(true)
 
-    const fetchAgents = async () => {
-      const url = `/api/rigs/${rig.id}/agents`
-      const result = await cachedFetch<Agent[]>(url, {
-        cacheTTL: 2 * 60 * 1000, // 2 minutes
-        returnStaleOnError: true,
-      })
+    const fetchAgentsData = async () => {
+      const result = await getAgents(rig.id)
 
       if (result.data) {
         setAgents(result.data)
-        if (result.fromCache && result.error) {
-          console.warn('[Agents] Using cached data:', result.error)
-        }
       } else {
         console.error('Failed to fetch agents:', result.error)
         setAgents([])
@@ -133,7 +116,7 @@ export function RigDashboard({ rig, refreshKey = 0, updatedIssueIds = new Set() 
       setAgentsLoading(false)
     }
 
-    fetchAgents()
+    fetchAgentsData()
   }, [rig.id, refreshKey])
 
   // Fetch dependencies when arrows are enabled
@@ -143,25 +126,18 @@ export function RigDashboard({ rig, refreshKey = 0, updatedIssueIds = new Set() 
       return
     }
 
-    const fetchDependencies = async () => {
-      const url = `/api/rigs/${rig.id}/dependencies`
-      const result = await cachedFetch<Dependency[]>(url, {
-        cacheTTL: 2 * 60 * 1000, // 2 minutes
-        returnStaleOnError: true,
-      })
+    const fetchDependenciesData = async () => {
+      const result = await getDependencies(rig.id)
 
       if (result.data) {
         setDependencies(result.data)
-        if (result.fromCache && result.error) {
-          console.warn('[Dependencies] Using cached data:', result.error)
-        }
       } else {
         console.error('Failed to fetch dependencies:', result.error)
         setDependencies([])
       }
     }
 
-    fetchDependencies()
+    fetchDependenciesData()
   }, [rig.id, showArrows, refreshKey])
 
   // Group ALL issues by status for KPI summary (not affected by filters)

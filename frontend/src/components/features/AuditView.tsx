@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRigStore } from '@/stores/rig-store'
 import { useDataStore, selectIssuesByRig, selectConnected } from '@/stores/data-store'
-import { cachedFetch } from '@/services/cache'
+import { getIssues } from '@/services'
 import { ConvoySelector, type ConvoySortBy } from './ConvoySelector'
 import { ConvoyTreeView } from './ConvoyTreeView'
 import { DateRangePicker, type DateRange } from '@/components/ui/DateRangePicker'
@@ -151,11 +151,7 @@ export function AuditView({ updatedIssueIds = new Set() }: AuditViewProps) {
     setHttpError(null)
 
     const fetchIssues = async () => {
-      const url = `/api/rigs/${selectedRig.id}/issues?all=true`
-      const result = await cachedFetch<Issue[]>(url, {
-        cacheTTL: 2 * 60 * 1000,
-        returnStaleOnError: true,
-      })
+      const result = await getIssues(selectedRig.id, { all: true })
 
       if (result.data) {
         setHttpIssues(result.data)

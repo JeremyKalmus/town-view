@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import type { Agent, Rig, ActivityEvent } from '@/types'
 import { useDataStore, selectConnected, selectMail, selectActivity } from '@/stores/data-store'
-import { cachedFetch } from '@/services/cache'
+import { getRigs, getAgents } from '@/services'
 import { RigHealthGrid } from './RigHealthGrid'
 import { InfrastructureHealth } from './monitoring/InfrastructureHealth'
 import { ActivityFeed } from './monitoring/ActivityFeed'
@@ -107,10 +107,7 @@ export function TownDashboard({ refreshKey = 0 }: TownDashboardProps) {
     const fetchInfrastructureAgents = async () => {
       try {
         // First get all rigs
-        const rigsResult = await cachedFetch<Rig[]>('/api/rigs', {
-          cacheTTL: 2 * 60 * 1000,
-          returnStaleOnError: true,
-        })
+        const rigsResult = await getRigs()
 
         if (!rigsResult.data) {
           setHttpError(rigsResult.error || 'Failed to load rigs')
@@ -120,10 +117,7 @@ export function TownDashboard({ refreshKey = 0 }: TownDashboardProps) {
 
         // Fetch agents from all rigs in parallel
         const agentPromises = rigsResult.data.map(async (rig) => {
-          const result = await cachedFetch<Agent[]>(`/api/rigs/${rig.id}/agents`, {
-            cacheTTL: 2 * 60 * 1000,
-            returnStaleOnError: true,
-          })
+          const result = await getAgents(rig.id)
           return result.data || []
         })
 

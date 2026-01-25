@@ -15,7 +15,7 @@ import { useUIStore } from '@/stores/ui-store'
 import { useDataStore, selectRigs, selectConnected } from '@/stores/data-store'
 import { useOffline } from '@/hooks/useOffline'
 import { useWebSocket } from '@/hooks/useWebSocket'
-import { cachedFetch } from '@/services/cache'
+import { getRigs } from '@/services'
 import type { Rig } from '@/types'
 
 function App() {
@@ -68,10 +68,7 @@ function App() {
   useEffect(() => {
     // Fetch rigs via HTTP as fallback (WebSocket provides real-time updates)
     const fetchRigs = async () => {
-      const result = await cachedFetch<Rig[]>('/api/rigs', {
-        cacheTTL: 5 * 60 * 1000, // 5 minutes
-        returnStaleOnError: true,
-      })
+      const result = await getRigs()
 
       if (result.data) {
         // Deduplicate rigs by ID (defensive measure for backend edge cases)
@@ -80,13 +77,7 @@ function App() {
         )
         setHttpRigs(uniqueRigs)
         setLoading(false)
-        // Clear error if we have data (even cached)
-        if (result.fromCache && result.error) {
-          // Keep error for display but don't block UI
-          console.warn('[Rigs] Using cached data:', result.error)
-        } else {
-          setError(null)
-        }
+        setError(null)
       } else if (result.error) {
         setError(result.error)
         setLoading(false)

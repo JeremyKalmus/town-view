@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import type { Rig, Agent, AgentState } from '@/types'
-import { cachedFetch } from '@/services/cache'
+import { getRigs, getAgents } from '@/services'
 import { useRigStore } from '@/stores/rig-store'
 import { useUIStore } from '@/stores/ui-store'
 import { getAgentStateIcon } from '@/lib/agent-utils'
@@ -87,14 +87,11 @@ export function RigHealthGrid({
   useEffect(() => {
     if (isMockMode) return
 
-    const fetchRigs = async () => {
+    const fetchRigsData = async () => {
       setLoading(true)
       setError(null)
 
-      const result = await cachedFetch<Rig[]>('/api/rigs', {
-        cacheTTL: 2 * 60 * 1000,
-        returnStaleOnError: true,
-      })
+      const result = await getRigs()
 
       if (result.data) {
         // Deduplicate rigs by ID
@@ -109,7 +106,7 @@ export function RigHealthGrid({
       }
     }
 
-    fetchRigs()
+    fetchRigsData()
   }, [refreshKey, isMockMode])
 
   // Fetch agents for all rigs and compute health summaries
@@ -137,10 +134,7 @@ export function RigHealthGrid({
 
       // Fetch agents for each rig in parallel
       const promises = rigs.map(async (rig) => {
-        const result = await cachedFetch<Agent[]>(`/api/rigs/${rig.id}/agents`, {
-          cacheTTL: 2 * 60 * 1000,
-          returnStaleOnError: true,
-        })
+        const result = await getAgents(rig.id)
 
         const agents = result.data || []
         const summary = computeHealthSummary(rig, agents)
