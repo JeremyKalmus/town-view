@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import type { Agent, Rig, Issue, AgentState } from '@/types'
 import { useDataStore, selectConnected } from '@/stores/data-store'
 import { StatusDot } from '@/components/ui/StatusDot'
-import { TOWN_WORK_TYPES, isTownWorkType } from '@/lib/agent-bead-config'
+import { isTownWorkType } from '@/lib/agent-bead-config'
 import { cn } from '@/lib/class-utils'
 import { getAgentRoleIcon } from '@/lib/agent-utils'
 import { useRigStore } from '@/stores/rig-store'
@@ -75,6 +75,43 @@ function computeWorkerCounts(agents: Agent[]): WorkerCounts {
   })
 
   return counts
+}
+
+/**
+ * Check if an issue is a workflow infrastructure bead (wisp, event, agent).
+ * These are filtered out from "real work" counts in the Town Dashboard.
+ *
+ * Wisps are identified by:
+ * - ID containing '-wisp-' (workflow step beads)
+ * - Issue type 'event' (session lifecycle events)
+ * - Issue type 'agent' (agent lifecycle beads)
+ * - Issue type 'molecule' (workflow containers)
+ */
+function isWorkflowInfrastructure(issue: Issue): boolean {
+  // Wisp beads (workflow steps)
+  if (issue.id.includes('-wisp-')) {
+    return true
+  }
+  // Event beads (session start/end, etc.)
+  if (issue.issue_type === 'event') {
+    return true
+  }
+  // Agent beads (polecat lifecycle)
+  if (issue.issue_type === 'agent') {
+    return true
+  }
+  // Molecule beads (workflow containers) - patrol molecules etc.
+  if (issue.issue_type === 'molecule') {
+    return true
+  }
+  return false
+}
+
+/**
+ * Filter issues to only "real work" - excludes workflow infrastructure.
+ */
+function filterToRealWork(issues: Issue[]): Issue[] {
+  return issues.filter((issue) => !isWorkflowInfrastructure(issue))
 }
 
 /**
@@ -451,10 +488,16 @@ export function TownDashboardV2({ refreshKey = 0 }: TownDashboardV2Props) {
     return issues
   }, [wsIssues])
 
-  // Filter to town work types only
+  // Filter to town work types only (includes all town work for convoys, in-flight, etc.)
   const townWorkIssues = useMemo(() => {
     return allIssues.filter((issue) => isTownWorkType(issue.issue_type))
   }, [allIssues])
+
+  // Filter to "real work" only - excludes wisps, events, agents, molecules
+  // Used for Open Work and In Progress KPIs
+  const realWorkIssues = useMemo(() => {
+    return filterToRealWork(townWorkIssues)
+  }, [townWorkIssues])
 
   // Compute total worker counts
   const totalWorkerCounts = useMemo(() => {
@@ -470,15 +513,15 @@ export function TownDashboardV2({ refreshKey = 0 }: TownDashboardV2Props) {
     ).length
   }, [townWorkIssues])
 
-  // Count in-progress work
+  // Count in-progress work (real work only, excludes wisps/events/agents)
   const inProgressCount = useMemo(() => {
-    return townWorkIssues.filter((issue) => issue.status === 'in_progress').length
-  }, [townWorkIssues])
+    return realWorkIssues.filter((issue) => issue.status === 'in_progress').length
+  }, [realWorkIssues])
 
-  // Count open work
+  // Count open work (real work only, excludes wisps/events/agents)
   const openWorkCount = useMemo(() => {
-    return townWorkIssues.filter((issue) => issue.status === 'open').length
-  }, [townWorkIssues])
+    return realWorkIssues.filter((issue) => issue.status === 'open').length
+  }, [realWorkIssues])
 
   // Compute per-rig stats
   const rigStats = useMemo((): RigStats[] => {
@@ -488,6 +531,7 @@ export function TownDashboardV2({ refreshKey = 0 }: TownDashboardV2Props) {
       const witness = rigAgents.find((a) => a.role_type === 'witness')
 
       const rigTownWork = rigIssues.filter((issue) => isTownWorkType(issue.issue_type))
+      const rigRealWork = filterToRealWork(rigTownWork)
 
       return {
         rigId: rig.id,
@@ -499,7 +543,8 @@ export function TownDashboardV2({ refreshKey = 0 }: TownDashboardV2Props) {
             issue.issue_type === 'convoy' &&
             (issue.status === 'open' || issue.status === 'in_progress')
         ).length,
-        openWork: rigTownWork.filter((issue) => issue.status === 'open').length,
+        // Open work uses filtered "real work" to exclude wisps/events/agents
+        openWork: rigRealWork.filter((issue) => issue.status === 'open').length,
       }
     })
   }, [wsRigs, wsAgents, wsIssues])
@@ -578,4 +623,12 @@ export function TownDashboardV2({ refreshKey = 0 }: TownDashboardV2Props) {
       </div>
     </div>
   )
+}
+
+/**
+ * Helper function to check if a rig is the HQ rig.
+ */
+export function isHQRig(rig: Rig | null | undefined): boolean {
+  if (!rig) return false
+  return rig.id === 'hq' || rig.name === 'HQ (Town)' || rig.name.toLowerCase() === 'hq'
 }

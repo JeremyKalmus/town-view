@@ -509,6 +509,7 @@ func (m *Manager) discoverAgents() {
 	agentBeads := m.GetAllAgentBeads()
 
 	// Known singleton roles that should always be shown
+	// Note: mayor and deacon are HQ-only, registered separately
 	expectedRoles := []string{"witness", "refinery"}
 
 	// First, register expected singleton roles as "stopped" for all rigs
@@ -525,6 +526,11 @@ func (m *Manager) discoverAgents() {
 			m.registerAgentWithStatus(rigID, role, role, nil, registry.StatusStopped, agentBeads)
 		}
 	}
+
+	// Register HQ-only roles (mayor, deacon) as stopped by default
+	// They'll be updated to running if tmux sessions are found
+	m.registerAgentWithStatus("hq", "mayor", "mayor", nil, registry.StatusStopped, agentBeads)
+	m.registerAgentWithStatus("hq", "deacon", "deacon", nil, registry.StatusStopped, agentBeads)
 
 	// Run tmux list-sessions to get all sessions
 	cmd := exec.Command("tmux", "list-sessions", "-F", "#{session_name}")
@@ -548,14 +554,19 @@ func (m *Manager) discoverAgents() {
 
 	for _, session := range lines {
 		session = strings.TrimSpace(session)
-		if session == "" || !strings.HasPrefix(session, "gt-") {
+		if session == "" {
 			continue
 		}
 
-		// Also handle hq-mayor pattern
+		// Handle hq-mayor pattern (before gt- prefix check)
 		if strings.HasPrefix(session, "hq-mayor") {
 			m.registerAgentWithBeads("hq", "mayor", "mayor", &session, registry.StatusRunning, agentBeads)
 			discovered++
+			continue
+		}
+
+		// Skip non-gt- sessions
+		if !strings.HasPrefix(session, "gt-") {
 			continue
 		}
 
