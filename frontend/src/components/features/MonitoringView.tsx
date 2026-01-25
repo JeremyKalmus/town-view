@@ -6,6 +6,8 @@ import { cn } from '@/lib/class-utils'
 import { formatRelativeTime } from '@/lib/status-utils'
 import { SkeletonAgentGrid, ErrorState } from '@/components/ui/Skeleton'
 import { AgentPeekPanel, ActiveConvoysPanel } from './monitoring'
+import { TestSuiteList } from './TestSuiteList'
+import { useTestSuiteStatus, isRegression } from '@/hooks/useTestSuiteStatus'
 
 interface MonitoringViewProps {
   rig: Rig
@@ -16,6 +18,9 @@ interface MonitoringViewProps {
 
 // Threshold for stuck detection (15 minutes in milliseconds)
 const STUCK_THRESHOLD_MS = 15 * 60 * 1000
+
+// Monitoring view tabs
+type MonitoringTab = 'agents' | 'tests'
 
 // Role display order
 const ROLE_ORDER = ['witness', 'refinery', 'crew', 'polecat'] as const
@@ -81,6 +86,12 @@ export function MonitoringView({ rig, refreshKey = 0 }: MonitoringViewProps) {
   // Agent peek panel state
   const [peekPanelOpen, setPeekPanelOpen] = useState(false)
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null)
+
+  // Tab state
+  const [activeTab, setActiveTab] = useState<MonitoringTab>('agents')
+
+  // Test suite data for regression count
+  const { tests: testSuiteTests } = useTestSuiteStatus({ enabled: true })
 
   // Track if this is the initial load (skip cache on first load to get fresh data)
   const isInitialLoadRef = useRef(true)
@@ -188,6 +199,12 @@ export function MonitoringView({ rig, refreshKey = 0 }: MonitoringViewProps) {
   const workingCount = agents.filter(a => a.state === 'working' || a.hook_bead).length
   const stuckCount = agents.filter(a => isAgentStuck(a)).length
 
+  // Count test regressions
+  const regressionCount = useMemo(
+    () => testSuiteTests.filter(t => isRegression(t)).length,
+    [testSuiteTests]
+  )
+
   // Handle agent card click - open peek panel
   const handleAgentClick = useCallback((agent: Agent) => {
     setSelectedAgent(agent)
@@ -209,24 +226,58 @@ export function MonitoringView({ rig, refreshKey = 0 }: MonitoringViewProps) {
           <p className="text-text-muted text-sm mt-1">
             Agent status by role • {workingCount} working
             {stuckCount > 0 && <span className="text-status-blocked"> • {stuckCount} stuck</span>}
+            {regressionCount > 0 && <span className="text-status-in-progress"> • {regressionCount} regression{regressionCount !== 1 ? 's' : ''}</span>}
           </p>
         </div>
         <div className="flex items-center gap-4 text-sm">
-          {/* Activity Legend */}
-          <div className="flex items-center gap-3 text-xs text-text-muted border-r border-border pr-4">
-            <span className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-status-closed" />
-              <span>&lt;2m</span>
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-amber-500" />
-              <span>2-10m</span>
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-status-blocked" />
-              <span>&gt;10m</span>
-            </span>
+          {/* Tab switcher */}
+          <div className="flex items-center gap-1 p-1 bg-bg-tertiary rounded-lg">
+            <button
+              onClick={() => setActiveTab('agents')}
+              className={cn(
+                'px-4 py-1.5 text-sm font-medium rounded-md transition-colors',
+                activeTab === 'agents'
+                  ? 'bg-bg-secondary text-text-primary shadow-sm'
+                  : 'text-text-secondary hover:text-text-primary hover:bg-bg-secondary/50'
+              )}
+            >
+              Agents
+            </button>
+            <button
+              onClick={() => setActiveTab('tests')}
+              className={cn(
+                'px-4 py-1.5 text-sm font-medium rounded-md transition-colors',
+                activeTab === 'tests'
+                  ? 'bg-bg-secondary text-text-primary shadow-sm'
+                  : 'text-text-secondary hover:text-text-primary hover:bg-bg-secondary/50',
+                regressionCount > 0 && activeTab !== 'tests' && 'text-status-in-progress'
+              )}
+            >
+              Tests
+              {regressionCount > 0 && (
+                <span className="ml-1.5 px-1.5 py-0.5 text-xs rounded-full bg-status-in-progress/20 text-status-in-progress">
+                  {regressionCount}
+                </span>
+              )}
+            </button>
           </div>
+          {/* Activity Legend - only show when on agents tab */}
+          {activeTab === 'agents' && (
+            <div className="flex items-center gap-3 text-xs text-text-muted border-l border-border pl-4">
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-status-closed" />
+                <span>&lt;2m</span>
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-amber-500" />
+                <span>2-10m</span>
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-status-blocked" />
+                <span>&gt;10m</span>
+              </span>
+            </div>
+          )}
           <span className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-status-closed animate-pulse" />
             <span className="text-text-muted">Live</span>
@@ -239,66 +290,76 @@ export function MonitoringView({ rig, refreshKey = 0 }: MonitoringViewProps) {
         </div>
       </div>
 
-      {/* Active Convoys Panel - positioned above agent sections */}
-      <ActiveConvoysPanel rigId={rig.id} className="mb-6" />
+      {/* Content based on active tab */}
+      {activeTab === 'agents' ? (
+        <>
+          {/* Active Convoys Panel - positioned above agent sections */}
+          <ActiveConvoysPanel rigId={rig.id} className="mb-6" />
 
-      {/* Error state */}
-      {agentsError && !loading && (
-        <ErrorState
-          title="Failed to load agents"
-          message={agentsError}
-          onRetry={handleRetry}
-        />
-      )}
+          {/* Error state */}
+          {agentsError && !loading && (
+            <ErrorState
+              title="Failed to load agents"
+              message={agentsError}
+              onRetry={handleRetry}
+            />
+          )}
 
-      {/* Loading state */}
-      {loading && <SkeletonAgentGrid count={4} />}
+          {/* Loading state */}
+          {loading && <SkeletonAgentGrid count={4} />}
 
-      {/* Agent sections by role */}
-      {!loading && !agentsError && (
-        <div className="space-y-4">
-          {/* Top row: Witness, Refinery, Crew - side by side sections */}
-          <div className="flex flex-wrap gap-6">
-            {(['witness', 'refinery', 'crew'] as const).map(role => {
-              const roleAgents = agentsByRole.get(role) || []
-              if (roleAgents.length === 0) return null
+          {/* Agent sections by role */}
+          {!loading && !agentsError && (
+            <div className="space-y-4">
+              {/* Top row: Witness, Refinery, Crew - side by side sections */}
+              <div className="flex flex-wrap gap-6">
+                {(['witness', 'refinery', 'crew'] as const).map(role => {
+                  const roleAgents = agentsByRole.get(role) || []
+                  if (roleAgents.length === 0) return null
 
-              const roleConfig = ROLE_CONFIG[role]
-              const workingInRole = roleAgents.filter(a => a.state === 'working' || a.hook_bead).length
+                  const roleConfig = ROLE_CONFIG[role]
+                  const workingInRole = roleAgents.filter(a => a.state === 'working' || a.hook_bead).length
 
-              return (
-                <CompactRoleSection
-                  key={role}
-                  label={roleConfig.label}
-                  icon={roleConfig.icon}
-                  agents={roleAgents}
-                  issueMap={issueMap}
-                  workingCount={workingInRole}
-                  onAgentClick={handleAgentClick}
-                />
-              )
-            })}
-          </div>
+                  return (
+                    <CompactRoleSection
+                      key={role}
+                      label={roleConfig.label}
+                      icon={roleConfig.icon}
+                      agents={roleAgents}
+                      issueMap={issueMap}
+                      workingCount={workingInRole}
+                      onAgentClick={handleAgentClick}
+                    />
+                  )
+                })}
+              </div>
 
-          {/* Polecats row - full width grid */}
-          {(() => {
-            const polecatAgents = agentsByRole.get('polecat') || []
-            if (polecatAgents.length === 0) return null
+              {/* Polecats row - full width grid */}
+              {(() => {
+                const polecatAgents = agentsByRole.get('polecat') || []
+                if (polecatAgents.length === 0) return null
 
-            const roleConfig = ROLE_CONFIG.polecat
-            const workingInRole = polecatAgents.filter(a => a.state === 'working' || a.hook_bead).length
+                const roleConfig = ROLE_CONFIG.polecat
+                const workingInRole = polecatAgents.filter(a => a.state === 'working' || a.hook_bead).length
 
-            return (
-              <RoleSection
-                label={roleConfig.label}
-                icon={roleConfig.icon}
-                agents={polecatAgents}
-                issueMap={issueMap}
-                workingCount={workingInRole}
-                onAgentClick={handleAgentClick}
-              />
-            )
-          })()}
+                return (
+                  <RoleSection
+                    label={roleConfig.label}
+                    icon={roleConfig.icon}
+                    agents={polecatAgents}
+                    issueMap={issueMap}
+                    workingCount={workingInRole}
+                    onAgentClick={handleAgentClick}
+                  />
+                )
+              })()}
+            </div>
+          )}
+        </>
+      ) : (
+        /* Tests tab content */
+        <div className="card h-[calc(100vh-200px)]">
+          <TestSuiteList />
         </div>
       )}
 
