@@ -275,3 +275,14 @@ export interface WorkItemHealth {
   duration_ms: number;
   started_at: string;
 }
+
+// Test regression represents a test that was passing but now fails
+export interface TestRegression {
+  test_name: string;
+  test_file: string;
+  last_passed_at: string;
+  last_passed_commit?: string;
+  first_failed_at: string;
+  first_failed_commit?: string;
+  error_message?: string;
+}
