@@ -581,28 +581,57 @@ func (s *Service) GetConvoyProgress(convoyID string) (*types.ConvoyProgress, err
 	}
 	s.mu.RUnlock()
 
-	// Query tracked issues
-	query := `
+	total := 0
+	completed := 0
+
+	// Method 1: Query for issues that track this convoy (child -> convoy direction)
+	// This handles the case where children have dependencies pointing to the convoy
+	query1 := `
 		SELECT i.status
 		FROM issues i
 		INNER JOIN dependencies d ON i.id = d.issue_id
 		WHERE d.depends_on_id = ? AND d.type = 'tracks' AND i.deleted_at IS NULL
 	`
-
-	rows, err := s.db.Query(query, convoyID)
+	rows1, err := s.db.Query(query1, convoyID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query convoy issues: %w", err)
 	}
-	defer rows.Close()
+	defer rows1.Close()
 
-	total := 0
-	completed := 0
-	for rows.Next() {
+	for rows1.Next() {
 		var status string
-		if err := rows.Scan(&status); err != nil {
+		if err := rows1.Scan(&status); err != nil {
 			return nil, fmt.Errorf("failed to scan status: %w", err)
 		}
 		total++
+		if status == "closed" || status == "tombstone" {
+			completed++
+		}
+	}
+
+	// Method 2: Query convoy's own dependencies (convoy -> children direction)
+	// This handles the case where the convoy has dependencies pointing to tracked issues
+	// Also handles external references (external:rig:issue-id) which we count but can't resolve status
+	query2 := `
+		SELECT d.depends_on_id, COALESCE(i.status, '') as status
+		FROM dependencies d
+		LEFT JOIN issues i ON d.depends_on_id = i.id AND i.deleted_at IS NULL
+		WHERE d.issue_id = ? AND d.type = 'tracks'
+	`
+	rows2, err := s.db.Query(query2, convoyID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query convoy dependencies: %w", err)
+	}
+	defer rows2.Close()
+
+	for rows2.Next() {
+		var dependsOnID, status string
+		if err := rows2.Scan(&dependsOnID, &status); err != nil {
+			return nil, fmt.Errorf("failed to scan dependency: %w", err)
+		}
+		total++
+		// For external references (status will be empty), we count as open
+		// For local issues, check if closed/tombstone
 		if status == "closed" || status == "tombstone" {
 			completed++
 		}
