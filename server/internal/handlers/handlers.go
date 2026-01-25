@@ -678,6 +678,35 @@ func (h *Handlers) GetGitChanges(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, changes)
 }
 
+// CreateGitChange handles POST /api/telemetry/git
+// Records a git commit from an agent.
+func (h *Handlers) CreateGitChange(w http.ResponseWriter, r *http.Request) {
+	if h.telemetryCollector == nil {
+		http.Error(w, "Telemetry not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	var change telemetry.GitChange
+	if err := json.NewDecoder(r.Body).Decode(&change); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Set timestamp if not provided
+	if change.Timestamp == "" {
+		change.Timestamp = telemetry.Now()
+	}
+
+	if err := h.telemetryCollector.RecordGitChange(change); err != nil {
+		slog.Error("Failed to record git change", "error", err)
+		http.Error(w, "Failed to record git change", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	writeJSON(w, map[string]string{"status": "recorded"})
+}
+
 // GetGitSummary handles GET /api/telemetry/git/summary
 // Returns aggregated git statistics with optional filtering.
 func (h *Handlers) GetGitSummary(w http.ResponseWriter, r *http.Request) {

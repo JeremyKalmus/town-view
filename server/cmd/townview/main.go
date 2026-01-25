@@ -132,6 +132,7 @@ func main() {
 
 	// Telemetry (git changes)
 	mux.HandleFunc("GET /api/telemetry/git", h.GetGitChanges)
+	mux.HandleFunc("POST /api/telemetry/git", h.CreateGitChange)
 	mux.HandleFunc("GET /api/telemetry/git/summary", h.GetGitSummary)
 
 	// Telemetry (agent/bead)
