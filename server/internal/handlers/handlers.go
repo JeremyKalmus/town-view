@@ -705,6 +705,56 @@ func (h *Handlers) GetGitSummary(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, summary)
 }
 
+// GetAgentTelemetry handles GET /api/telemetry/agents/{agentId}
+// Returns full telemetry for the specified agent including tokens, git, and tests.
+func (h *Handlers) GetAgentTelemetry(w http.ResponseWriter, r *http.Request) {
+	agentID := r.PathValue("agentId")
+
+	if h.telemetryCollector == nil {
+		http.Error(w, "Telemetry collector not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	telemetry, err := h.telemetryCollector.GetAgentTelemetry(agentID)
+	if err != nil {
+		slog.Error("Failed to get agent telemetry", "agentId", agentID, "error", err)
+		http.Error(w, "Failed to get agent telemetry", http.StatusInternalServerError)
+		return
+	}
+
+	if len(telemetry.TokenUsage) == 0 && len(telemetry.GitChanges) == 0 && len(telemetry.TestRuns) == 0 {
+		http.Error(w, "No telemetry found for agent", http.StatusNotFound)
+		return
+	}
+
+	writeJSON(w, telemetry)
+}
+
+// GetBeadTelemetry handles GET /api/telemetry/beads/{beadId}
+// Returns full telemetry for the specified bead including tokens, git, and tests.
+func (h *Handlers) GetBeadTelemetry(w http.ResponseWriter, r *http.Request) {
+	beadID := r.PathValue("beadId")
+
+	if h.telemetryCollector == nil {
+		http.Error(w, "Telemetry collector not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	telemetry, err := h.telemetryCollector.GetBeadTelemetry(beadID)
+	if err != nil {
+		slog.Error("Failed to get bead telemetry", "beadId", beadID, "error", err)
+		http.Error(w, "Failed to get bead telemetry", http.StatusInternalServerError)
+		return
+	}
+
+	if len(telemetry.TokenUsage) == 0 && len(telemetry.GitChanges) == 0 && len(telemetry.TestRuns) == 0 {
+		http.Error(w, "No telemetry found for bead", http.StatusNotFound)
+		return
+	}
+
+	writeJSON(w, telemetry)
+}
+
 // CreateTestRun handles POST /api/telemetry/tests
 // Accepts TestRun JSON payload and records it via the telemetry collector.
 func (h *Handlers) CreateTestRun(w http.ResponseWriter, r *http.Request) {
