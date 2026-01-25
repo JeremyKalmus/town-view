@@ -27,12 +27,13 @@ var upgrader = gorillaws.Upgrader{
 
 // Snapshot represents a full data snapshot sent to WebSocket clients.
 type Snapshot struct {
-	Type     string                `json:"type"`
-	Rigs     []types.Rig           `json:"rigs"`
-	Agents   []types.Agent         `json:"agents"`
-	Issues   []types.Issue         `json:"issues"`
-	Mail     []types.Mail          `json:"mail"`
-	Activity []types.ActivityEvent `json:"activity"`
+	Type       string                `json:"type"`
+	Rigs       []types.Rig           `json:"rigs"`
+	Agents     []types.Agent         `json:"agents"`
+	Issues     []types.Issue         `json:"issues"`
+	Mail       []types.Mail          `json:"mail"`
+	Activity   []types.ActivityEvent `json:"activity"`
+	CacheStats query.CacheStats      `json:"cache_stats"`
 }
 
 // WebSocketHandler handles WebSocket connections.
@@ -79,13 +80,20 @@ func (h *WebSocketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // buildSnapshot creates a full data snapshot for broadcasting.
 func (h *WebSocketHandler) buildSnapshot() ([]byte, error) {
+	// Get cache stats from townview rig's query service
+	var cacheStats query.CacheStats
+	if rig, err := h.rigManager.GetRig("townview"); err == nil && rig.QueryService != nil {
+		cacheStats = rig.QueryService.GetCacheStats()
+	}
+
 	snapshot := Snapshot{
-		Type:     "snapshot",
-		Rigs:     []types.Rig{},
-		Agents:   []types.Agent{},
-		Issues:   []types.Issue{},
-		Mail:     []types.Mail{},
-		Activity: []types.ActivityEvent{},
+		Type:       "snapshot",
+		Rigs:       []types.Rig{},
+		Agents:     []types.Agent{},
+		Issues:     []types.Issue{},
+		Mail:       []types.Mail{},
+		Activity:   []types.ActivityEvent{},
+		CacheStats: cacheStats,
 	}
 
 	// Get all rigs from RigManager (uses Service Layer)
