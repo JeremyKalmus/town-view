@@ -397,9 +397,28 @@ func (m *Manager) agentDiscoveryLoop() {
 
 // discoverAgents discovers agents from tmux sessions and registers them.
 // Sessions are expected to follow the pattern: gt-{rig}-{role} or gt-{rig}-{role}-{name}
+// Always registers expected singleton roles (witness, refinery) for each rig, even if stopped.
 func (m *Manager) discoverAgents() {
 	if m.agentRegistry == nil {
 		return
+	}
+
+	// Known singleton roles that should always be shown
+	expectedRoles := []string{"witness", "refinery"}
+
+	// First, register expected singleton roles as "stopped" for all rigs
+	// These will be updated to "running" if we find their tmux sessions
+	m.mu.RLock()
+	rigIDs := make([]string, 0, len(m.rigs))
+	for rigID := range m.rigs {
+		rigIDs = append(rigIDs, rigID)
+	}
+	m.mu.RUnlock()
+
+	for _, rigID := range rigIDs {
+		for _, role := range expectedRoles {
+			m.registerAgentWithStatus(rigID, role, role, nil, registry.StatusStopped)
+		}
 	}
 
 	// Run tmux list-sessions to get all sessions
@@ -418,7 +437,7 @@ func (m *Manager) discoverAgents() {
 		"deacon":   true,
 	}
 
-	// Parse sessions and register agents
+	// Parse sessions and register running agents
 	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
 	discovered := 0
 
@@ -486,8 +505,13 @@ func (m *Manager) discoverAgents() {
 	}
 }
 
-// registerAgent registers an agent with the registry.
+// registerAgent registers an agent with the registry as running.
 func (m *Manager) registerAgent(rig, role, name string, sessionID *string) {
+	m.registerAgentWithStatus(rig, role, name, sessionID, registry.StatusRunning)
+}
+
+// registerAgentWithStatus registers an agent with the registry with a specific status.
+func (m *Manager) registerAgentWithStatus(rig, role, name string, sessionID *string, status registry.AgentStatus) {
 	// Build agent ID
 	var id string
 	switch role {
@@ -523,7 +547,7 @@ func (m *Manager) registerAgent(rig, role, name string, sessionID *string) {
 		Name:                name,
 		SessionID:           sessionID,
 		HeartbeatIntervalMs: 30000, // 30 second heartbeat expected
-		Status:              registry.StatusRunning,
+		Status:              status,
 	}
 
 	m.agentRegistry.Register(reg)
