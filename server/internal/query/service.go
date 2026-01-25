@@ -745,6 +745,52 @@ func (s *Service) GetRecentActivity(filter ActivityFilter) ([]events.Event, erro
 	return s.eventStore.Query(eventFilter)
 }
 
+// AgentBead represents an agent bead from the database with hook info.
+type AgentBead struct {
+	ID         string
+	HookBead   string
+	AgentState string
+	RoleType   string
+	Rig        string
+}
+
+// GetAgentBeads returns all agent-type beads with their hook information.
+func (s *Service) GetAgentBeads() ([]AgentBead, error) {
+	query := `
+		SELECT id, COALESCE(hook_bead, '') as hook_bead,
+		       COALESCE(agent_state, '') as agent_state,
+		       COALESCE(role_type, '') as role_type,
+		       COALESCE(rig, '') as rig
+		FROM issues
+		WHERE issue_type = 'agent' AND deleted_at IS NULL
+	`
+
+	rows, err := s.db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query agent beads: %w", err)
+	}
+	defer rows.Close()
+
+	var agents []AgentBead
+	for rows.Next() {
+		var agent AgentBead
+		if err := rows.Scan(&agent.ID, &agent.HookBead, &agent.AgentState, &agent.RoleType, &agent.Rig); err != nil {
+			return nil, fmt.Errorf("failed to scan agent bead: %w", err)
+		}
+		agents = append(agents, agent)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating agent beads: %w", err)
+	}
+
+	if agents == nil {
+		agents = []AgentBead{}
+	}
+
+	return agents, nil
+}
+
 // scanIssue scans a single issue from rows.
 func scanIssue(rows *sql.Rows) (*types.Issue, error) {
 	var issue types.Issue

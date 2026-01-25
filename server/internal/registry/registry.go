@@ -68,6 +68,7 @@ type AgentRegistration struct {
 	SessionID           *string     `json:"session_id,omitempty"`
 	HeartbeatIntervalMs int         `json:"heartbeat_interval_ms"`
 	Status              AgentStatus `json:"status,omitempty"`
+	CurrentBead         *string     `json:"current_bead,omitempty"` // Bead ID being worked on
 }
 
 // Heartbeat contains the information sent in a heartbeat.
@@ -184,6 +185,7 @@ func (r *Registry) Register(reg AgentRegistration) AgentState {
 		Role:                reg.Role,
 		Name:                reg.Name,
 		Status:              status,
+		CurrentBead:         reg.CurrentBead,
 		LastHeartbeat:       now,
 		HeartbeatIntervalMs: intervalMs,
 		MissedHeartbeats:    0,

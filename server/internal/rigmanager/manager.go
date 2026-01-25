@@ -373,6 +373,27 @@ func (m *Manager) GetRawDependencies(rigID, issueID string) ([]types.IssueDepend
 	return rig.QueryService.GetRawDependencies(issueID)
 }
 
+// GetAllAgentBeads returns agent beads from all rigs.
+func (m *Manager) GetAllAgentBeads() map[string]query.AgentBead {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	result := make(map[string]query.AgentBead)
+	for _, rig := range m.rigs {
+		if rig.QueryService != nil {
+			beads, err := rig.QueryService.GetAgentBeads()
+			if err != nil {
+				slog.Debug("Failed to get agent beads for rig", "rig", rig.ID, "error", err)
+				continue
+			}
+			for _, bead := range beads {
+				result[bead.ID] = bead
+			}
+		}
+	}
+	return result
+}
+
 // RefreshRig forces a refresh of rig data (clears cache).
 func (m *Manager) RefreshRig(rigID string) error {
 	rig, err := m.GetRig(rigID)
@@ -415,6 +436,9 @@ func (m *Manager) discoverAgents() {
 		return
 	}
 
+	// Get agent beads from all rigs for hook_bead enrichment
+	agentBeads := m.GetAllAgentBeads()
+
 	// Known singleton roles that should always be shown
 	expectedRoles := []string{"witness", "refinery"}
 
@@ -429,7 +453,7 @@ func (m *Manager) discoverAgents() {
 
 	for _, rigID := range rigIDs {
 		for _, role := range expectedRoles {
-			m.registerAgentWithStatus(rigID, role, role, nil, registry.StatusStopped)
+			m.registerAgentWithStatus(rigID, role, role, nil, registry.StatusStopped, agentBeads)
 		}
 	}
 
@@ -461,7 +485,7 @@ func (m *Manager) discoverAgents() {
 
 		// Also handle hq-mayor pattern
 		if strings.HasPrefix(session, "hq-mayor") {
-			m.registerAgent("hq", "mayor", "mayor", &session)
+			m.registerAgentWithBeads("hq", "mayor", "mayor", &session, registry.StatusRunning, agentBeads)
 			discovered++
 			continue
 		}
@@ -508,7 +532,7 @@ func (m *Manager) discoverAgents() {
 			name = rest
 		}
 
-		m.registerAgent(rigName, role, name, &session)
+		m.registerAgentWithBeads(rigName, role, name, &session, registry.StatusRunning, agentBeads)
 		discovered++
 	}
 
@@ -517,14 +541,15 @@ func (m *Manager) discoverAgents() {
 	}
 }
 
-// registerAgent registers an agent with the registry as running.
-func (m *Manager) registerAgent(rig, role, name string, sessionID *string) {
-	m.registerAgentWithStatus(rig, role, name, sessionID, registry.StatusRunning)
+// registerAgentWithStatus registers an agent with the registry with a specific status.
+// Deprecated: use registerAgentWithBeads for hook_bead enrichment.
+func (m *Manager) registerAgentWithStatus(rig, role, name string, sessionID *string, status registry.AgentStatus, agentBeads map[string]query.AgentBead) {
+	m.registerAgentWithBeads(rig, role, name, sessionID, status, agentBeads)
 }
 
-// registerAgentWithStatus registers an agent with the registry with a specific status.
-func (m *Manager) registerAgentWithStatus(rig, role, name string, sessionID *string, status registry.AgentStatus) {
-	// Build agent ID
+// registerAgentWithBeads registers an agent with the registry, enriching with hook_bead from agent beads.
+func (m *Manager) registerAgentWithBeads(rig, role, name string, sessionID *string, status registry.AgentStatus, agentBeads map[string]query.AgentBead) {
+	// Build agent ID (for registry)
 	var id string
 	switch role {
 	case "witness", "refinery", "mayor", "deacon":
@@ -533,6 +558,40 @@ func (m *Manager) registerAgentWithStatus(rig, role, name string, sessionID *str
 		id = fmt.Sprintf("%s/crew/%s", rig, name)
 	default:
 		id = fmt.Sprintf("%s/polecats/%s", rig, name)
+	}
+
+	// Lookup hook_bead from agent beads
+	// Agent bead ID format: {prefix}{rig}-{role}-{name} e.g., "to-townview-polecat-obsidian"
+	var currentBead *string
+	m.mu.RLock()
+	rigData, exists := m.rigs[rig]
+	m.mu.RUnlock()
+
+	if exists && rigData != nil {
+		// Build potential agent bead IDs to look up
+		// Agent bead ID format: {prefix}-{rig}-{role}-{name}
+		// Example: "to-townview-polecat-obsidian" where prefix="to", rig="townview"
+		var beadIDs []string
+		prefix := strings.TrimSuffix(rigData.Prefix, "-") // Remove trailing hyphen if present
+		switch role {
+		case "witness", "refinery", "mayor", "deacon":
+			beadIDs = append(beadIDs, fmt.Sprintf("%s-%s-%s", prefix, rig, role))
+		case "crew":
+			beadIDs = append(beadIDs, fmt.Sprintf("%s-%s-crew-%s", prefix, rig, name))
+		default:
+			// Polecats: try both formats
+			beadIDs = append(beadIDs, fmt.Sprintf("%s-%s-polecat-%s", prefix, rig, name))
+			beadIDs = append(beadIDs, fmt.Sprintf("%s-%s-polecats-%s", prefix, rig, name))
+		}
+
+		// Look up hook_bead
+		for _, beadID := range beadIDs {
+			if bead, ok := agentBeads[beadID]; ok && bead.HookBead != "" {
+				hookBead := bead.HookBead
+				currentBead = &hookBead
+				break
+			}
+		}
 	}
 
 	// Map role string to AgentRole
@@ -560,6 +619,7 @@ func (m *Manager) registerAgentWithStatus(rig, role, name string, sessionID *str
 		SessionID:           sessionID,
 		HeartbeatIntervalMs: 30000, // 30 second heartbeat expected
 		Status:              status,
+		CurrentBead:         currentBead,
 	}
 
 	m.agentRegistry.Register(reg)
