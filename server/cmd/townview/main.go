@@ -127,6 +127,7 @@ func main() {
 	mux.HandleFunc("GET /api/telemetry/tests", h.GetTestSuiteStatus)
 	mux.HandleFunc("POST /api/telemetry/tests", h.CreateTestRun)
 	mux.HandleFunc("GET /api/telemetry/regressions", h.GetRegressions)
+	mux.HandleFunc("GET /api/telemetry/tokens/summary", h.GetTokenSummary)
 
 	// WebSocket (real-time data streaming)
 	mux.Handle("GET /ws", wsHandler)

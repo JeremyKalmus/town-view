@@ -609,6 +609,36 @@ func (h *Handlers) GetRegressions(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, regressions)
 }
 
+
+// GetTokenSummary handles GET /api/telemetry/tokens/summary
+// Returns aggregated token usage statistics with optional filtering.
+func (h *Handlers) GetTokenSummary(w http.ResponseWriter, r *http.Request) {
+	if h.telemetryCollector == nil {
+		writeJSON(w, telemetry.TokenSummary{
+			ByModel: make(map[string]telemetry.TokenModelSummary),
+			ByAgent: make(map[string]telemetry.TokenModelSummary),
+		})
+		return
+	}
+
+	// Build filter from query params
+	filter := telemetry.TelemetryFilter{
+		AgentID: r.URL.Query().Get("agent_id"),
+		BeadID:  r.URL.Query().Get("bead_id"),
+		Since:   r.URL.Query().Get("since"),
+		Until:   r.URL.Query().Get("until"),
+	}
+
+	summary, err := h.telemetryCollector.GetTokenSummary(filter)
+	if err != nil {
+		slog.Error("Failed to get token summary", "error", err)
+		http.Error(w, "Failed to get token summary", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, summary)
+}
+
 // CreateTestRun handles POST /api/telemetry/tests
 // Accepts TestRun JSON payload and records it via the telemetry collector.
 func (h *Handlers) CreateTestRun(w http.ResponseWriter, r *http.Request) {
