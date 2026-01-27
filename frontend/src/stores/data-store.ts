@@ -4,7 +4,7 @@
  */
 
 import { create } from 'zustand'
-import type { Rig, Agent, Issue, Mail, ActivityEvent } from '@/types'
+import type { Rig, Agent, Issue, Mail, ActivityEvent, CacheStats } from '@/types'
 
 /**
  * Snapshot payload from WebSocket connection.
@@ -15,6 +15,7 @@ export interface Snapshot {
   issues: Record<string, Issue[]>
   mail: Mail[]
   activity: ActivityEvent[]
+  cache_stats: CacheStats | null
 }
 
 interface DataState {
@@ -24,6 +25,7 @@ interface DataState {
   issues: Record<string, Issue[]>  // keyed by rigId
   mail: Mail[]
   activity: ActivityEvent[]
+  cacheStats: CacheStats | null
 
   // Metadata
   lastUpdated: number | null
@@ -41,6 +43,7 @@ export const useDataStore = create<DataState>((set) => ({
   issues: {},
   mail: [],
   activity: [],
+  cacheStats: null,
   lastUpdated: null,
   connected: false,
 
@@ -52,6 +55,7 @@ export const useDataStore = create<DataState>((set) => ({
       issues: snapshot.issues,
       mail: snapshot.mail,
       activity: snapshot.activity,
+      cacheStats: snapshot.cache_stats,
       lastUpdated: Date.now(),
     }),
 
@@ -88,6 +92,11 @@ export const selectMail = (state: DataState) => state.mail
  * Select activity events.
  */
 export const selectActivity = (state: DataState) => state.activity
+
+/**
+ * Select cache statistics.
+ */
+export const selectCacheStats = (state: DataState) => state.cacheStats
 
 /**
  * Select connection status.

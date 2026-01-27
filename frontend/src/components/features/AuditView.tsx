@@ -7,11 +7,12 @@ import { useFetch } from '@/hooks/useFetch'
 import { cn } from '@/lib/class-utils'
 import { getAgentRoleIcon, getAgentStateClass, getAgentStateBgClass } from '@/lib/agent-utils'
 import { formatRelativeTime } from '@/lib/status-utils'
-import { Search, User, GitCommit, TestTube, Coins, LayoutDashboard, CheckCircle, XCircle, AlertTriangle, FileText } from 'lucide-react'
+import { Search, User, GitCommit, TestTube, Coins, LayoutDashboard, CheckCircle, XCircle, AlertTriangle, FileText, Database } from 'lucide-react'
+import { CacheStatsPanel } from '@/components/features/monitoring'
 import type { Agent, Issue, TestStatus } from '@/types'
 
 // Tab types for the audit view
-type AuditTab = 'overview' | 'git' | 'tests' | 'tokens'
+type AuditTab = 'overview' | 'git' | 'tests' | 'tokens' | 'cache'
 
 // Token summary types from API
 interface TokenModelSummary {
@@ -217,6 +218,12 @@ export function AuditView(_props: AuditViewProps) {
                 icon={<Coins className="h-4 w-4" />}
                 label="Tokens"
               />
+              <TabButton
+                active={activeTab === 'cache'}
+                onClick={() => setActiveTab('cache')}
+                icon={<Database className="h-4 w-4" />}
+                label="Cache"
+              />
             </div>
           </div>
 
@@ -244,6 +251,9 @@ export function AuditView(_props: AuditViewProps) {
                 summary={tokenSummary}
                 loading={tokensLoading}
               />
+            )}
+            {activeTab === 'cache' && (
+              <CacheStatsPanel />
             )}
           </div>
         </div>
