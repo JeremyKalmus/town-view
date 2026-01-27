@@ -379,3 +379,21 @@ export interface AgentTelemetry {
   git_summary: GitSummary;
   test_summary: TestSummary;
 }
+
+// =============================================================================
+// Cache Statistics Types
+// =============================================================================
+
+// Cache performance statistics from Query Service
+export interface CacheStats {
+  issue_entries: number;
+  issue_list_entries: number;
+  dependency_entries: number;
+  convoy_progress_entries: number;
+  hit_count: number;
+  miss_count: number;
+  last_invalidation: string; // ISO timestamp
+  issues_ttl_seconds: number;
+  convoy_progress_ttl_seconds: number;
+  dependencies_ttl_seconds: number;
+}
