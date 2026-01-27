@@ -204,6 +204,20 @@ export interface AuditMetrics {
   };
 }
 
+// Cache statistics from Query Service (via WebSocket snapshot)
+export interface CacheStats {
+  issue_entries: number
+  issue_list_entries: number
+  dependency_entries: number
+  convoy_progress_entries: number
+  hit_count: number
+  miss_count: number
+  last_invalidation: string
+  issues_ttl_seconds: number
+  convoy_progress_ttl_seconds: number
+  dependencies_ttl_seconds: number
+}
+
 // Molecule progress tracking
 export interface MoleculeProgress {
   issue_id: string;

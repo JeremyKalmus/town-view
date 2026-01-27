@@ -15,7 +15,7 @@ export interface Snapshot {
   issues: Record<string, Issue[]>
   mail: Mail[]
   activity: ActivityEvent[]
-  cache_stats: CacheStats
+  cache_stats: CacheStats | null
 }
 
 interface DataState {
@@ -92,6 +92,11 @@ export const selectMail = (state: DataState) => state.mail
  * Select activity events.
  */
 export const selectActivity = (state: DataState) => state.activity
+
+/**
+ * Select cache statistics.
+ */
+export const selectCacheStats = (state: DataState) => state.cacheStats
 
 /**
  * Select connection status.

@@ -5,7 +5,7 @@
 
 import { useEffect, useRef, useCallback } from 'react'
 import { useDataStore, type Snapshot } from '@/stores/data-store'
-import type { Rig, Agent, Issue, Mail, ActivityEvent } from '@/types'
+import type { Rig, Agent, Issue, Mail, ActivityEvent, CacheStats } from '@/types'
 
 /** Raw snapshot from WebSocket (may have flat arrays or keyed maps) */
 interface RawSnapshot {
@@ -15,6 +15,7 @@ interface RawSnapshot {
   issues: Issue[] | Record<string, Issue[]>
   mail: Mail[]
   activity: ActivityEvent[]
+  cache_stats?: CacheStats
 }
 
 /** Configuration for the WebSocket connection */
@@ -99,6 +100,7 @@ export function useWebSocket(config: WebSocketConfig = {}) {
       issues,
       mail: raw.mail,
       activity: raw.activity,
+      cache_stats: raw.cache_stats ?? null,
     }
   }, [])
 
