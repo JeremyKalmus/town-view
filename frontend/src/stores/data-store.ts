@@ -107,8 +107,3 @@ export const selectConnected = (state: DataState) => state.connected
  * Select last updated timestamp.
  */
 export const selectLastUpdated = (state: DataState) => state.lastUpdated
-
-/**
- * Select cache statistics.
- */
-export const selectCacheStats = (state: DataState) => state.cacheStats

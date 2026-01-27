@@ -70,8 +70,9 @@ func New(config Config, eventStore *events.Store, agentRegistry *registry.Regist
 	// Discover agents from tmux sessions
 	m.discoverAgents()
 
-	// Start background agent discovery (refresh every 30 seconds)
-	go m.agentDiscoveryLoop()
+	// Start background discovery loops
+	go m.rigDiscoveryLoop()   // rescan for new rigs every 60 seconds
+	go m.agentDiscoveryLoop() // refresh agents every 30 seconds
 
 	return m, nil
 }
@@ -106,19 +107,10 @@ func (m *Manager) discoverRigs() error {
 
 		dirPath := filepath.Join(m.townRoot, name)
 
-		// Check for .beads directory directly in the rig
-		beadsPath := filepath.Join(dirPath, ".beads")
-		if _, err := os.Stat(beadsPath); err == nil {
+		// Check for .beads directory (follows redirect files automatically)
+		if beadsPath, ok := m.resolveBeadsPath(dirPath); ok {
 			prefix := m.inferPrefix(name, beadsPath)
 			m.addRig(name, name, prefix, name, beadsPath)
-			continue
-		}
-
-		// Check for mayor/rig structure (some rigs have this)
-		mayorRigPath := filepath.Join(dirPath, "mayor", "rig", ".beads")
-		if _, err := os.Stat(mayorRigPath); err == nil {
-			prefix := m.inferPrefix(name, mayorRigPath)
-			m.addRig(name, name, prefix, filepath.Join(name, "mayor", "rig"), mayorRigPath)
 		}
 	}
 
@@ -131,7 +123,12 @@ func (m *Manager) discoverRigs() error {
 }
 
 // addRig adds a rig to the manager and initializes its QueryService.
+// Idempotent: skips rigs already tracked.
 func (m *Manager) addRig(id, name, prefix, relPath, beadsPath string) {
+	if _, exists := m.rigs[id]; exists {
+		return // already tracked
+	}
+
 	dbPath := filepath.Join(beadsPath, "beads.db")
 
 	// Verify database exists
@@ -164,6 +161,32 @@ func (m *Manager) addRig(id, name, prefix, relPath, beadsPath string) {
 
 	rig.QueryService = qs
 	m.rigs[id] = rig
+}
+
+// resolveBeadsPath resolves the actual beads path for a directory.
+// It checks for a redirect file (.beads/redirect) and follows it if present.
+// Returns the resolved beads path and true if a valid .beads directory was found.
+func (m *Manager) resolveBeadsPath(dirPath string) (string, bool) {
+	beadsPath := filepath.Join(dirPath, ".beads")
+	if _, err := os.Stat(beadsPath); err != nil {
+		return "", false
+	}
+
+	// Check for redirect file
+	redirectPath := filepath.Join(beadsPath, "redirect")
+	if data, err := os.ReadFile(redirectPath); err == nil {
+		target := strings.TrimSpace(string(data))
+		if target != "" {
+			resolved := filepath.Join(dirPath, target)
+			if _, err := os.Stat(resolved); err == nil {
+				return resolved, true
+			}
+			slog.Debug("Redirect target not found", "dir", dirPath, "target", resolved)
+		}
+	}
+
+	// No redirect — use the direct .beads path
+	return beadsPath, true
 }
 
 // inferPrefix tries to determine the rig's issue prefix.
@@ -483,6 +506,18 @@ func (m *Manager) RefreshAll() {
 	for _, rig := range m.rigs {
 		if rig.QueryService != nil {
 			rig.QueryService.InvalidateCache()
+		}
+	}
+}
+
+// rigDiscoveryLoop periodically scans for new rigs in the town root.
+func (m *Manager) rigDiscoveryLoop() {
+	ticker := time.NewTicker(60 * time.Second)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		if err := m.discoverRigs(); err != nil {
+			slog.Error("Rig discovery failed", "error", err)
 		}
 	}
 }

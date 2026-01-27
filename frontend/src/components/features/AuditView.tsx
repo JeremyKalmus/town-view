@@ -59,7 +59,7 @@ export function AuditView(_props: AuditViewProps) {
 
   // HTTP fallback state for agents
   const [httpAgents, setHttpAgents] = useState<Agent[]>([])
-  const [httpLoading, setHttpLoading] = useState(true)
+  const [, setHttpLoading] = useState(true)
 
   // Use WebSocket data when connected and available, otherwise HTTP fallback
   const agents = wsConnected && wsAgents.length > 0 ? wsAgents : httpAgents

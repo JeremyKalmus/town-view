@@ -12,7 +12,7 @@ interface MetricsDisplayProps {
  * and per-type breakdown with visual anomaly indicators.
  */
 export function MetricsDisplay({ metrics, className }: MetricsDisplayProps) {
-  const { timeToComplete, completionCount, typeBreakdown, anomalyThresholds } = metrics
+  const { timeToComplete, completionCount = 0, typeBreakdown, anomalyThresholds } = metrics
 
   const isTimeAnomaly = anomalyThresholds?.timeToComplete !== undefined &&
     timeToComplete.avg > anomalyThresholds.timeToComplete
@@ -64,19 +64,19 @@ export function MetricsDisplay({ metrics, className }: MetricsDisplayProps) {
           <div className="flex items-baseline justify-between">
             <span className="text-text-secondary text-sm">Bugs</span>
             <span className="mono text-lg font-semibold text-status-blocked">
-              {typeBreakdown.bugs}
+              {typeBreakdown?.bugs ?? 0}
             </span>
           </div>
           <div className="flex items-baseline justify-between">
             <span className="text-text-secondary text-sm">Tasks</span>
             <span className="mono text-lg font-semibold text-status-in-progress">
-              {typeBreakdown.tasks}
+              {typeBreakdown?.tasks ?? 0}
             </span>
           </div>
           <div className="flex items-baseline justify-between">
             <span className="text-text-secondary text-sm">Features</span>
             <span className="mono text-lg font-semibold text-status-open">
-              {typeBreakdown.features}
+              {typeBreakdown?.features ?? 0}
             </span>
           </div>
         </div>

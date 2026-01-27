@@ -23,6 +23,7 @@ export type IssueType =
   | 'convoy'
   | 'agent'
   | 'event'
+  | 'mail'
   | 'rig';
 
 // Agent role type enum
@@ -64,6 +65,13 @@ export interface Issue {
   dependency_count: number;
   dependent_count: number;
   convoy?: ConvoyInfo;
+  dependencies?: IssueDependencyRecord[];
+}
+
+// Dependency record as returned inline with an issue
+export interface IssueDependencyRecord {
+  depends_on_id: string;
+  type: string;
 }
 
 // Agent health for sidebar indicators
@@ -151,7 +159,7 @@ export interface TreeNavigationState {
 export interface Dependency {
   from_id: string;
   to_id: string;
-  type: 'blocks' | 'parent-child';
+  type: 'blocks' | 'parent-child' | 'tracks';
 }
 
 // Comment on an issue
@@ -196,11 +204,15 @@ export interface TypeBreakdown {
 // Audit metrics for convoy/issue analysis
 export interface AuditMetrics {
   timeToComplete: TimeMetrics;
-  completionCount: number;
-  typeBreakdown: TypeBreakdown;
+  completionCount?: number;
+  typeBreakdown?: TypeBreakdown;
+  reassignmentCount?: number;
+  mergeConflictCount?: number;
   // Anomaly thresholds (values above these are considered anomalies)
   anomalyThresholds?: {
     timeToComplete?: number;  // milliseconds
+    reassignmentCount?: number;
+    mergeConflictCount?: number;
   };
 }
 
@@ -395,19 +407,16 @@ export interface AgentTelemetry {
 }
 
 // =============================================================================
-// Cache Statistics Types
+// Test Regression Types
 // =============================================================================
 
-// Cache performance statistics from Query Service
-export interface CacheStats {
-  issue_entries: number;
-  issue_list_entries: number;
-  dependency_entries: number;
-  convoy_progress_entries: number;
-  hit_count: number;
-  miss_count: number;
-  last_invalidation: string; // ISO timestamp
-  issues_ttl_seconds: number;
-  convoy_progress_ttl_seconds: number;
-  dependencies_ttl_seconds: number;
+// Test that was passing but now fails
+export interface TestRegression {
+  test_name: string;
+  test_file: string;
+  last_passed_at: string;
+  last_passed_commit?: string;
+  first_failed_at: string;
+  first_failed_commit?: string;
+  error_message?: string;
 }

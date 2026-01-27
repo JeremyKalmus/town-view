@@ -42,6 +42,7 @@ const TYPE_LABELS: Record<IssueType, string> = {
   convoy: 'Convoy',
   agent: 'Agent',
   event: 'Event',
+  mail: 'Mail',
   rig: 'Rig',
 }
 

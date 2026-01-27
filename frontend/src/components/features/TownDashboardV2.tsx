@@ -107,7 +107,7 @@ function isWorkflowInfrastructure(issue: Issue): boolean {
     return true
   }
   // Message beads (mail)
-  if (issue.issue_type === 'message') {
+  if (issue.issue_type === 'mail') {
     return true
   }
   // Patrol molecules (Deacon Patrol, Witness Patrol, Refinery Patrol, etc.)
@@ -474,7 +474,7 @@ function InFlightPanel({ issues }: { issues: Issue[] }) {
  * │ Rig | Witness | Workers | Convoys | Work                        │
  * └─────────────────────────────────────────────────────────────────┘
  */
-export function TownDashboardV2({ refreshKey = 0 }: TownDashboardV2Props) {
+export function TownDashboardV2({ refreshKey: _refreshKey = 0 }: TownDashboardV2Props) {
   // Data store (WebSocket-fed)
   const wsRigs = useDataStore((state) => state.rigs)
   const wsAgents = useDataStore((state) => state.agents)

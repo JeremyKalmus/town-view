@@ -64,7 +64,6 @@ export function useConvoyChildren(
   const [children, setChildren] = useState<ConvoyChild[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [hasFetched, setHasFetched] = useState(false)
 
   // Get HQ issues (where convoys live) from data store
   const hqIssues = useDataStore(selectIssuesByRig(HQ_RIG_ID))
@@ -96,7 +95,6 @@ export function useConvoyChildren(
       if (!convoy) {
         // Convoy not found, show empty
         setChildren([])
-        setHasFetched(true)
         setLoading(false)
         return
       }
@@ -163,7 +161,6 @@ export function useConvoyChildren(
 
       if (mountedRef.current) {
         setChildren(resolvedChildren)
-        setHasFetched(true)
       }
     } catch (err) {
       if (mountedRef.current) {
@@ -186,7 +183,6 @@ export function useConvoyChildren(
 
   // Reset when convoy changes
   useEffect(() => {
-    setHasFetched(false)
     setChildren([])
     setError(null)
   }, [convoyId])
